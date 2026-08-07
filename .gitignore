@@ -1,0 +1,40 @@
+# ===== Secrets / cau hinh rieng (muc 5: khong hardcode API key) =====
+.env
+*.env
+!.env.example
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# ===== Java / Maven =====
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+
+# ===== File nguoi dung upload / audio TTS cache =====
+uploads/
+backend/uploads/
+
+# ===== Node / React =====
+node_modules/
+dist/
+dist-ssr/
+.vite/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+nbproject/
+
+# ===== He dieu hanh =====
+.DS_Store
+Thumbs.db
