@@ -27,7 +27,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Slf4j
 public class TtsGenerationWorker {
 
-    private final FptAiTtsClient ttsClient;
+    private final TtsEngine ttsEngine;
     private final StorageService storageService;
     private final AudioFileRepository audioFileRepository;
 
@@ -42,17 +42,19 @@ public class TtsGenerationWorker {
         }
 
         try {
-            byte[] mp3 = ttsClient.synthesize(event.text(), event.voice(), event.speed());
-            String fileName = storageService.storeAudio(mp3, ".mp3");
+            SynthesisResult result = ttsEngine.synthesize(event.text(), event.voice(), event.speed());
+            String fileName = storageService.storeAudio(result.audio(), ".mp3");
 
             audio.setFilePath(fileName);
-            audio.setFileSize((long) mp3.length);
+            audio.setFileSize((long) result.audio().length);
             audio.setContentType("audio/mpeg");
+            audio.setProvider(result.providerId());
             audio.setStatus(AudioStatus.READY);
             audio.setErrorMessage(null);
             audioFileRepository.save(audio);
 
-            log.info("Synthesis finished for audio {} ({} bytes)", event.audioId(), mp3.length);
+            log.info("Synthesis finished for audio {} via {} ({} bytes)",
+                    event.audioId(), result.providerId(), result.audio().length);
         } catch (TtsException ex) {
             log.warn("Synthesis failed for audio {}: {}", event.audioId(), ex.getMessage());
             markFailed(audio, ex.getMessage());

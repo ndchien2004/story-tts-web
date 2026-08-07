@@ -3,11 +3,8 @@ package com.storytts.backend.service.tts;
 import java.util.Arrays;
 import java.util.Optional;
 
-/**
- * Vietnamese voices offered by the provider, exposed to the client so the
- * reader can pick one.
- */
-public enum TtsVoice {
+/** Vietnamese voices offered by FPT.AI. */
+public enum FptVoice {
 
     BANMAI("banmai", "Ban Mai", "Nữ", "Miền Bắc"),
     LEMINH("leminh", "Lê Minh", "Nam", "Miền Bắc"),
@@ -23,7 +20,7 @@ public enum TtsVoice {
     private final String gender;
     private final String region;
 
-    TtsVoice(String code, String displayName, String gender, String region) {
+    FptVoice(String code, String displayName, String gender, String region) {
         this.code = code;
         this.displayName = displayName;
         this.gender = gender;
@@ -46,7 +43,7 @@ public enum TtsVoice {
         return region;
     }
 
-    public static Optional<TtsVoice> fromCode(String code) {
+    public static Optional<FptVoice> fromCode(String code) {
         if (code == null) {
             return Optional.empty();
         }

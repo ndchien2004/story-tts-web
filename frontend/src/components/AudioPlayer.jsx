@@ -15,6 +15,18 @@ const SOURCE_LABEL = {
   TTS: "Giọng AI",
 };
 
+/** Ids the server reports on a generated track. */
+const PROVIDER_LABEL = {
+  fptai: "FPT.AI",
+  elevenlabs: "ElevenLabs",
+};
+
+function describeTrack(track) {
+  const source = SOURCE_LABEL[track.source] ?? track.source;
+  const provider = PROVIDER_LABEL[track.provider];
+  return provider ? `${source} · ${provider}` : source;
+}
+
 /**
  * Chapter audio panel.
  *
@@ -33,11 +45,19 @@ export default function AudioPlayer({
   const { tracks, activeTrack, setActiveTrack, generating, error, clearError, requestTts } = audio;
 
   const audioRef = useRef(null);
-  const [voice, setVoice] = useState("banmai");
+  const [voice, setVoice] = useState("");
   const [speed, setSpeed] = useState(0);
   // Set when the user asks for narration, so playback can start by itself once
   // the track finishes generating.
   const [playWhenReady, setPlayWhenReady] = useState(false);
+
+  // The voice list is provider-dependent, so the default is whatever the
+  // server offers first rather than a hardcoded code.
+  useEffect(() => {
+    if (!voice && voices.length > 0) {
+      setVoice(voices[0].code);
+    }
+  }, [voice, voices]);
 
   useEffect(() => {
     if (!activeTrack || !playWhenReady) return;
@@ -60,6 +80,16 @@ export default function AudioPlayer({
     (track) => track.source === "TTS" && track.voice === voice && track.speed === speed,
   );
 
+  // Voices arrive as one flat list; grouping them by provider makes the choice
+  // and the fallback relationship obvious in the dropdown.
+  const voiceGroups = Object.entries(
+    voices.reduce((groups, option) => {
+      const key = option.providerName ?? "Khác";
+      (groups[key] ??= []).push(option);
+      return groups;
+    }, {}),
+  );
+
   return (
     <div className="stack" style={{ gap: "1rem" }}>
       {error && (
@@ -75,7 +105,7 @@ export default function AudioPlayer({
 
       {activeTrack ? (
         <div className="stack" style={{ gap: "0.6rem" }}>
-          <Badge tone="info">{SOURCE_LABEL[activeTrack.source]}</Badge>
+          <Badge tone="info">{describeTrack(activeTrack)}</Badge>
           <audio
             ref={audioRef}
             className="audio-element"
@@ -105,25 +135,38 @@ export default function AudioPlayer({
           >
             {tracks.map((track) => (
               <option key={track.id} value={track.id}>
-                {SOURCE_LABEL[track.source]}
-                {track.voice ? ` — ${track.voice}` : ""}
+                {describeTrack(track)}
               </option>
             ))}
           </Select>
         </Field>
       )}
 
-      <Field label="Giọng đọc" htmlFor="voice">
+      <Field
+        label="Giọng đọc"
+        htmlFor="voice"
+        hint={
+          voiceGroups.length > 1
+            ? "Nếu nhà cung cấp đang chọn gặp sự cố, hệ thống tự chuyển sang nhà cung cấp dự phòng."
+            : undefined
+        }
+      >
         <Select
           id="voice"
           value={voice}
-          disabled={generating}
+          disabled={generating || voices.length === 0}
           onChange={(event) => setVoice(event.target.value)}
         >
-          {voices.map((option) => (
-            <option key={option.code} value={option.code}>
-              {option.name} — {option.gender}, {option.region}
-            </option>
+          {voices.length === 0 && <option value="">Chưa có nhà cung cấp nào được cấu hình</option>}
+
+          {voiceGroups.map(([providerName, options]) => (
+            <optgroup key={providerName} label={providerName}>
+              {options.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.name} — {option.gender}, {option.region}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </Select>
       </Field>

@@ -20,14 +20,13 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Arrays;
 import java.util.List;
 
 /**
  * Turns chapter text into audio, reusing previous results where possible.
  *
  * Generated tracks are cached per (chapter, voice, speed). A repeat request for
- * the same combination returns the stored file instead of calling the provider
+ * the same combination returns the stored file instead of calling a provider
  * again, which keeps both latency and API usage down.
  */
 @Service
@@ -40,10 +39,11 @@ public class TtsService {
     private final AudioFileRepository audioFileRepository;
     private final StorageService storageService;
     private final TtsProperties properties;
+    private final TtsEngine ttsEngine;
     private final ApplicationEventPublisher eventPublisher;
 
     public List<VoiceOptionDto> availableVoices() {
-        return Arrays.stream(TtsVoice.values()).map(VoiceOptionDto::from).toList();
+        return ttsEngine.availableVoices();
     }
 
     /**
@@ -56,6 +56,11 @@ public class TtsService {
     public AudioInfoDto requestForChapter(Long chapterId, TtsRequest request) {
         if (!properties.enabled()) {
             throw new TtsException("Chức năng đọc bằng AI đang tạm tắt trên máy chủ.");
+        }
+        if (!ttsEngine.hasAnyProvider()) {
+            throw new TtsException(
+                    "Chưa cấu hình nhà cung cấp giọng đọc nào. "
+                            + "Vui lòng đặt FPT_TTS_API_KEY hoặc ELEVENLABS_API_KEY trong file .env.");
         }
 
         Chapter chapter = chapterService.findDetailEntity(chapterId);
@@ -113,11 +118,22 @@ public class TtsService {
         return AudioInfoDto.from(audio, chapterId);
     }
 
+    /**
+     * Falls back to the first voice on offer when the request names none, so a
+     * caller that omits the field still gets a deterministic cache key.
+     */
     private String resolveVoice(String requested) {
-        return TtsVoice.fromCode(requested)
-                .or(() -> TtsVoice.fromCode(properties.fptai().defaultVoice()))
-                .orElse(TtsVoice.BANMAI)
-                .getCode();
+        List<VoiceOptionDto> voices = ttsEngine.availableVoices();
+
+        if (requested != null && !requested.isBlank()) {
+            String trimmed = requested.trim();
+            boolean known = voices.stream().anyMatch(voice -> voice.code().equalsIgnoreCase(trimmed));
+            if (known) {
+                return trimmed;
+            }
+        }
+
+        return voices.isEmpty() ? "default" : voices.getFirst().code();
     }
 
     private int resolveSpeed(Integer requested) {

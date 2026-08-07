@@ -54,12 +54,21 @@ public class AudioFile {
     @Builder.Default
     private String contentType = "audio/mpeg";
 
-    /** Giọng đọc dùng khi gọi TTS (ví dụ banmai, lannhi, leminh...) — null nếu là bản UPLOAD. */
-    @Column(length = 50)
+    /** Voice code passed to the provider; null for an uploaded recording. */
+    @Column(length = 80)
     private String voice;
 
-    /** Tốc độ đọc TTS (-3..3 theo FPT.AI) — null nếu là bản UPLOAD. */
+    /** Reading speed, -3 to 3; null for an uploaded recording. */
     private Integer speed;
+
+    /**
+     * Which backend produced the audio.
+     *
+     * Recorded because a fallback means the result may not come from the
+     * provider that was asked for.
+     */
+    @Column(length = 40)
+    private String provider;
 
     /** Thông báo lỗi khi status = FAILED, để frontend hiển thị rõ ràng. */
     @Column(name = "error_message", length = 1000)
