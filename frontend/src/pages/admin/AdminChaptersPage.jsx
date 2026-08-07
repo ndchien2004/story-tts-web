@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { adminApi, storyApi } from "../../api/endpoints";
+import AudioUploadButton from "../../components/AudioUploadButton";
 import { AccessBadge, Alert, Button, ButtonLink, EmptyState, Select, Spinner } from "../../components/ui";
 
 const ACCESS_LEVELS = [
@@ -125,6 +126,15 @@ export default function AdminChaptersPage() {
                   <td>{chapter.hasAudio ? "🎧 Có" : "—"}</td>
                   <td>
                     <div className="row" style={{ gap: "0.35rem", flexWrap: "nowrap" }}>
+                      <AudioUploadButton
+                        chapterId={chapter.id}
+                        hasAudio={chapter.hasAudio}
+                        onUploaded={() => {
+                          setNotice(`Đã tải lên audio cho "${chapter.title}".`);
+                          load();
+                        }}
+                        onError={setError}
+                      />
                       <ButtonLink to={`/admin/chuong/${chapter.id}`} size="sm">
                         Sửa
                       </ButtonLink>

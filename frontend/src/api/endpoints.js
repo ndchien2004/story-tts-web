@@ -1,4 +1,4 @@
-import client from "./client";
+import client, { API_BASE_URL, getStoredToken } from "./client";
 
 /* ------------------------------------------------------------------ */
 /* Auth                                                                */
@@ -35,6 +35,38 @@ export const chapterApi = {
 };
 
 /* ------------------------------------------------------------------ */
+/* Audio and speech synthesis                                          */
+/* ------------------------------------------------------------------ */
+
+export const audioApi = {
+  list: (chapterId) => client.get(`/api/chapters/${chapterId}/audio`).then((r) => r.data),
+
+  voices: (chapterId) => client.get(`/api/chapters/${chapterId}/tts/voices`).then((r) => r.data),
+
+  /** Starts synthesis, or returns the cached track when one already exists. */
+  requestTts: (chapterId, { voice, speed }) =>
+    client.post(`/api/chapters/${chapterId}/tts`, { voice, speed }).then((r) => r.data),
+
+  ttsStatus: (chapterId, audioId) =>
+    client.get(`/api/chapters/${chapterId}/tts/${audioId}/status`).then((r) => r.data),
+
+  /**
+   * Builds the URL for an `<audio>` element.
+   *
+   * The element cannot send an Authorization header, so the token travels as a
+   * query parameter that the server's JWT filter also accepts.
+   */
+  streamUrl: (path) => {
+    const token = getStoredToken();
+    const url = new URL(path, API_BASE_URL);
+    if (token) {
+      url.searchParams.set("access_token", token);
+    }
+    return url.toString();
+  },
+};
+
+/* ------------------------------------------------------------------ */
 /* Admin                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -45,6 +77,17 @@ export const adminApi = {
 
   createChapter: (storyId, payload) =>
     client.post(`/api/admin/stories/${storyId}/chapters`, payload).then((r) => r.data),
+
+  uploadAudio: (chapterId, file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return client
+      .post(`/api/admin/chapters/${chapterId}/audio`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      .then((r) => r.data);
+  },
+  deleteAudio: (audioId) => client.delete(`/api/admin/audio/${audioId}`),
   getChapter: (id) => client.get(`/api/admin/chapters/${id}`).then((r) => r.data),
   updateChapter: (id, payload) => client.put(`/api/admin/chapters/${id}`, payload).then((r) => r.data),
   setChapterAccessLevel: (id, accessLevel) =>

@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { chapterApi } from "../api/endpoints";
+import { audioApi, chapterApi } from "../api/endpoints";
+import AudioPlayer from "../components/AudioPlayer";
 import LockedGate from "../components/LockedGate";
+import useChapterAudio from "../hooks/useChapterAudio";
 import { useTheme } from "../context/theme-context";
 import { AccessBadge, Alert, Button, ButtonLink, Spinner } from "../components/ui";
+
+const AUTO_CONTINUE_KEY = "storytts.autoContinue";
 
 export default function ChapterPage() {
   const { chapterId } = useParams();
@@ -15,6 +19,14 @@ export default function ChapterPage() {
   const [lockError, setLockError] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [voices, setVoices] = useState([]);
+  const [autoContinue, setAutoContinue] = useState(
+    () => localStorage.getItem(AUTO_CONTINUE_KEY) === "true",
+  );
+
+  // Audio is only fetched once the chapter itself proved readable, so a locked
+  // chapter never triggers a second request that is bound to be refused.
+  const audio = useChapterAudio(chapterId, { enabled: Boolean(chapter) });
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +60,31 @@ export default function ChapterPage() {
     };
   }, [chapterId]);
 
+  useEffect(() => {
+    if (!chapter) return;
+    audioApi
+      .voices(chapterId)
+      .then(setVoices)
+      .catch(() => setVoices([]));
+  }, [chapter, chapterId]);
+
+  useEffect(() => {
+    localStorage.setItem(AUTO_CONTINUE_KEY, String(autoContinue));
+  }, [autoContinue]);
+
+  /**
+   * Continuous listening: move to the next chapter when playback finishes.
+   *
+   * Only the navigation happens here. The next page loads its own audio and, if
+   * none exists yet, the reader can generate it there — the access check runs
+   * again server-side either way.
+   */
+  const handleTrackEnded = useCallback(() => {
+    if (autoContinue && chapter?.nextChapterId) {
+      navigate(`/chuong/${chapter.nextChapterId}`);
+    }
+  }, [autoContinue, chapter, navigate]);
+
   if (loading) return <Spinner label="Đang tải chương…" />;
 
   if (lockError) {
@@ -65,7 +102,7 @@ export default function ChapterPage() {
   if (!chapter) return null;
 
   return (
-    <div className="container-narrow">
+    <div className="container-narrow stack" style={{ gap: "1.5rem" }}>
       <div className="reader-toolbar">
         <div className="row" style={{ gap: "0.4rem" }}>
           <Button
@@ -114,6 +151,15 @@ export default function ChapterPage() {
         </div>
       </div>
 
+      <AudioPlayer
+        audio={audio}
+        voices={voices}
+        autoContinue={autoContinue}
+        onToggleAutoContinue={() => setAutoContinue((value) => !value)}
+        onTrackEnded={handleTrackEnded}
+        hasNextChapter={Boolean(chapter.nextChapterId)}
+      />
+
       <article className="nb-card stack">
         <div className="row-between">
           <Link to={`/truyen/${chapter.storyId}`} className="muted" style={{ fontWeight: 700 }}>
@@ -129,7 +175,7 @@ export default function ChapterPage() {
         <div className="reader-content">{chapter.content}</div>
       </article>
 
-      <div className="row" style={{ justifyContent: "space-between", marginTop: "1.5rem" }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
         <Button
           disabled={!chapter.previousChapterId}
           onClick={() => navigate(`/chuong/${chapter.previousChapterId}`)}
