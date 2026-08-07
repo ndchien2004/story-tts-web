@@ -1,0 +1,708 @@
+/**
+ * Shared component classes.
+ *
+ * Naming: `nb-` prefix for the neobrutalist primitives, plain names for
+ * layout helpers. Page-specific rules live at the bottom of the file.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Layout                                                              */
+/* ------------------------------------------------------------------ */
+
+.container {
+  width: min(1180px, 100% - 2rem);
+  margin-inline: auto;
+}
+
+.container-narrow {
+  width: min(760px, 100% - 2rem);
+  margin-inline: auto;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.grow {
+  flex: 1 1 auto;
+}
+
+.page {
+  padding-block: var(--space-6) var(--space-7);
+}
+
+.muted {
+  color: var(--ink-muted);
+}
+
+.text-center {
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ */
+/* Card                                                                */
+/* ------------------------------------------------------------------ */
+
+.nb-card {
+  background: var(--surface);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-5);
+}
+
+.nb-card-flat {
+  box-shadow: none;
+}
+
+.nb-card-tint {
+  background: var(--accent);
+  color: #0a0a0a;
+}
+
+/* Section header with the accent bar that anchors most pages. */
+.nb-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.nb-section-title::before {
+  content: "";
+  width: 14px;
+  align-self: stretch;
+  min-height: 1.6rem;
+  background: var(--accent);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: 3px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Button                                                              */
+/* ------------------------------------------------------------------ */
+
+.nb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0.6rem 1.1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  color: #0a0a0a;
+  background: var(--surface);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+/* The press effect: the button slides into its own shadow. */
+.nb-btn:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--outline);
+}
+
+.nb-btn:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--outline);
+}
+
+.nb-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
+  transform: none;
+}
+
+.nb-btn-primary {
+  background: var(--accent);
+}
+
+.nb-btn-info {
+  background: var(--info);
+}
+
+.nb-btn-success {
+  background: var(--success);
+}
+
+.nb-btn-danger {
+  background: var(--danger);
+}
+
+.nb-btn-violet {
+  background: var(--violet);
+}
+
+.nb-btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: none;
+}
+
+.nb-btn-ghost:hover:not(:disabled) {
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.nb-btn-sm {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+  border-width: 2px;
+}
+
+.nb-btn-lg {
+  padding: 0.85rem 1.6rem;
+  font-size: 1.05rem;
+}
+
+.nb-btn-block {
+  width: 100%;
+}
+
+/* Square icon-only button. */
+.nb-icon-btn {
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  font-size: 1.1rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Badge                                                               */
+/* ------------------------------------------------------------------ */
+
+.nb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #0a0a0a;
+  background: var(--surface);
+  border: 2px solid var(--outline);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+.nb-badge-public {
+  background: var(--success);
+}
+
+.nb-badge-member {
+  background: var(--warning);
+}
+
+.nb-badge-vip {
+  background: var(--danger);
+}
+
+.nb-badge-neutral {
+  background: var(--bg-alt);
+  color: var(--ink);
+}
+
+.nb-badge-info {
+  background: var(--info);
+}
+
+/* ------------------------------------------------------------------ */
+/* Form controls                                                       */
+/* ------------------------------------------------------------------ */
+
+.nb-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.nb-label {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.nb-input,
+.nb-select,
+.nb-textarea {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  background: var(--surface);
+  color: var(--ink);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius-sm);
+  transition: box-shadow var(--transition);
+}
+
+.nb-input:focus,
+.nb-select:focus,
+.nb-textarea:focus {
+  outline: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.nb-textarea {
+  min-height: 12rem;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.nb-select {
+  cursor: pointer;
+}
+
+.nb-error {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #b3123a;
+}
+
+[data-theme="dark"] .nb-error {
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------------------ */
+/* Alert                                                               */
+/* ------------------------------------------------------------------ */
+
+.nb-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  font-weight: 600;
+  color: #0a0a0a;
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.nb-alert-error {
+  background: var(--danger);
+}
+
+.nb-alert-success {
+  background: var(--success);
+}
+
+.nb-alert-info {
+  background: var(--info);
+}
+
+.nb-alert-warning {
+  background: var(--warning);
+}
+
+/* ------------------------------------------------------------------ */
+/* Navbar                                                              */
+/* ------------------------------------------------------------------ */
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--surface);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding-block: var(--space-3);
+}
+
+.navbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.navbar-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  background: var(--accent);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.navbar-link {
+  padding: 0.4rem 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.navbar-link:hover {
+  border-color: var(--outline);
+}
+
+.navbar-link.active {
+  background: var(--accent);
+  color: #0a0a0a;
+  border-color: var(--outline);
+}
+
+/* Mobile menu toggle is hidden until the layout gets tight. */
+.navbar-toggle {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .navbar-toggle {
+    display: inline-flex;
+  }
+
+  .navbar-links {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    background: var(--surface);
+    border-bottom: var(--outline-width) solid var(--outline);
+  }
+
+  .navbar-links.open {
+    display: flex;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Story grid                                                          */
+/* ------------------------------------------------------------------ */
+
+.story-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: var(--space-5);
+}
+
+.story-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  overflow: hidden;
+  text-decoration: none;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.story-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.story-cover {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  text-align: center;
+  background: var(--accent);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.story-cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Placeholder initials shown when a story has no cover image. */
+.story-cover-initials {
+  font-size: 2.4rem;
+  font-weight: 900;
+  color: #0a0a0a;
+  letter-spacing: -0.04em;
+}
+
+.story-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.story-card-title {
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.3;
+  /* Two-line clamp keeps every card the same height. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* Chapter list                                                        */
+/* ------------------------------------------------------------------ */
+
+.chapter-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  padding: 0;
+}
+
+.chapter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  text-decoration: none;
+  background: var(--surface);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius-sm);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.chapter-row:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.chapter-row-locked {
+  background: var(--surface-sunken);
+}
+
+.chapter-number {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2.4rem;
+  height: 2.4rem;
+  font-weight: 800;
+  background: var(--bg-alt);
+  border: 2px solid var(--outline);
+  border-radius: var(--radius-sm);
+}
+
+.chapter-title {
+  flex: 1 1 auto;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reader                                                              */
+/* ------------------------------------------------------------------ */
+
+.reader-content {
+  font-family: var(--font-reader);
+  font-size: var(--reader-font-size);
+  line-height: var(--reader-line-height);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.reader-content p + p {
+  margin-top: 1.2em;
+}
+
+.reader-toolbar {
+  position: sticky;
+  top: 4.4rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3);
+  margin-bottom: var(--space-5);
+  background: var(--surface);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Full-page gate rendered instead of chapter text when access is denied. */
+.locked-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+  background: var(--surface);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.locked-gate-icon {
+  display: grid;
+  place-items: center;
+  width: 5rem;
+  height: 5rem;
+  font-size: 2.4rem;
+  background: var(--warning);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ------------------------------------------------------------------ */
+/* Pagination                                                          */
+/* ------------------------------------------------------------------ */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-6);
+}
+
+.pagination-page {
+  min-width: 2.5rem;
+}
+
+.pagination-page.active {
+  background: var(--accent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Table                                                               */
+/* ------------------------------------------------------------------ */
+
+.nb-table-wrap {
+  overflow-x: auto;
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.nb-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.nb-table th,
+.nb-table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border-bottom: 2px solid var(--outline);
+}
+
+.nb-table th {
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  background: var(--accent);
+  color: #0a0a0a;
+}
+
+.nb-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.nb-table tbody tr:hover {
+  background: var(--surface-sunken);
+}
+
+/* ------------------------------------------------------------------ */
+/* Misc                                                                */
+/* ------------------------------------------------------------------ */
+
+.spinner {
+  width: 1.15em;
+  height: 1.15em;
+  border: 3px solid var(--outline);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-7) var(--space-4);
+  text-align: center;
+}
+
+.hero {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-6);
+  background: var(--accent);
+  color: #0a0a0a;
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.footer {
+  padding-block: var(--space-5);
+  margin-top: var(--space-7);
+  border-top: var(--outline-width) solid var(--outline);
+  background: var(--surface);
+}
