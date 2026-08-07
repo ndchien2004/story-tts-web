@@ -112,7 +112,7 @@ export default function AdminUsersPage() {
       {loading && <Spinner />}
 
       {!loading && result && result.content.length === 0 && (
-        <EmptyState icon="👤" title="Không tìm thấy thành viên nào" />
+        <EmptyState title="Không tìm thấy thành viên nào" />
       )}
 
       {!loading && result && result.content.length > 0 && (

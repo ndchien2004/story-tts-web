@@ -72,26 +72,25 @@ export function Badge({ tone = "neutral", children, className = "" }) {
   return <span className={`nb-badge nb-badge-${tone} ${className}`}>{children}</span>;
 }
 
+/**
+ * Access levels are shown as plain wording, without a padlock or crown.
+ * Colour alone carries the emphasis.
+ */
 const ACCESS_LEVEL_META = {
-  PUBLIC: { tone: "public", icon: "🌐", label: "Công khai" },
-  MEMBER: { tone: "member", icon: "🔒", label: "Yêu cầu đăng nhập" },
-  VIP: { tone: "vip", icon: "👑", label: "Yêu cầu VIP" },
+  PUBLIC: { tone: "public", label: "Công khai" },
+  MEMBER: { tone: "member", label: "Cần đăng nhập" },
+  VIP: { tone: "vip", label: "Cần VIP" },
 };
 
 /**
  * Badge describing a chapter's access level.
  *
- * `label` overrides the local text so the server stays the source of truth for
- * wording, while the icon and colour are decided here.
+ * `label` overrides the local wording so the server stays the source of truth,
+ * while the colour is decided here.
  */
-export function AccessBadge({ level, label, showIcon = true }) {
+export function AccessBadge({ level, label }) {
   const meta = ACCESS_LEVEL_META[level] ?? ACCESS_LEVEL_META.PUBLIC;
-  return (
-    <Badge tone={meta.tone}>
-      {showIcon && <span aria-hidden="true">{meta.icon}</span>}
-      {label ?? meta.label}
-    </Badge>
-  );
+  return <Badge tone={meta.tone}>{label ?? meta.label}</Badge>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -101,10 +100,8 @@ export function AccessBadge({ level, label, showIcon = true }) {
 export function Alert({ tone = "info", title, children }) {
   return (
     <div className={`nb-alert nb-alert-${tone}`} role={tone === "error" ? "alert" : "status"}>
-      <div>
-        {title && <strong style={{ display: "block", marginBottom: "0.2rem" }}>{title}</strong>}
-        {children}
-      </div>
+      {title && <strong>{title}</strong>}
+      <div>{children}</div>
     </div>
   );
 }
@@ -118,12 +115,9 @@ export function Spinner({ label = "Đang tải…" }) {
   );
 }
 
-export function EmptyState({ icon = "📭", title, children }) {
+export function EmptyState({ title, children }) {
   return (
     <div className="empty-state">
-      <div style={{ fontSize: "2.5rem" }} aria-hidden="true">
-        {icon}
-      </div>
       <h3>{title}</h3>
       {children && <p className="muted">{children}</p>}
     </div>
@@ -143,7 +137,11 @@ export function Field({ label, htmlFor, error, hint, children }) {
         </label>
       )}
       {children}
-      {hint && !error && <span className="muted" style={{ fontSize: "0.85rem" }}>{hint}</span>}
+      {hint && !error && (
+        <span className="muted" style={{ fontSize: "0.83rem" }}>
+          {hint}
+        </span>
+      )}
       {error && <span className="nb-error">{error}</span>}
     </div>
   );

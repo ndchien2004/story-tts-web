@@ -79,7 +79,7 @@ export default function StoryDetailPage() {
         </div>
 
         {chapters.length === 0 ? (
-          <EmptyState icon="📄" title="Truyện chưa có chương nào">
+          <EmptyState title="Truyện chưa có chương nào">
             Quản trị viên sẽ cập nhật nội dung sớm.
           </EmptyState>
         ) : (

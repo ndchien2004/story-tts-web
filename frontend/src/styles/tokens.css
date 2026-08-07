@@ -1,22 +1,30 @@
 /**
  * Design tokens.
  *
- * The visual language is neobrutalist: flat fills, hard black outlines and
- * offset shadows with no blur. Every value the rest of the stylesheets need is
+ * The visual language is neobrutalist: flat fills, hard outlines and offset
+ * shadows with no blur. Every value the rest of the stylesheets need is
  * declared here once so that switching themes only swaps this block.
  */
 
 :root {
   /* Surfaces */
   --bg: #fffdf5;
-  --bg-alt: #f4f1e4;
+  --bg-alt: #f1eee1;
   --surface: #ffffff;
   --surface-sunken: #f7f5ec;
+  --surface-raised: #ffffff;
 
   /* Text */
   --ink: #0a0a0a;
-  --ink-muted: #5c5a52;
-  --ink-inverse: #fffdf5;
+  --ink-muted: #625f56;
+
+  /**
+   * Text placed on a tinted fill (accent, info, danger…).
+   *
+   * The tints stay light in both themes, so this deliberately does NOT flip
+   * with the theme — otherwise light text would land on a light button.
+   */
+  --on-tint: #0a0a0a;
 
   /* Outline used by every bordered element */
   --outline: #0a0a0a;
@@ -36,8 +44,8 @@
   --shadow: 5px 5px 0 var(--outline);
   --shadow-lg: 8px 8px 0 var(--outline);
 
-  --radius: 8px;
-  --radius-sm: 5px;
+  --radius: 10px;
+  --radius-sm: 6px;
   --radius-pill: 999px;
 
   /* Spacing scale */
@@ -49,38 +57,56 @@
   --space-6: 2rem;
   --space-7: 3rem;
 
-  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --font-reader: Georgia, "Times New Roman", serif;
+  /**
+   * Font stacks.
+   *
+   * Every family listed carries a complete set of precomposed Vietnamese
+   * glyphs. That matters: a font missing them (Georgia, for one) makes the
+   * browser fall back per character, so accented letters render in a different
+   * face than their unaccented neighbours and words look broken apart.
+   */
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+    "Noto Sans", Roboto, Arial, sans-serif;
+  --font-reader: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+    "Noto Sans", Roboto, Arial, sans-serif;
   --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
 
   --transition: 120ms ease-out;
 
-  /* Reader preferences, overridden inline from the reader settings panel. */
+  /* Height of the sticky header; the reader subtracts it from the viewport. */
+  --navbar-height: 4.25rem;
+
+  /* Reader preferences, driven by the reader settings controls. */
   --reader-font-size: 1.125rem;
-  --reader-line-height: 1.9;
+  --reader-line-height: 1.85;
 }
 
 [data-theme="dark"] {
   --bg: #15151c;
-  --bg-alt: #1d1d27;
+  --bg-alt: #22222e;
   --surface: #23232f;
-  --surface-sunken: #1a1a23;
+  --surface-sunken: #1b1b24;
+  --surface-raised: #2b2b3a;
 
-  --ink: #f6f4ec;
-  --ink-muted: #a5a29a;
-  --ink-inverse: #15151c;
+  --ink: #f4f2ea;
+  --ink-muted: #9d9a92;
 
-  /* Dark mode keeps the hard outline, only inverted, so the brutalist
-     silhouette survives the theme switch. */
-  --outline: #f6f4ec;
+  /* Deliberately unchanged; see the note in :root. */
+  --on-tint: #0a0a0a;
 
-  --accent: #ffd84d;
-  --accent-strong: #ffc700;
-  --info: #4fc3c3;
-  --success: #9bd93a;
-  --warning: #e89440;
-  --danger: #f2718a;
-  --violet: #a98cff;
+  /* The hard outline survives the theme switch, only inverted, so the
+     brutalist silhouette still reads. */
+  --outline: #f4f2ea;
+
+  /* Tints are darkened just enough to sit calmly on a dark page while
+     staying light enough for --on-tint text to keep its contrast. */
+  --accent: #f5c93f;
+  --accent-strong: #e0b62c;
+  --info: #63cfcf;
+  --success: #a6d94a;
+  --warning: #e8a457;
+  --danger: #f08098;
+  --violet: #b09aff;
 }
 
 /* Respect users who ask the OS to reduce motion. */

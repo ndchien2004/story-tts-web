@@ -1,4 +1,5 @@
 import axios from "axios";
+import { normalizeDeep } from "../utils/text";
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
@@ -32,11 +33,14 @@ client.interceptors.request.use((config) => {
 });
 
 /**
- * Normalise every failure into an `ApiError` so components never have to dig
- * through the axios error shape.
+ * Fold response text to Unicode NFC, then normalise every failure into an
+ * `ApiError` so components never have to dig through the axios error shape.
  */
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    response.data = normalizeDeep(response.data);
+    return response;
+  },
   (error) => Promise.reject(toApiError(error)),
 );
 

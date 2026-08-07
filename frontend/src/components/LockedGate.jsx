@@ -17,9 +17,7 @@ export default function LockedGate({ requiredAccessLevel, message }) {
 
   return (
     <div className="locked-gate">
-      <div className="locked-gate-icon" aria-hidden="true">
-        {needsVip ? "👑" : "🔒"}
-      </div>
+      <span className="locked-gate-tag">{needsVip ? "Nội dung VIP" : "Nội dung hạn chế"}</span>
 
       <h2>{needsVip ? "Chương dành cho thành viên VIP" : "Chương yêu cầu đăng nhập"}</h2>
 

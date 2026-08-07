@@ -11,12 +11,12 @@ const SPEED_OPTIONS = [
 ];
 
 const SOURCE_LABEL = {
-  UPLOAD: "🎙️ Bản thu sẵn",
-  TTS: "🤖 Giọng AI",
+  UPLOAD: "Bản thu sẵn",
+  TTS: "Giọng AI",
 };
 
 /**
- * Chapter audio panel: native playback plus on-demand narration.
+ * Chapter audio panel.
  *
  * Playback uses a plain `<audio controls>` element so seeking, volume and the
  * OS media keys behave exactly as users expect; the server serves byte ranges,
@@ -53,11 +53,7 @@ export default function AudioPlayer({
   async function handleGenerate() {
     clearError();
     setPlayWhenReady(true);
-    const ready = await requestTts({ voice, speed });
-    if (!ready) {
-      // Still generating; the hook polls and `activeTrack` updates on success.
-      return;
-    }
+    await requestTts({ voice, speed });
   }
 
   const ttsAlreadyExists = tracks.some(
@@ -65,16 +61,11 @@ export default function AudioPlayer({
   );
 
   return (
-    <section className="nb-card stack" style={{ gap: "1rem" }}>
-      <div className="row-between">
-        <h2 style={{ fontSize: "1.15rem" }}>Nghe chương này</h2>
-        {activeTrack && <Badge tone="info">{SOURCE_LABEL[activeTrack.source]}</Badge>}
-      </div>
-
+    <div className="stack" style={{ gap: "1rem" }}>
       {error && (
         <Alert tone="error">
           {error}
-          <div style={{ marginTop: "0.5rem" }}>
+          <div>
             <Button size="sm" onClick={clearError}>
               Đóng
             </Button>
@@ -83,24 +74,28 @@ export default function AudioPlayer({
       )}
 
       {activeTrack ? (
-        <audio
-          ref={audioRef}
-          controls
-          preload="metadata"
-          src={audioApi.streamUrl(activeTrack.streamUrl)}
-          onEnded={onTrackEnded}
-          style={{ width: "100%" }}
-        >
-          Trình duyệt của bạn không hỗ trợ phát audio.
-        </audio>
+        <div className="stack" style={{ gap: "0.6rem" }}>
+          <Badge tone="info">{SOURCE_LABEL[activeTrack.source]}</Badge>
+          <audio
+            ref={audioRef}
+            className="audio-element"
+            controls
+            preload="metadata"
+            src={audioApi.streamUrl(activeTrack.streamUrl)}
+            onEnded={onTrackEnded}
+          >
+            Trình duyệt của bạn không hỗ trợ phát audio.
+          </audio>
+        </div>
       ) : (
         <p className="muted">
-          Chương này chưa có bản audio. Bấm “Nghe bằng AI” để hệ thống tự tạo giọng đọc.
+          Chương này chưa có bản audio. Chọn giọng đọc rồi bấm “Nghe bằng AI” để hệ thống tạo giọng
+          đọc cho chương.
         </p>
       )}
 
       {tracks.length > 1 && (
-        <Field label="Chọn bản audio" htmlFor="track">
+        <Field label="Bản audio" htmlFor="track">
           <Select
             id="track"
             value={activeTrack?.id ?? ""}
@@ -118,75 +113,66 @@ export default function AudioPlayer({
         </Field>
       )}
 
-      <hr style={{ border: "none", borderTop: "2px dashed var(--outline)" }} />
+      <Field label="Giọng đọc" htmlFor="voice">
+        <Select
+          id="voice"
+          value={voice}
+          disabled={generating}
+          onChange={(event) => setVoice(event.target.value)}
+        >
+          {voices.map((option) => (
+            <option key={option.code} value={option.code}>
+              {option.name} — {option.gender}, {option.region}
+            </option>
+          ))}
+        </Select>
+      </Field>
 
-      <div className="filter-bar">
-        <Field label="Giọng đọc" htmlFor="voice">
-          <Select
-            id="voice"
-            value={voice}
-            disabled={generating}
-            onChange={(event) => setVoice(event.target.value)}
-          >
-            {voices.map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.name} ({option.gender} · {option.region})
-              </option>
-            ))}
-          </Select>
-        </Field>
+      <Field label="Tốc độ đọc" htmlFor="speed">
+        <Select
+          id="speed"
+          value={speed}
+          disabled={generating}
+          onChange={(event) => setSpeed(Number(event.target.value))}
+        >
+          {SPEED_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </Field>
 
-        <Field label="Tốc độ đọc" htmlFor="speed">
-          <Select
-            id="speed"
-            value={speed}
-            disabled={generating}
-            onChange={(event) => setSpeed(Number(event.target.value))}
-          >
-            {SPEED_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-
-        <div className="nb-field">
-          <span className="nb-label">&nbsp;</span>
-          <Button variant="primary" loading={generating} onClick={handleGenerate}>
-            {generating
-              ? "Đang tạo audio…"
-              : ttsAlreadyExists
-                ? "Phát bản đã tạo"
-                : "🤖 Nghe bằng AI"}
-          </Button>
-        </div>
-      </div>
+      <Button variant="primary" block loading={generating} onClick={handleGenerate}>
+        {generating ? "Đang tạo audio…" : ttsAlreadyExists ? "Phát bản đã tạo" : "Nghe bằng AI"}
+      </Button>
 
       {generating && (
         <Alert tone="info">
-          Đang chuyển văn bản thành giọng nói. Chương dài có thể mất một vài phút — bạn có thể tiếp
-          tục đọc trong lúc chờ.
+          Đang chuyển văn bản thành giọng nói. Chương dài có thể mất một vài phút, bạn vẫn đọc tiếp
+          được trong lúc chờ.
         </Alert>
       )}
 
-      <label className="row" style={{ gap: "0.5rem", cursor: "pointer" }}>
+      <label className="row" style={{ gap: "0.5rem", cursor: "pointer", alignItems: "flex-start" }}>
         <input
           type="checkbox"
+          className="nb-checkbox"
           checked={autoContinue}
           onChange={onToggleAutoContinue}
           disabled={!hasNextChapter}
-          style={{ width: "1.1rem", height: "1.1rem" }}
+          style={{ marginTop: "0.25rem" }}
         />
-        <span style={{ fontWeight: 700 }}>
-          Nghe liên tục
-          <span className="muted" style={{ fontWeight: 400 }}>
-            {" "}
-            — hết chương thì tự chuyển sang chương sau
-            {!hasNextChapter && " (đây là chương cuối)"}
+        <span style={{ flex: "1 1 0", minWidth: 0 }}>
+          <strong>Nghe liên tục</strong>
+          <br />
+          <span className="muted" style={{ fontSize: "0.85rem" }}>
+            {hasNextChapter
+              ? "Hết chương sẽ tự chuyển sang chương sau."
+              : "Đây là chương cuối của truyện."}
           </span>
         </span>
       </label>
-    </section>
+    </div>
   );
 }

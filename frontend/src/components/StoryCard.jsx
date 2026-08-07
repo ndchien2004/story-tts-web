@@ -24,31 +24,35 @@ const PLACEHOLDER_TINTS = [
 
 export default function StoryCard({ story }) {
   const tint = PLACEHOLDER_TINTS[story.id % PLACEHOLDER_TINTS.length];
+  const hasCover = Boolean(story.coverImage);
 
   return (
     <Link to={`/truyen/${story.id}`} className="nb-card story-card">
-      <div className="story-cover" style={{ background: tint }}>
-        {story.coverImage ? (
+      <div
+        className={`story-cover ${hasCover ? "" : "story-cover-placeholder"}`}
+        style={hasCover ? undefined : { background: tint }}
+      >
+        {hasCover ? (
           <img src={story.coverImage} alt="" loading="lazy" />
         ) : (
           <span className="story-cover-initials">{initialsOf(story.title)}</span>
+        )}
+
+        {story.genre && (
+          <Badge tone="neutral" className="story-cover-chip">
+            {story.genre.name}
+          </Badge>
         )}
       </div>
 
       <div className="story-card-body">
         <span className="story-card-title">{story.title}</span>
-        <span className="muted" style={{ fontSize: "0.88rem" }}>
-          {story.author?.name ?? "Chưa rõ tác giả"}
-        </span>
-        <div className="row" style={{ gap: "0.35rem" }}>
-          {story.genre && <Badge tone="info">{story.genre.name}</Badge>}
-          <Badge tone={story.status === "COMPLETED" ? "public" : "neutral"}>
-            {story.statusLabel}
-          </Badge>
+        <span className="story-card-author">{story.author?.name ?? "Chưa rõ tác giả"}</span>
+
+        <div className="story-card-meta">
+          <span>{story.chapterCount} chương</span>
+          <span>{story.statusLabel}</span>
         </div>
-        <span className="muted" style={{ fontSize: "0.82rem" }}>
-          {story.chapterCount} chương · {story.viewCount} lượt xem
-        </span>
       </div>
     </Link>
   );

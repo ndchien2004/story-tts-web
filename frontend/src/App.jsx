@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
+import ReaderLayout from "./components/ReaderLayout";
 import { RequireAdmin } from "./components/RouteGuards";
 import AuthProvider from "./context/AuthProvider";
 import ThemeProvider from "./context/ThemeProvider";
@@ -30,7 +31,6 @@ export default function App() {
               <Route index element={<HomePage />} />
               <Route path="truyen" element={<StoriesPage />} />
               <Route path="truyen/:storyId" element={<StoryDetailPage />} />
-              <Route path="chuong/:chapterId" element={<ChapterPage />} />
               <Route path="dang-nhap" element={<LoginPage />} />
               <Route path="dang-ky" element={<RegisterPage />} />
 
@@ -49,7 +49,14 @@ export default function App() {
               </Route>
 
               <Route path="404" element={<NotFoundPage />} />
+
               <Route path="*" element={<Navigate to="/404" replace />} />
+            </Route>
+
+            {/* The reader gets its own shell: it fills the viewport and
+                scrolls inside its panes, so it takes no page padding. */}
+            <Route element={<ReaderLayout />}>
+              <Route path="chuong/:chapterId" element={<ChapterPage />} />
             </Route>
           </Routes>
         </BrowserRouter>

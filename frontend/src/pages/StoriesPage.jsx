@@ -12,7 +12,7 @@ const SORT_OPTIONS = [
   { value: "newest", label: "Mới nhất" },
   { value: "popular", label: "Phổ biến nhất" },
   { value: "oldest", label: "Cũ nhất" },
-  { value: "title", label: "Tên A → Z" },
+  { value: "title", label: "Tên A-Z" },
 ];
 
 const STATUS_OPTIONS = [
@@ -164,7 +164,7 @@ export default function StoriesPage() {
       {loading && <Spinner />}
 
       {!loading && result && result.content.length === 0 && (
-        <EmptyState icon="🔍" title="Không tìm thấy truyện nào">
+        <EmptyState title="Không tìm thấy truyện nào">
           Thử đổi từ khóa hoặc bỏ bớt bộ lọc.
         </EmptyState>
       )}

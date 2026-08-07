@@ -22,21 +22,19 @@ export default function Navbar() {
     <header className="navbar">
       <div className="container navbar-inner" style={{ position: "relative" }}>
         <Link to="/" className="navbar-brand" onClick={closeMenu}>
-          <span className="navbar-brand-mark" aria-hidden="true">
-            📖
-          </span>
+          <span className="navbar-brand-mark" aria-hidden="true" />
           Truyện Nghe
         </Link>
 
         <div className="grow" />
 
         <Button
-          className="nb-icon-btn navbar-toggle"
-          aria-label="Mở menu"
+          className="navbar-toggle"
+          size="sm"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((open) => !open)}
         >
-          ☰
+          Menu
         </Button>
 
         <nav className={`navbar-links ${menuOpen ? "open" : ""}`}>
@@ -52,20 +50,15 @@ export default function Navbar() {
             </NavLink>
           )}
 
-          <Button
-            className="nb-icon-btn"
-            onClick={toggleTheme}
-            aria-label={isDark ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối"}
-            title={isDark ? "Giao diện sáng" : "Giao diện tối"}
-          >
-            {isDark ? "☀️" : "🌙"}
+          <Button size="sm" onClick={toggleTheme}>
+            {isDark ? "Giao diện sáng" : "Giao diện tối"}
           </Button>
 
           {isAuthenticated ? (
             <>
-              <span className="row" style={{ gap: "0.4rem" }}>
-                <strong>{user.displayName || user.username}</strong>
-                {isAdmin && <Badge tone="info">ADMIN</Badge>}
+              <span className="navbar-user">
+                {user.displayName || user.username}
+                {isAdmin && <Badge tone="info">Admin</Badge>}
                 {!isAdmin && isVip && <Badge tone="vip">VIP</Badge>}
               </span>
               <Button size="sm" onClick={handleLogout}>

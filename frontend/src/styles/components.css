@@ -19,6 +19,12 @@
   margin-inline: auto;
 }
 
+/* Wider gutter budget for the reader, which has two panes to place. */
+.container-wide {
+  width: min(1560px, 100% - 2rem);
+  margin-inline: auto;
+}
+
 .stack {
   display: flex;
   flex-direction: column;
@@ -62,6 +68,7 @@
 
 .nb-card {
   background: var(--surface);
+  color: var(--ink);
   border: var(--outline-width) solid var(--outline);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -70,11 +77,6 @@
 
 .nb-card-flat {
   box-shadow: none;
-}
-
-.nb-card-tint {
-  background: var(--accent);
-  color: #0a0a0a;
 }
 
 /* Section header with the accent bar that anchors most pages. */
@@ -87,7 +89,7 @@
 
 .nb-section-title::before {
   content: "";
-  width: 14px;
+  width: 12px;
   align-self: stretch;
   min-height: 1.6rem;
   background: var(--accent);
@@ -104,13 +106,14 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: 0.6rem 1.1rem;
+  padding: 0.55rem 1.05rem;
   font-weight: 700;
   line-height: 1.2;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
-  color: #0a0a0a;
+  /* Follows the theme: the default fill is the themed surface, not a tint. */
+  color: var(--ink);
   background: var(--surface);
   border: var(--outline-width) solid var(--outline);
   border-radius: var(--radius-sm);
@@ -131,9 +134,18 @@
 
 .nb-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.5;
   box-shadow: none;
   transform: none;
+}
+
+/* Tinted variants keep dark text in both themes; see --on-tint. */
+.nb-btn-primary,
+.nb-btn-info,
+.nb-btn-success,
+.nb-btn-danger,
+.nb-btn-violet {
+  color: var(--on-tint);
 }
 
 .nb-btn-primary {
@@ -168,26 +180,18 @@
 }
 
 .nb-btn-sm {
-  padding: 0.35rem 0.7rem;
+  padding: 0.3rem 0.65rem;
   font-size: 0.85rem;
   border-width: 2px;
 }
 
 .nb-btn-lg {
-  padding: 0.85rem 1.6rem;
+  padding: 0.8rem 1.5rem;
   font-size: 1.05rem;
 }
 
 .nb-btn-block {
   width: 100%;
-}
-
-/* Square icon-only button. */
-.nb-icon-btn {
-  width: 2.6rem;
-  height: 2.6rem;
-  padding: 0;
-  font-size: 1.1rem;
 }
 
 /* ------------------------------------------------------------------ */
@@ -197,15 +201,22 @@
 .nb-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.15rem 0.6rem;
-  font-size: 0.78rem;
+  padding: 0.12rem 0.55rem;
+  font-size: 0.76rem;
   font-weight: 700;
-  color: #0a0a0a;
+  letter-spacing: 0.01em;
+  color: var(--ink);
   background: var(--surface);
   border: 2px solid var(--outline);
   border-radius: var(--radius-pill);
   white-space: nowrap;
+}
+
+.nb-badge-public,
+.nb-badge-member,
+.nb-badge-vip,
+.nb-badge-info {
+  color: var(--on-tint);
 }
 
 .nb-badge-public {
@@ -220,13 +231,13 @@
   background: var(--danger);
 }
 
+.nb-badge-info {
+  background: var(--info);
+}
+
 .nb-badge-neutral {
   background: var(--bg-alt);
   color: var(--ink);
-}
-
-.nb-badge-info {
-  background: var(--info);
 }
 
 /* ------------------------------------------------------------------ */
@@ -241,19 +252,24 @@
 
 .nb-label {
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 
 .nb-input,
 .nb-select,
 .nb-textarea {
   width: 100%;
-  padding: 0.6rem 0.8rem;
+  padding: 0.55rem 0.75rem;
   background: var(--surface);
   color: var(--ink);
   border: var(--outline-width) solid var(--outline);
   border-radius: var(--radius-sm);
   transition: box-shadow var(--transition);
+}
+
+.nb-input::placeholder,
+.nb-textarea::placeholder {
+  color: var(--ink-muted);
 }
 
 .nb-input:focus,
@@ -275,6 +291,13 @@
   cursor: pointer;
 }
 
+/* Native select popups follow the system theme, so options need explicit
+   colours or they render dark-on-dark. */
+.nb-select option {
+  background: var(--surface);
+  color: var(--ink);
+}
+
 .nb-error {
   font-size: 0.85rem;
   font-weight: 700;
@@ -282,7 +305,13 @@
 }
 
 [data-theme="dark"] .nb-error {
-  color: var(--danger);
+  color: #ff9db0;
+}
+
+.nb-checkbox {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--accent);
 }
 
 /* ------------------------------------------------------------------ */
@@ -291,11 +320,11 @@
 
 .nb-alert {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
+  flex-direction: column;
+  gap: var(--space-2);
   padding: var(--space-4);
   font-weight: 600;
-  color: #0a0a0a;
+  color: var(--on-tint);
   border: var(--outline-width) solid var(--outline);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
@@ -333,29 +362,26 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding-block: var(--space-3);
+  min-height: var(--navbar-height);
 }
 
 .navbar-brand {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  font-size: 1.15rem;
+  gap: var(--space-3);
+  font-size: 1.1rem;
   font-weight: 900;
-  letter-spacing: -0.03em;
   text-decoration: none;
   text-transform: uppercase;
 }
 
+/* Solid mark used as a wordmark anchor rather than an icon. */
 .navbar-brand-mark {
-  display: grid;
-  place-items: center;
-  width: 2.2rem;
-  height: 2.2rem;
+  width: 1.5rem;
+  height: 1.5rem;
   background: var(--accent);
   border: var(--outline-width) solid var(--outline);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-sm);
+  border-radius: 4px;
 }
 
 .navbar-links {
@@ -365,7 +391,7 @@
 }
 
 .navbar-link {
-  padding: 0.4rem 0.75rem;
+  padding: 0.38rem 0.7rem;
   font-weight: 700;
   text-decoration: none;
   border: 2px solid transparent;
@@ -378,8 +404,15 @@
 
 .navbar-link.active {
   background: var(--accent);
-  color: #0a0a0a;
+  color: var(--on-tint);
   border-color: var(--outline);
+}
+
+.navbar-user {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
 }
 
 /* Mobile menu toggle is hidden until the layout gets tight. */
@@ -387,7 +420,7 @@
   display: none;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 900px) {
   .navbar-toggle {
     display: inline-flex;
   }
@@ -417,14 +450,13 @@
 
 .story-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: var(--space-5);
 }
 
 .story-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
   padding: 0;
   overflow: hidden;
   text-decoration: none;
@@ -432,7 +464,7 @@
 }
 
 .story-card:hover {
-  transform: translate(-2px, -2px);
+  transform: translate(-3px, -3px);
   box-shadow: var(--shadow-lg);
 }
 
@@ -441,45 +473,90 @@
   aspect-ratio: 3 / 4;
   display: grid;
   place-items: center;
-  padding: var(--space-4);
-  text-align: center;
-  background: var(--accent);
+  overflow: hidden;
   border-bottom: var(--outline-width) solid var(--outline);
 }
 
 .story-cover img {
-  position: absolute;
-  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-/* Placeholder initials shown when a story has no cover image. */
+/*
+ * Placeholder cover: oversized initials on a flat tint, with a diagonal band
+ * so a grid of coverless stories does not read as a wall of blank rectangles.
+ */
+.story-cover-placeholder::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 14px,
+    rgba(10, 10, 10, 0.07) 14px 28px
+  );
+}
+
 .story-cover-initials {
-  font-size: 2.4rem;
+  position: relative;
+  z-index: 1;
+  font-size: 2.6rem;
   font-weight: 900;
-  color: #0a0a0a;
-  letter-spacing: -0.04em;
+  color: var(--on-tint);
+}
+
+/* Genre chip pinned to the cover so the body below stays uncluttered. */
+.story-cover-chip {
+  position: absolute;
+  z-index: 2;
+  left: var(--space-3);
+  bottom: var(--space-3);
+  max-width: calc(100% - var(--space-5));
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .story-card-body {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-4);
+  background: var(--surface);
 }
 
 .story-card-title {
   font-size: 1.02rem;
   font-weight: 800;
-  line-height: 1.3;
+  line-height: 1.35;
   /* Two-line clamp keeps every card the same height. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.story-card-author {
+  font-size: 0.88rem;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.story-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+  border-top: 2px solid var(--outline);
 }
 
 /* ------------------------------------------------------------------ */
@@ -500,6 +577,7 @@
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   text-decoration: none;
+  color: var(--ink);
   background: var(--surface);
   border: var(--outline-width) solid var(--outline);
   border-radius: var(--radius-sm);
@@ -519,8 +597,8 @@
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 2.3rem;
+  height: 2.3rem;
   font-weight: 800;
   background: var(--bg-alt);
   border: 2px solid var(--outline);
@@ -533,8 +611,84 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* Reader                                                              */
+/* Reader — two panes filling the viewport, each scrolling on its own   */
 /* ------------------------------------------------------------------ */
+
+.reader {
+  display: flex;
+  flex-direction: column;
+  /* Exactly the space left under the sticky header — its bottom border
+     included — so the page itself never scrolls and only the panes do. */
+  height: calc(100vh - var(--navbar-height) - var(--outline-width));
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+}
+
+.reader-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 0 0 auto;
+}
+
+/* Chapter title sits between the two corner buttons and truncates rather
+   than pushing them out of their corners. */
+.reader-bar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.reader-bar-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: var(--space-4);
+  /* Without this the grid refuses to shrink and the panes never scroll. */
+  min-height: 0;
+}
+
+.reader-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.reader-pane-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.reader-pane-header h2 {
+  font-size: 1rem;
+}
+
+.reader-pane-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5);
+}
 
 .reader-content {
   font-family: var(--font-reader);
@@ -542,27 +696,37 @@
   line-height: var(--reader-line-height);
   white-space: pre-wrap;
   word-break: break-word;
+  /* Caps the measure on very wide screens; long lines are tiring to read.
+     Centred so the pane does not look lopsided once the cap kicks in. */
+  max-width: 70ch;
+  margin-inline: auto;
 }
 
-.reader-content p + p {
-  margin-top: 1.2em;
+.reader-side-section + .reader-side-section {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 2px dashed var(--outline);
 }
 
-.reader-toolbar {
-  position: sticky;
-  top: 4.4rem;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  padding: var(--space-3);
-  margin-bottom: var(--space-5);
-  background: var(--surface);
-  border: var(--outline-width) solid var(--outline);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+/* Below this width a fixed-height split stops making sense, so the page
+   returns to ordinary vertical flow. */
+@media (max-width: 900px) {
+  .reader {
+    height: auto;
+    padding-bottom: var(--space-6);
+  }
+
+  .reader-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reader-pane-body {
+    overflow-y: visible;
+  }
+
+  .reader-content {
+    max-width: none;
+  }
 }
 
 /* Full-page gate rendered instead of chapter text when access is denied. */
@@ -579,16 +743,16 @@
   box-shadow: var(--shadow);
 }
 
-.locked-gate-icon {
-  display: grid;
-  place-items: center;
-  width: 5rem;
-  height: 5rem;
-  font-size: 2.4rem;
+.locked-gate-tag {
+  padding: 0.3rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--on-tint);
   background: var(--warning);
   border: var(--outline-width) solid var(--outline);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-pill);
 }
 
 /* ------------------------------------------------------------------ */
@@ -605,11 +769,12 @@
 }
 
 .pagination-page {
-  min-width: 2.5rem;
+  min-width: 2.4rem;
 }
 
 .pagination-page.active {
   background: var(--accent);
+  color: var(--on-tint);
 }
 
 /* ------------------------------------------------------------------ */
@@ -627,6 +792,7 @@
   width: 100%;
   border-collapse: collapse;
   background: var(--surface);
+  color: var(--ink);
   white-space: nowrap;
 }
 
@@ -640,10 +806,10 @@
 .nb-table th {
   font-weight: 800;
   text-transform: uppercase;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   letter-spacing: 0.04em;
+  color: var(--on-tint);
   background: var(--accent);
-  color: #0a0a0a;
 }
 
 .nb-table tbody tr:last-child td {
@@ -659,9 +825,9 @@
 /* ------------------------------------------------------------------ */
 
 .spinner {
-  width: 1.15em;
-  height: 1.15em;
-  border: 3px solid var(--outline);
+  width: 1.1em;
+  height: 1.1em;
+  border: 3px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin 700ms linear infinite;
@@ -687,7 +853,7 @@
   gap: var(--space-5);
   padding: var(--space-6);
   background: var(--accent);
-  color: #0a0a0a;
+  color: var(--on-tint);
   border: var(--outline-width) solid var(--outline);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
@@ -705,4 +871,10 @@
   margin-top: var(--space-7);
   border-top: var(--outline-width) solid var(--outline);
   background: var(--surface);
+}
+
+/* Native audio controls follow the UA theme; this keeps them legible. */
+.audio-element {
+  width: 100%;
+  color-scheme: light dark;
 }

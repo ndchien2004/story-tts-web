@@ -78,7 +78,7 @@ export default function AdminStoriesPage() {
       {loading && <Spinner />}
 
       {!loading && result && result.content.length === 0 && (
-        <EmptyState icon="📚" title="Chưa có truyện nào">
+        <EmptyState title="Chưa có truyện nào">
           Bấm “Thêm truyện” để tạo truyện đầu tiên.
         </EmptyState>
       )}

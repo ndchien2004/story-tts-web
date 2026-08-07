@@ -3,17 +3,22 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { audioApi, chapterApi } from "../api/endpoints";
 import AudioPlayer from "../components/AudioPlayer";
 import LockedGate from "../components/LockedGate";
+import ReaderSettings from "../components/ReaderSettings";
 import useChapterAudio from "../hooks/useChapterAudio";
-import { useTheme } from "../context/theme-context";
-import { AccessBadge, Alert, Button, ButtonLink, Spinner } from "../components/ui";
+import { AccessBadge, Alert, Button, Spinner } from "../components/ui";
 
 const AUTO_CONTINUE_KEY = "storytts.autoContinue";
 
+/**
+ * Reading screen.
+ *
+ * The chapter text and the listening panel sit side by side and each scrolls on
+ * its own, so the navigation stays pinned to the top corners no matter how long
+ * the chapter is.
+ */
 export default function ChapterPage() {
   const { chapterId } = useParams();
   const navigate = useNavigate();
-  const { increaseFontSize, decreaseFontSize, canIncrease, canDecrease, isDark, toggleTheme } =
-    useTheme();
 
   const [chapter, setChapter] = useState(null);
   const [lockError, setLockError] = useState(null);
@@ -53,8 +58,6 @@ export default function ChapterPage() {
         if (!cancelled) setLoading(false);
       });
 
-    window.scrollTo({ top: 0 });
-
     return () => {
       cancelled = true;
     };
@@ -75,9 +78,8 @@ export default function ChapterPage() {
   /**
    * Continuous listening: move to the next chapter when playback finishes.
    *
-   * Only the navigation happens here. The next page loads its own audio and, if
-   * none exists yet, the reader can generate it there — the access check runs
-   * again server-side either way.
+   * Only the navigation happens here. The next page loads its own audio and the
+   * access check runs again server-side either way.
    */
   const handleTrackEnded = useCallback(() => {
     if (autoContinue && chapter?.nextChapterId) {
@@ -85,11 +87,17 @@ export default function ChapterPage() {
     }
   }, [autoContinue, chapter, navigate]);
 
-  if (loading) return <Spinner label="Đang tải chương…" />;
+  if (loading) {
+    return (
+      <div className="page">
+        <Spinner label="Đang tải chương…" />
+      </div>
+    );
+  }
 
   if (lockError) {
     return (
-      <div className="container-narrow">
+      <div className="container-narrow page">
         <LockedGate
           requiredAccessLevel={lockError.requiredAccessLevel}
           message={lockError.message}
@@ -98,100 +106,74 @@ export default function ChapterPage() {
     );
   }
 
-  if (error) return <Alert tone="error">{error}</Alert>;
+  if (error) {
+    return (
+      <div className="page">
+        <Alert tone="error">{error}</Alert>
+      </div>
+    );
+  }
+
   if (!chapter) return null;
 
   return (
-    <div className="container-narrow stack" style={{ gap: "1.5rem" }}>
-      <div className="reader-toolbar">
-        <div className="row" style={{ gap: "0.4rem" }}>
-          <Button
-            size="sm"
-            disabled={!chapter.previousChapterId}
-            onClick={() => navigate(`/chuong/${chapter.previousChapterId}`)}
-          >
-            ← Chương trước
-          </Button>
-          <Button
-            size="sm"
-            disabled={!chapter.nextChapterId}
-            onClick={() => navigate(`/chuong/${chapter.nextChapterId}`)}
-          >
-            Chương sau →
-          </Button>
-        </div>
-
-        <div className="row" style={{ gap: "0.4rem" }}>
-          <Button
-            size="sm"
-            onClick={decreaseFontSize}
-            disabled={!canDecrease}
-            aria-label="Giảm cỡ chữ"
-            title="Giảm cỡ chữ"
-          >
-            A−
-          </Button>
-          <Button
-            size="sm"
-            onClick={increaseFontSize}
-            disabled={!canIncrease}
-            aria-label="Tăng cỡ chữ"
-            title="Tăng cỡ chữ"
-          >
-            A+
-          </Button>
-          <Button
-            size="sm"
-            onClick={toggleTheme}
-            aria-label={isDark ? "Giao diện sáng" : "Giao diện tối"}
-            title={isDark ? "Giao diện sáng" : "Giao diện tối"}
-          >
-            {isDark ? "☀️" : "🌙"}
-          </Button>
-        </div>
-      </div>
-
-      <AudioPlayer
-        audio={audio}
-        voices={voices}
-        autoContinue={autoContinue}
-        onToggleAutoContinue={() => setAutoContinue((value) => !value)}
-        onTrackEnded={handleTrackEnded}
-        hasNextChapter={Boolean(chapter.nextChapterId)}
-      />
-
-      <article className="nb-card stack">
-        <div className="row-between">
-          <Link to={`/truyen/${chapter.storyId}`} className="muted" style={{ fontWeight: 700 }}>
-            ← {chapter.storyTitle}
-          </Link>
-          <AccessBadge level={chapter.accessLevel} label={chapter.requirementLabel} />
-        </div>
-
-        <h1>{chapter.title}</h1>
-
-        <hr style={{ border: "none", borderTop: "3px solid var(--outline)", margin: "0.5rem 0" }} />
-
-        <div className="reader-content">{chapter.content}</div>
-      </article>
-
-      <div className="row" style={{ justifyContent: "space-between" }}>
+    <div className="reader">
+      <div className="reader-bar">
         <Button
           disabled={!chapter.previousChapterId}
           onClick={() => navigate(`/chuong/${chapter.previousChapterId}`)}
         >
-          ← Chương trước
+          Chương trước
         </Button>
-        <ButtonLink to={`/truyen/${chapter.storyId}`} variant="ghost">
-          Mục lục
-        </ButtonLink>
+
+        <div className="reader-bar-title">
+          <strong>{chapter.title}</strong>
+          <AccessBadge level={chapter.accessLevel} label={chapter.requirementLabel} />
+        </div>
+
         <Button
           variant="primary"
           disabled={!chapter.nextChapterId}
           onClick={() => navigate(`/chuong/${chapter.nextChapterId}`)}
         >
-          Chương sau →
+          Chương sau
         </Button>
+      </div>
+
+      <div className="reader-grid">
+        <section className="reader-pane">
+          <header className="reader-pane-header">
+            <h2>Nội dung chương</h2>
+            <Link to={`/truyen/${chapter.storyId}`} className="muted" style={{ fontWeight: 700 }}>
+              {chapter.storyTitle}
+            </Link>
+          </header>
+
+          <div className="reader-pane-body scroll-area">
+            <div className="reader-content">{chapter.content}</div>
+          </div>
+        </section>
+
+        <aside className="reader-pane">
+          <header className="reader-pane-header">
+            <h2>Nghe chương này</h2>
+          </header>
+
+          <div className="reader-pane-body scroll-area">
+            <AudioPlayer
+              audio={audio}
+              voices={voices}
+              autoContinue={autoContinue}
+              onToggleAutoContinue={() => setAutoContinue((value) => !value)}
+              onTrackEnded={handleTrackEnded}
+              hasNextChapter={Boolean(chapter.nextChapterId)}
+            />
+
+            <div className="reader-side-section">
+              <ReaderSettings />
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );

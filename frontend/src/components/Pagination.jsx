@@ -18,7 +18,7 @@ export default function Pagination({ page, totalPages, onChange }) {
   return (
     <nav className="pagination" aria-label="Phân trang">
       <Button size="sm" disabled={page === 0} onClick={() => onChange(page - 1)}>
-        ← Trước
+        Trước
       </Button>
 
       {visiblePages(page, totalPages).map((index) => (
@@ -34,7 +34,7 @@ export default function Pagination({ page, totalPages, onChange }) {
       ))}
 
       <Button size="sm" disabled={page >= totalPages - 1} onClick={() => onChange(page + 1)}>
-        Sau →
+        Sau
       </Button>
     </nav>
   );

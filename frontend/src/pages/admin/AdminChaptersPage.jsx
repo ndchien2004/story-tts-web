@@ -72,7 +72,7 @@ export default function AdminChaptersPage() {
       <div className="row-between">
         <div>
           <Link to="/admin" className="muted" style={{ fontWeight: 700 }}>
-            ← Danh sách truyện
+            Danh sách truyện
           </Link>
           <h1 style={{ marginTop: "0.35rem" }}>{story?.title}</h1>
         </div>
@@ -85,7 +85,7 @@ export default function AdminChaptersPage() {
       {notice && <Alert tone="success">{notice}</Alert>}
 
       {chapters.length === 0 ? (
-        <EmptyState icon="📄" title="Truyện chưa có chương nào">
+        <EmptyState title="Truyện chưa có chương nào">
           Bấm “Thêm chương” để đăng chương đầu tiên.
         </EmptyState>
       ) : (
@@ -123,7 +123,7 @@ export default function AdminChaptersPage() {
                       ))}
                     </Select>
                   </td>
-                  <td>{chapter.hasAudio ? "🎧 Có" : "—"}</td>
+                  <td>{chapter.hasAudio ? "Có" : "—"}</td>
                   <td>
                     <div className="row" style={{ gap: "0.35rem", flexWrap: "nowrap" }}>
                       <AudioUploadButton
