@@ -111,15 +111,55 @@ public class FptAiTtsClient {
             throw new TtsException("API key của dịch vụ đọc văn bản không hợp lệ hoặc đã hết hạn.");
         }
         if (status == 429) {
-            throw new TtsException(
-                    "Tài khoản FPT.AI đã hết lượt sử dụng hoặc gọi quá nhanh. "
-                            + "Vui lòng kiểm tra hạn mức rồi thử lại sau.");
+            throw new TtsException(describeRateLimit(response));
         }
         if (status < 200 || status >= 300) {
             throw new TtsException("Dịch vụ đọc văn bản trả về lỗi (HTTP %d).".formatted(status));
         }
 
         return extractDownloadUrl(response.body());
+    }
+
+    /**
+     * Turns a 429 into a message that names the actual cause.
+     *
+     * The provider throttles on two independent counters and reports both with
+     * the same status code: a per-minute request rate, and the allowance of the
+     * subscribed plan. They need different responses from the user — one is
+     * worth retrying in a moment, the other is not — so the remaining-minute
+     * header decides which of the two was hit.
+     */
+    private String describeRateLimit(HttpResponse<String> response) {
+        Integer remainingThisMinute = response.headers()
+                .firstValue("x-ratelimit-remaining-minute")
+                .map(value -> {
+                    try {
+                        return Integer.valueOf(value.trim());
+                    } catch (NumberFormatException ex) {
+                        return null;
+                    }
+                })
+                .orElse(null);
+
+        if (remainingThisMinute != null && remainingThisMinute <= 0) {
+            return "Đang gọi dịch vụ đọc văn bản quá nhanh. Vui lòng đợi khoảng một phút rồi thử lại.";
+        }
+
+        // Requests are still allowed this minute, so the plan allowance is what
+        // ran out. Retrying will not help until the plan resets or is upgraded.
+        String detail = extractProviderMessage(response.body());
+        return "Tài khoản FPT.AI đã dùng hết hạn mức của gói hiện tại"
+                + (detail == null ? "" : " (%s)".formatted(detail))
+                + ". Thử lại ngay sẽ không có tác dụng — cần đợi gói làm mới hoặc nâng cấp gói.";
+    }
+
+    private String extractProviderMessage(String body) {
+        try {
+            String message = objectMapper.readTree(body).path("message").asText("");
+            return message.isBlank() ? null : message;
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     private String extractDownloadUrl(String body) {
