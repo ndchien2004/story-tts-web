@@ -33,7 +33,7 @@ import java.util.List;
  * <p>
  * Lưu ý: các endpoint đọc chương/nghe audio để {@code permitAll} ở tầng URL, vì "Khách"
  * vẫn được đọc chương PUBLIC. Việc chặn chương MEMBER/VIP nằm ở
- * {@code AccessControlService} — một lớp kiểm tra quyền dùng chung (mục 7 & 10 đề bài).
+ * {@code AccessControlService} — một lớp kiểm tra quyền dùng chung.
  */
 @Configuration
 @EnableWebSecurity

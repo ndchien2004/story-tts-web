@@ -4,7 +4,7 @@ import com.storytts.backend.domain.AccessLevel;
 import lombok.Getter;
 
 /**
- * Chương bị khóa và người dùng hiện tại không đủ quyền → HTTP 403 (mục 4.3 [BB] đề bài).
+ * Chương bị khóa và người dùng hiện tại không đủ quyền → HTTP 403.
  * <p>
  * Kèm theo {@link #requiredAccessLevel} để React biết nên hiển thị màn hình
  * "yêu cầu đăng nhập" hay "nâng cấp VIP". Ngoại lệ này <b>không</b> chứa nội dung chương.

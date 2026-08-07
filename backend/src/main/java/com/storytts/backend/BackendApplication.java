@@ -8,7 +8,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 /**
  * Backend REST API cho website đọc &amp; nghe truyện có chức năng Text-to-Speech.
  *
- * <p>Phân lớp: Controller → Service → Repository → Entity (yêu cầu mục 10 đề bài).
+ * <p>Phân lớp: Controller → Service → Repository → Entity.
  */
 @SpringBootApplication
 @ConfigurationPropertiesScan

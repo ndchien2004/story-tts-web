@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * API đọc nội dung chương.
  * Nếu chương bị khóa và người dùng không đủ quyền, service ném lỗi 403 —
- * controller không tự kiểm tra quyền để tránh lặp code (mục 10 đề bài).
+ * controller không tự kiểm tra quyền để tránh lặp code.
  */
 @RestController
 @RequestMapping("/api/chapters")

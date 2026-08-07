@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/** CRUD thể loại (mục 4.2 [NC] đề bài). */
+/** CRUD thể loại. */
 @Service
 @RequiredArgsConstructor
 public class GenreService {

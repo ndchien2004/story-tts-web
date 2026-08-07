@@ -6,9 +6,9 @@ import lombok.*;
 import java.time.Instant;
 
 /**
- * Bảng reading_progress (mục 8 đề bài).
- * Dùng cho cả tiến độ đọc (mục 4.3 [NC]) lẫn vị trí đang nghe (mục 4.4 [NC]),
- * đồng thời là dữ liệu đầu vào cho gợi ý truyện tương tự (mục 4.3 [NC]).
+ * Bảng reading_progress.
+ * Dùng cho cả tiến độ đọc lẫn vị trí đang nghe,
+ * đồng thời là dữ liệu đầu vào cho gợi ý truyện tương tự.
  */
 @Entity
 @Table(
@@ -43,7 +43,7 @@ public class ReadingProgress {
     @Builder.Default
     private Integer lastPosition = 0;
 
-    /** Giây thứ bao nhiêu của audio khi nghe dở (mục 4.4 [NC] đề bài). */
+    /** Giây thứ bao nhiêu của audio khi nghe dở. */
     @Column(name = "audio_position_seconds", nullable = false)
     @Builder.Default
     private Integer audioPositionSeconds = 0;

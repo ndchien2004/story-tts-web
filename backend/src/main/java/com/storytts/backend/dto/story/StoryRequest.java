@@ -4,7 +4,7 @@ import com.storytts.backend.domain.StoryStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-/** Dữ liệu Admin gửi lên khi tạo/sửa truyện (mục 4.2 đề bài). */
+/** Dữ liệu Admin gửi lên khi tạo/sửa truyện. */
 public record StoryRequest(
 
         @NotBlank(message = "Tên truyện không được để trống")

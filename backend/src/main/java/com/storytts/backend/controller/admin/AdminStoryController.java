@@ -14,7 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/** CRUD truyện phía Admin (mục 4.2 đề bài). Toàn bộ /api/admin/** đã bị chặn hasRole('ADMIN'). */
+/** CRUD truyện phía Admin. Toàn bộ /api/admin/** đã bị chặn hasRole('ADMIN'). */
 @RestController
 @RequestMapping("/api/admin/stories")
 @RequiredArgsConstructor

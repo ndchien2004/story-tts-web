@@ -3,7 +3,7 @@ package com.storytts.backend.domain;
 import jakarta.persistence.*;
 import lombok.*;
 
-/** Bảng authors — tác giả truyện (mục 8 đề bài). */
+/** Bảng authors — tác giả truyện. */
 @Entity
 @Table(name = "authors", uniqueConstraints = @UniqueConstraint(name = "uk_authors_name", columnNames = "name"))
 @Getter

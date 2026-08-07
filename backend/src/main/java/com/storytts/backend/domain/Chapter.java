@@ -8,8 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Bảng chapters (mục 8 đề bài).
- * Cột {@link #accessLevel} là cơ chế khóa chương do Admin đặt (mục 4.2 đề bài).
+ * Bảng chapters.
+ * Cột {@link #accessLevel} là cơ chế khóa chương do Admin đặt.
  */
 @Entity
 @Table(
@@ -38,7 +38,7 @@ public class Chapter {
     @Column(nullable = false, length = 255)
     private String title;
 
-    /** Nội dung văn bản của chương — cũng là đầu vào cho TTS (mục 4.5 đề bài). */
+    /** Nội dung văn bản của chương — cũng là đầu vào cho TTS. */
     @Lob
     @Column(columnDefinition = "LONGTEXT")
     private String content;

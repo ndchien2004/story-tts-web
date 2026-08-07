@@ -16,7 +16,7 @@ import java.util.Optional;
 public interface StoryRepository extends JpaRepository<Story, Long> {
 
     /**
-     * Truy vấn dùng chung cho danh sách truyện: tìm kiếm theo tên/tác giả (mục 4.3),
+     * Truy vấn dùng chung cho danh sách truyện: tìm kiếm theo tên/tác giả,
      * lọc theo thể loại và trạng thái, có phân trang + sắp xếp do Pageable quyết định.
      */
     @Query("""
@@ -38,7 +38,7 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     Optional<Story> findDetailById(@Param("id") Long id);
 
     /**
-     * Gợi ý truyện cùng thể loại mà người dùng chưa đọc (mục 4.3 [NC] đề bài).
+     * Gợi ý truyện cùng thể loại mà người dùng chưa đọc.
      */
     @Query("""
             SELECT s FROM Story s

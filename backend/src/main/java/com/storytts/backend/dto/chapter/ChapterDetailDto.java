@@ -18,13 +18,13 @@ public record ChapterDetailDto(
         long viewCount,
         Instant createdAt,
 
-        /** Điều hướng chương trước/sau (mục 4.3 đề bài). Null nếu không còn chương. */
+        /** Điều hướng chương trước/sau. Null nếu không còn chương. */
         Long previousChapterId,
         Long nextChapterId,
 
-        /** Có audio do Admin upload sẵn hay không (mục 4.4 đề bài). */
+        /** Có audio do Admin upload sẵn hay không. */
         boolean hasUploadedAudio,
-        /** Đã có bản TTS trong cache hay chưa (mục 4.5 đề bài). */
+        /** Đã có bản TTS trong cache hay chưa. */
         boolean hasTtsAudio
 ) {
 }

@@ -5,7 +5,7 @@ import lombok.*;
 
 import java.time.Instant;
 
-/** Bảng favorites — đánh dấu truyện yêu thích (mục 4.6 [NC] đề bài). */
+/** Bảng favorites — đánh dấu truyện yêu thích. */
 @Entity
 @Table(
         name = "favorites",

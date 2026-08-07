@@ -5,7 +5,7 @@ import lombok.*;
 
 import java.time.Instant;
 
-/** Bảng ratings_comments — đánh giá sao + bình luận theo truyện (mục 4.6 [NC] đề bài). */
+/** Bảng ratings_comments — đánh giá sao + bình luận theo truyện. */
 @Entity
 @Table(
         name = "ratings_comments",

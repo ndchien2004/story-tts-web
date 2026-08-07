@@ -2,7 +2,7 @@ package com.storytts.backend.dto.auth;
 
 /**
  * Kết quả đăng nhập/đăng ký: React lưu {@code token} rồi đính vào header
- * {@code Authorization: Bearer <token>} ở mỗi request tiếp theo (mục 4.1 đề bài).
+ * {@code Authorization: Bearer <token>} ở mỗi request tiếp theo.
  */
 public record AuthResponse(
         String token,

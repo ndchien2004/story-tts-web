@@ -7,7 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Bảng stories (mục 8 đề bài). */
+/** Bảng stories. */
 @Entity
 @Table(
         name = "stories",
@@ -52,7 +52,7 @@ public class Story {
     @Builder.Default
     private StoryStatus status = StoryStatus.ONGOING;
 
-    /** Dùng cho sắp xếp "phổ biến nhất" (mục 4.3 đề bài). */
+    /** Dùng cho sắp xếp "phổ biến nhất". */
     @Column(name = "view_count", nullable = false)
     @Builder.Default
     private long viewCount = 0L;

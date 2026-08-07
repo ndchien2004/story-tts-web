@@ -6,7 +6,7 @@ import lombok.*;
 import java.time.Instant;
 
 /**
- * Bảng users (mục 8 đề bài).
+ * Bảng users.
  * Quyền đọc chương được xác định bởi cặp {@link #role} + {@link #vip}.
  */
 @Entity
@@ -34,7 +34,7 @@ public class User {
     @Column(nullable = false, length = 150)
     private String email;
 
-    /** Mật khẩu đã băm bằng BCrypt — không bao giờ lưu plaintext (mục 4.1 đề bài). */
+    /** Mật khẩu đã băm bằng BCrypt — không bao giờ lưu plaintext. */
     @Column(name = "password_hash", nullable = false, length = 100)
     private String passwordHash;
 
@@ -43,7 +43,7 @@ public class User {
     @Builder.Default
     private Role role = Role.MEMBER;
 
-    /** Admin cấp/thu hồi thủ công trong trang quản trị (mục 4.1 đề bài). */
+    /** Admin cấp/thu hồi thủ công trong trang quản trị. */
     @Column(name = "is_vip", nullable = false)
     @Builder.Default
     private boolean vip = false;

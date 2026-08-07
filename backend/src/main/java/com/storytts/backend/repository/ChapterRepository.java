@@ -22,7 +22,7 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
     @Query("SELECT c FROM Chapter c JOIN FETCH c.story WHERE c.id = :id")
     Optional<Chapter> findDetailById(@Param("id") Long id);
 
-    /** Chương kế tiếp — phục vụ nút "chương sau" và chế độ nghe liên tục (mục 4.4 [NC]). */
+    /** Chương kế tiếp — phục vụ nút "chương sau" và chế độ nghe liên tục. */
     @Query("""
             SELECT c FROM Chapter c
             WHERE c.story.id = :storyId AND c.chapterNumber > :currentNumber
@@ -46,7 +46,7 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
 
     /**
      * Đếm số chương cho nhiều truyện trong MỘT truy vấn.
-     * Tránh N+1 query khi render danh sách truyện (yêu cầu tải dưới 2 giây — mục 5 đề bài).
+     * Tránh N+1 query khi render danh sách truyện (yêu cầu tải dưới 2 giây
      */
     @Query("SELECT c.story.id, COUNT(c) FROM Chapter c WHERE c.story.id IN :storyIds GROUP BY c.story.id")
     List<Object[]> countGroupedByStoryIds(@Param("storyIds") Collection<Long> storyIds);

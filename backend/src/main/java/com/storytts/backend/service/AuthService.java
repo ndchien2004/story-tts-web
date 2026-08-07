@@ -16,7 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Đăng ký / đăng nhập / lấy thông tin tài khoản hiện tại (mục 4.1 đề bài). */
+/** Đăng ký / đăng nhập / lấy thông tin tài khoản hiện tại. */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -42,7 +42,7 @@ public class AuthService {
         User user = User.builder()
                 .username(username)
                 .email(email)
-                // Mật khẩu luôn được băm bằng BCrypt, không lưu plaintext (mục 4.1 đề bài).
+                // Mật khẩu luôn được băm bằng BCrypt, không lưu plaintext.
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .displayName(request.displayName())
                 .role(Role.MEMBER)

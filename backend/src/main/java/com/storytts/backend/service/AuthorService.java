@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/** CRUD tác giả (mục 4.2 [NC] đề bài). */
+/** CRUD tác giả. */
 @Service
 @RequiredArgsConstructor
 public class AuthorService {

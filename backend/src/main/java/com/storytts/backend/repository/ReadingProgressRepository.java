@@ -13,7 +13,7 @@ public interface ReadingProgressRepository extends JpaRepository<ReadingProgress
 
     Optional<ReadingProgress> findByUserIdAndChapterId(Long userId, Long chapterId);
 
-    /** Chương đọc gần nhất của một truyện — để nút "Đọc tiếp" nhảy đúng chỗ (mục 4.3 [NC]). */
+    /** Chương đọc gần nhất của một truyện — để nút "Đọc tiếp" nhảy đúng chỗ. */
     @Query("""
             SELECT p FROM ReadingProgress p
             WHERE p.user.id = :userId AND p.chapter.story.id = :storyId
@@ -23,7 +23,7 @@ public interface ReadingProgressRepository extends JpaRepository<ReadingProgress
     Optional<ReadingProgress> findLatestByUserAndStory(@Param("userId") Long userId,
                                                        @Param("storyId") Long storyId);
 
-    /** Lịch sử đọc/nghe gần đây (mục 4.6 [NC]). */
+    /** Lịch sử đọc/nghe gần đây. */
     @Query("""
             SELECT p FROM ReadingProgress p
             JOIN FETCH p.chapter c
@@ -33,7 +33,7 @@ public interface ReadingProgressRepository extends JpaRepository<ReadingProgress
             """)
     List<ReadingProgress> findRecentByUser(@Param("userId") Long userId, Pageable pageable);
 
-    /** Thể loại của các truyện người dùng đọc gần đây — đầu vào cho gợi ý (mục 4.3 [NC]). */
+    /** Thể loại của các truyện người dùng đọc gần đây — đầu vào cho gợi ý. */
     @Query("""
             SELECT DISTINCT s.genre.id FROM ReadingProgress p
             JOIN p.chapter c

@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/** API đọc truyện cho mọi đối tượng, kể cả Khách chưa đăng nhập (mục 4.3 đề bài). */
+/** API đọc truyện cho mọi đối tượng, kể cả Khách chưa đăng nhập. */
 @RestController
 @RequestMapping("/api/stories")
 @RequiredArgsConstructor

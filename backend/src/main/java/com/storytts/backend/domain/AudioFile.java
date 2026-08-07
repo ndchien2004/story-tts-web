@@ -6,7 +6,7 @@ import lombok.*;
 import java.time.Instant;
 
 /**
- * Bảng audio_files (mục 8 đề bài).
+ * Bảng audio_files.
  * Một chương có thể có nhiều bản audio: 1 bản UPLOAD do admin thu âm sẵn,
  * và các bản TTS sinh ra theo từng giọng đọc / tốc độ (dùng làm cache — mục 4.5).
  */
@@ -61,7 +61,7 @@ public class AudioFile {
     /** Tốc độ đọc TTS (-3..3 theo FPT.AI) — null nếu là bản UPLOAD. */
     private Integer speed;
 
-    /** Thông báo lỗi khi status = FAILED, để frontend hiển thị rõ ràng (mục 5 đề bài). */
+    /** Thông báo lỗi khi status = FAILED, để frontend hiển thị rõ ràng. */
     @Column(name = "error_message", length = 1000)
     private String errorMessage;
 

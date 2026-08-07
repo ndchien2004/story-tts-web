@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
- * Dữ liệu Admin gửi lên khi tạo/sửa chương (mục 4.2 đề bài).
+ * Dữ liệu Admin gửi lên khi tạo/sửa chương.
  * Trường {@link #accessLevel} chính là thao tác "khóa chương".
  */
 public record ChapterRequest(

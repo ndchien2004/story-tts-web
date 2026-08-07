@@ -19,7 +19,7 @@ import java.util.Map;
 
 /**
  * Gom toàn bộ xử lý lỗi về một chỗ, trả JSON thống nhất cho React.
- * Đáp ứng yêu cầu "có xử lý lỗi hợp lý, không crash server" (mục 5 đề bài).
+ * Đáp ứng yêu cầu "có xử lý lỗi hợp lý, không crash server".
  */
 @RestControllerAdvice
 @Slf4j

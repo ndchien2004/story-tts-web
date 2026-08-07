@@ -16,7 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
 
-/** Sinh và kiểm tra JWT (mục 4.1 đề bài). */
+/** Sinh và kiểm tra JWT. */
 @Service
 @RequiredArgsConstructor
 @Slf4j

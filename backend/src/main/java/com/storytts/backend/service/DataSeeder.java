@@ -21,7 +21,7 @@ import java.util.Map;
  * Tạo tài khoản Admin và dữ liệu mẫu ở lần chạy đầu tiên.
  * <p>
  * Bộ dữ liệu cố tình có đủ cả ba mức khóa PUBLIC / MEMBER / VIP để kiểm thử
- * chức năng khóa chương bằng ba tài khoản khác nhau (mục 10 đề bài).
+ * chức năng khóa chương bằng ba tài khoản khác nhau.
  * Toàn bộ nội dung truyện ở đây là văn bản mẫu tự soạn, chỉ dùng để demo và chạy thử TTS.
  */
 @Component

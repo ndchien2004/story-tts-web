@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Quản lý thành viên phía Admin.
- * Trọng tâm: cấp/thu hồi VIP thủ công — đề bài không tích hợp cổng thanh toán (mục 4.1).
+ * VIP is granted and revoked by hand here; there is no payment integration.
  */
 @Service
 @RequiredArgsConstructor

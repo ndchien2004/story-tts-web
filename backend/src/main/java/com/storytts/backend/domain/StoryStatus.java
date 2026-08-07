@@ -1,6 +1,6 @@
 package com.storytts.backend.domain;
 
-/** Trạng thái truyện (mục 4.2 đề bài): đang ra / hoàn thành. */
+/** Trạng thái truyện: đang ra / hoàn thành. */
 public enum StoryStatus {
     ONGOING("Đang ra"),
     COMPLETED("Hoàn thành");

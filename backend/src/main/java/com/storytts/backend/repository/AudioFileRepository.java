@@ -18,7 +18,7 @@ public interface AudioFileRepository extends JpaRepository<AudioFile, Long> {
 
     /**
      * Tra cứu cache TTS: cùng chương + cùng giọng + cùng tốc độ thì tái sử dụng file cũ,
-     * không gọi lại API (mục 4.5 [BB] đề bài — tránh tốn phí và thời gian chờ).
+     * không gọi lại API.
      */
     @Query("""
             SELECT a FROM AudioFile a

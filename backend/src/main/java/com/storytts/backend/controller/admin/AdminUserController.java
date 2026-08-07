@@ -12,7 +12,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.*;
 
-/** Quản lý thành viên và cấp/thu hồi VIP thủ công (mục 4.1 [BB] đề bài). */
+/** Quản lý thành viên và cấp/thu hồi VIP thủ công. */
 @RestController
 @RequestMapping("/api/admin/users")
 @RequiredArgsConstructor

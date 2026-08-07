@@ -24,7 +24,7 @@ import java.util.Set;
 
 /**
  * Nghiệp vụ chương truyện.
- * Mọi đường vào nội dung chương đều gọi {@link AccessControlService} trước (mục 4.3 [BB] đề bài).
+ * Mọi đường vào nội dung chương đều gọi {@link AccessControlService} trước.
  */
 @Service
 @RequiredArgsConstructor
@@ -39,7 +39,7 @@ public class ChapterService {
     /**
      * Danh sách chương của một truyện.
      * Ai cũng xem được danh sách, nhưng chương không đủ quyền sẽ có {@code locked = true}
-     * để frontend hiển thị icon 🔒 kèm mức yêu cầu (mục 4.3 đề bài).
+     * để frontend hiển thị icon 🔒 kèm mức yêu cầu.
      */
     @Transactional(readOnly = true)
     public List<ChapterSummaryDto> listByStory(Long storyId) {
@@ -123,7 +123,7 @@ public class ChapterService {
                 .title(request.title().trim())
                 .content(request.content())
                 .chapterNumber(number)
-                // Mức khóa chương do Admin quyết định (mục 4.2 [BB] đề bài).
+                // Mức khóa chương do Admin quyết định.
                 .accessLevel(request.accessLevel())
                 .build();
 

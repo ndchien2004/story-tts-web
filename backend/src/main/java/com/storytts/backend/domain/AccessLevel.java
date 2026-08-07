@@ -1,7 +1,7 @@
 package com.storytts.backend.domain;
 
 /**
- * Mức truy cập của một chương — do Admin quyết định (mục 3 & 4.2 đề bài).
+ * Mức truy cập của một chương — do Admin quyết định.
  * Đây là cơ chế "khóa chương" trọng tâm của đề tài.
  */
 public enum AccessLevel {

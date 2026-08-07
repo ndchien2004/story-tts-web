@@ -39,7 +39,7 @@ public class StoryService {
     private final AuthorService authorService;
 
     /**
-     * Danh sách truyện: tìm theo tên/tác giả, lọc thể loại, sắp xếp (mục 4.3 [BB] đề bài).
+     * Danh sách truyện: tìm theo tên/tác giả, lọc thể loại, sắp xếp.
      *
      * @param sort một trong: {@code newest} (mặc định), {@code popular}, {@code oldest}, {@code title}
      */

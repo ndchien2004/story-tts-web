@@ -3,7 +3,7 @@ package com.storytts.backend.dto.chapter;
 import java.time.Instant;
 
 /**
- * Một dòng trong danh sách chương ở trang chi tiết truyện (mục 4.3 đề bài).
+ * Một dòng trong danh sách chương ở trang chi tiết truyện.
  * <p>
  * Cố ý <b>không</b> chứa trường {@code content}: danh sách chương hiển thị được cho mọi người,
  * nhưng nội dung chương bị khóa không bao giờ rời khỏi server.

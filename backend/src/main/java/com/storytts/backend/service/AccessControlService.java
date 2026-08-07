@@ -13,14 +13,14 @@ import java.util.Optional;
  * <h2>Lớp kiểm tra quyền truy cập chương — dùng chung cho toàn hệ thống</h2>
  *
  * Mọi luồng đụng tới nội dung chương đều phải đi qua đây, không lặp lại logic ở nhiều nơi
- * (yêu cầu mục 7 và mục 10 đề bài):
+ *:
  * <ul>
  *   <li>Đọc nội dung chương — {@code GET /api/chapters/{id}}</li>
  *   <li>Nghe audio đã upload — {@code GET /api/chapters/{id}/audio}</li>
  *   <li>Tạo/nghe audio bằng TTS — {@code POST /api/chapters/{id}/tts}</li>
  * </ul>
  *
- * <h3>Quy tắc (mục 8 đề bài)</h3>
+ * <h3>Quy tắc</h3>
  * <table border="1">
  *   <tr><th>access_level</th><th>Khách</th><th>Member</th><th>VIP</th><th>Admin</th></tr>
  *   <tr><td>PUBLIC</td><td>✔</td><td>✔</td><td>✔</td><td>✔</td></tr>
@@ -48,7 +48,7 @@ public class AccessControlService {
     }
 
     /**
-     * Phiên bản thuần logic, không phụ thuộc SecurityContext — dễ viết unit test (mục 6 đề bài).
+     * Phiên bản thuần logic, không phụ thuộc SecurityContext — dễ viết unit test.
      *
      * @param accessLevel mức khóa chương do Admin đặt
      * @param principal   người dùng hiện tại, {@code Optional.empty()} nghĩa là Khách
@@ -70,7 +70,7 @@ public class AccessControlService {
 
     /**
      * Chặn cứng: không đủ quyền thì ném {@link ChapterLockedException} → HTTP 403.
-     * Nội dung chương không bao giờ được trả về client trong trường hợp này (mục 4.3 [BB] đề bài).
+     * Nội dung chương không bao giờ được trả về client trong trường hợp này.
      */
     public void requireAccess(Chapter chapter) {
         if (!canAccess(chapter)) {
