@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
-import { Alert, Button, Field, TextInput } from "../components/ui";
+import GoogleAuth from "../components/GoogleAuth";
+import useAuthProviders from "../hooks/useAuthProviders";
+import { Alert, Button, Field, PasswordInput, TextInput } from "../components/ui";
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const providers = useAuthProviders();
 
   const [form, setForm] = useState({ username: "", password: "" });
   const [error, setError] = useState(null);
@@ -38,43 +41,56 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="container-narrow" style={{ maxWidth: "460px" }}>
-      <form className="nb-card stack" onSubmit={handleSubmit}>
-        <div className="nb-section-title">
-          <h1>Đăng nhập</h1>
-        </div>
+    <form className="stack" onSubmit={handleSubmit} style={{ gap: "var(--space-4)" }}>
+      <div className="nb-section-title auth-form-title" style={{ marginBottom: 0 }}>
+        <h1>Đăng nhập</h1>
+      </div>
 
-        {error && <Alert tone="error">{error}</Alert>}
+      {error && <Alert tone="error">{error}</Alert>}
 
-        <Field label="Tên đăng nhập hoặc email" htmlFor="username" error={fieldErrors.username}>
-          <TextInput
-            id="username"
-            autoComplete="username"
-            required
-            value={form.username}
-            onChange={(event) => updateField("username", event.target.value)}
-          />
-        </Field>
+      <Field label="Tên đăng nhập hoặc email" htmlFor="username" error={fieldErrors.username}>
+        <TextInput
+          id="username"
+          autoComplete="username"
+          autoFocus
+          required
+          value={form.username}
+          onChange={(event) => updateField("username", event.target.value)}
+        />
+      </Field>
 
-        <Field label="Mật khẩu" htmlFor="password" error={fieldErrors.password}>
-          <TextInput
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={form.password}
-            onChange={(event) => updateField("password", event.target.value)}
-          />
-        </Field>
+      <Field label="Mật khẩu" htmlFor="password" error={fieldErrors.password}>
+        <PasswordInput
+          id="password"
+          autoComplete="current-password"
+          required
+          error={fieldErrors.password}
+          value={form.password}
+          onChange={(event) => updateField("password", event.target.value)}
+        />
+      </Field>
 
-        <Button type="submit" variant="primary" size="lg" block loading={submitting}>
-          Đăng nhập
-        </Button>
-
-        <p className="text-center muted">
-          Chưa có tài khoản? <Link to="/dang-ky">Đăng ký ngay</Link>
+      {/* Only offered when the server can actually send the email. */}
+      {providers?.passwordResetEnabled && (
+        <p className="auth-aside">
+          <Link to="/quen-mat-khau">Quên mật khẩu?</Link>
         </p>
-      </form>
-    </div>
+      )}
+
+      <Button type="submit" variant="primary" size="lg" block loading={submitting}>
+        Đăng nhập
+      </Button>
+
+      <GoogleAuth
+        providers={providers}
+        text="signin_with"
+        redirectTo={redirectTo}
+        onError={setError}
+      />
+
+      <p className="auth-alt muted">
+        Chưa có tài khoản? <Link to="/dang-ky">Đăng ký ngay</Link>
+      </p>
+    </form>
   );
 }

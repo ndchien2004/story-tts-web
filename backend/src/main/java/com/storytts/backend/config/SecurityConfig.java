@@ -79,12 +79,24 @@ public class SecurityConfig {
                                 response, HttpServletResponse.SC_FORBIDDEN, "ACCESS_DENIED",
                                 "Bạn không có quyền thực hiện thao tác này.", request.getRequestURI())))
                 .authorizeHttpRequests(auth -> auth
-                        // --- Công khai: đăng ký / đăng nhập ---
-                        .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
+                        // --- Công khai: đăng ký / đăng nhập / quên mật khẩu ---
+                        // Liệt kê từng đường thay vì /api/auth/**, để /me và
+                        // /logout vẫn nằm sau lớp xác thực.
+                        .requestMatchers(
+                                "/api/auth/register", "/api/auth/login", "/api/auth/google",
+                                "/api/auth/forgot-password", "/api/auth/reset-password",
+                                "/api/auth/providers").permitAll()
 
                         // --- Tài liệu API ---
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+
+                        // --- Thanh toán ---
+                        // PayOS gọi về không mang theo JWT nào; thứ chặn người lạ
+                        // là chữ ký HMAC trong body, đối chiếu ở VipOrderService.
+                        .requestMatchers(HttpMethod.POST, "/api/payments/payos/webhook").permitAll()
+                        // Bảng giá là thứ cần xem được trước khi có tài khoản.
+                        .requestMatchers(HttpMethod.GET, "/api/vip/plans").permitAll()
 
                         // --- Khu vực quản trị: chỉ Admin ---
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

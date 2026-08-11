@@ -7,9 +7,9 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import java.util.concurrent.Executor;
 
 /**
- * Thread pool backing {@code @Async} work, currently speech synthesis.
+ * Thread pool backing {@code @Async} work: speech synthesis and outgoing email.
  *
- * A bounded pool is used on purpose: synthesis is dominated by waiting on an
+ * A bounded pool is used on purpose: both jobs are dominated by waiting on an
  * external service, and the default unbounded executor would let a burst of
  * requests spawn one thread each.
  */
@@ -22,7 +22,7 @@ public class AsyncConfig {
         executor.setCorePoolSize(2);
         executor.setMaxPoolSize(4);
         executor.setQueueCapacity(50);
-        executor.setThreadNamePrefix("tts-");
+        executor.setThreadNamePrefix("async-");
         // Let the JVM shut down cleanly without abandoning a half-written file.
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(30);

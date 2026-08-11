@@ -16,6 +16,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
+    Optional<User> findByGoogleId(String googleId);
+
     /** Cho phép đăng nhập bằng username hoặc email. */
     @Query("SELECT u FROM User u WHERE u.username = :login OR u.email = :login")
     Optional<User> findByUsernameOrEmail(@Param("login") String login);
@@ -34,5 +36,21 @@ public interface UserRepository extends JpaRepository<User, Long> {
             """)
     Page<User> search(@Param("keyword") String keyword, Pageable pageable);
 
-    long countByVipTrue();
+    /**
+     * Số tài khoản đang có quyền VIP.
+     *
+     * <p>Viết tay thay vì suy ra từ tên phương thức, vì "VIP" nay đến từ hai
+     * nguồn: Admin cấp tay, hoặc một gói còn hạn. Đếm mỗi cờ {@code is_vip} sẽ
+     * bỏ sót toàn bộ người đã trả tiền.
+     */
+    @Query("""
+            SELECT COUNT(u) FROM User u
+            WHERE u.vipGranted = TRUE OR u.vipUntil > CURRENT_TIMESTAMP
+            """)
+    long countVipUsers();
+
+    long countByEnabledFalse();
+
+    /** Dùng để chặn việc hạ quyền người quản trị cuối cùng. */
+    long countByRole(Role role);
 }

@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
-import { Alert, Button, Field, TextInput } from "../components/ui";
+import GoogleAuth from "../components/GoogleAuth";
+import useAuthProviders from "../hooks/useAuthProviders";
+import { Alert, Button, Field, PasswordInput, TextInput } from "../components/ui";
 
 const EMPTY_FORM = {
   username: "",
@@ -14,6 +16,7 @@ const EMPTY_FORM = {
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const providers = useAuthProviders();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState(null);
@@ -53,23 +56,26 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="container-narrow" style={{ maxWidth: "460px" }}>
-      <form className="nb-card stack" onSubmit={handleSubmit}>
-        <div className="nb-section-title">
-          <h1>Đăng ký</h1>
-        </div>
+    <form className="stack" onSubmit={handleSubmit} style={{ gap: "var(--space-4)" }}>
+      <div className="nb-section-title auth-form-title" style={{ marginBottom: 0 }}>
+        <h1>Đăng ký</h1>
+      </div>
 
-        {error && <Alert tone="error">{error}</Alert>}
+      {error && <Alert tone="error">{error}</Alert>}
 
+      {/* Paired across the pane, in the order the fields are filled in: the
+          five-field column this used to be did not fit a laptop screen. */}
+      <div className="auth-grid">
         <Field
           label="Tên đăng nhập"
           htmlFor="username"
           error={fieldErrors.username}
-          hint="Chỉ gồm chữ, số và các ký tự . _ -"
+          hint="Chữ, số và . _ -"
         >
           <TextInput
             id="username"
             autoComplete="username"
+            autoFocus
             required
             value={form.username}
             onChange={(event) => updateField("username", event.target.value)}
@@ -87,30 +93,29 @@ export default function RegisterPage() {
           />
         </Field>
 
-        <Field
-          label="Tên hiển thị"
-          htmlFor="displayName"
-          error={fieldErrors.displayName}
-          hint="Không bắt buộc"
-        >
-          <TextInput
-            id="displayName"
-            value={form.displayName}
-            onChange={(event) => updateField("displayName", event.target.value)}
-          />
-        </Field>
+        {/* The wrapper is the grid item, so the span goes on it rather than
+            on anything inside the field. */}
+        <div className="auth-grid-full">
+          <Field
+            label="Tên hiển thị"
+            htmlFor="displayName"
+            error={fieldErrors.displayName}
+            hint="Không bắt buộc — để trống thì dùng tên đăng nhập"
+          >
+            <TextInput
+              id="displayName"
+              value={form.displayName}
+              onChange={(event) => updateField("displayName", event.target.value)}
+            />
+          </Field>
+        </div>
 
-        <Field
-          label="Mật khẩu"
-          htmlFor="password"
-          error={fieldErrors.password}
-          hint="Tối thiểu 6 ký tự"
-        >
-          <TextInput
+        <Field label="Mật khẩu" htmlFor="password" error={fieldErrors.password} hint="Tối thiểu 6 ký tự">
+          <PasswordInput
             id="password"
-            type="password"
             autoComplete="new-password"
             required
+            error={fieldErrors.password}
             value={form.password}
             onChange={(event) => updateField("password", event.target.value)}
           />
@@ -121,24 +126,26 @@ export default function RegisterPage() {
           htmlFor="confirmPassword"
           error={fieldErrors.confirmPassword}
         >
-          <TextInput
+          <PasswordInput
             id="confirmPassword"
-            type="password"
             autoComplete="new-password"
             required
+            error={fieldErrors.confirmPassword}
             value={form.confirmPassword}
             onChange={(event) => updateField("confirmPassword", event.target.value)}
           />
         </Field>
+      </div>
 
-        <Button type="submit" variant="primary" size="lg" block loading={submitting}>
-          Tạo tài khoản
-        </Button>
+      <Button type="submit" variant="primary" size="lg" block loading={submitting}>
+        Tạo tài khoản
+      </Button>
 
-        <p className="text-center muted">
-          Đã có tài khoản? <Link to="/dang-nhap">Đăng nhập</Link>
-        </p>
-      </form>
-    </div>
+      <GoogleAuth providers={providers} text="signup_with" onError={setError} />
+
+      <p className="auth-alt muted">
+        Đã có tài khoản? <Link to="/dang-nhap">Đăng nhập</Link>
+      </p>
+    </form>
   );
 }

@@ -55,6 +55,16 @@ export default function AuthProvider({ children }) {
     [applySession],
   );
 
+  /**
+   * One call covers both signing in and signing up: the server creates the
+   * account the first time a Google identity turns up, so the browser has no
+   * way of telling the two apart and does not need to.
+   */
+  const loginWithGoogle = useCallback(
+    async (credential) => applySession(await authApi.google(credential)),
+    [applySession],
+  );
+
   const logout = useCallback(() => {
     setStoredToken(null);
     setUser(null);
@@ -77,10 +87,11 @@ export default function AuthProvider({ children }) {
       isVip: Boolean(user?.vip),
       login,
       register,
+      loginWithGoogle,
       logout,
       refresh,
     }),
-    [user, initialising, login, register, logout, refresh],
+    [user, initialising, login, register, loginWithGoogle, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
