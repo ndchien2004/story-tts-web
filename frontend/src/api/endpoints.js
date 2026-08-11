@@ -5,7 +5,20 @@ import client, { API_BASE_URL, getStoredToken } from "./client";
 /* ------------------------------------------------------------------ */
 
 export const authApi = {
+  /**
+   * Starts a registration. No account exists yet: the answer says whether a
+   * code went out, and carries a session only when the server has no mail
+   * account and therefore no way to verify anything.
+   */
   register: (payload) => client.post("/api/auth/register", payload).then((r) => r.data),
+
+  /** Completes it. This is the call that puts the account in the database. */
+  verifyRegistration: (payload) =>
+    client.post("/api/auth/register/verify", payload).then((r) => r.data),
+
+  resendRegistrationCode: (email) =>
+    client.post("/api/auth/register/resend", { email }).then((r) => r.data),
+
   login: (payload) => client.post("/api/auth/login", payload).then((r) => r.data),
   me: () => client.get("/api/auth/me").then((r) => r.data),
 
@@ -57,15 +70,6 @@ export const chapterApi = {
 
 export const audioApi = {
   list: (chapterId) => client.get(`/api/chapters/${chapterId}/audio`).then((r) => r.data),
-
-  voices: (chapterId) => client.get(`/api/chapters/${chapterId}/tts/voices`).then((r) => r.data),
-
-  /** Starts synthesis, or returns the cached track when one already exists. */
-  requestTts: (chapterId, { voice, speed }) =>
-    client.post(`/api/chapters/${chapterId}/tts`, { voice, speed }).then((r) => r.data),
-
-  ttsStatus: (chapterId, audioId) =>
-    client.get(`/api/chapters/${chapterId}/tts/${audioId}/status`).then((r) => r.data),
 
   /**
    * Builds the URL for an `<audio>` element.
@@ -154,6 +158,10 @@ export const adminApi = {
 
   createChapter: (storyId, payload) =>
     client.post(`/api/admin/stories/${storyId}/chapters`, payload).then((r) => r.data),
+
+  /** Every track a chapter has, failed ones included — the reader's list hides those. */
+  chapterAudio: (chapterId) =>
+    client.get(`/api/admin/chapters/${chapterId}/audio`).then((r) => r.data),
 
   uploadAudio: (chapterId, file) => {
     const form = new FormData();

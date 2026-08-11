@@ -7,7 +7,6 @@ import com.storytts.backend.dto.auth.AuthProvidersDto;
 import com.storytts.backend.dto.auth.AuthResponse;
 import com.storytts.backend.dto.auth.GoogleLoginRequest;
 import com.storytts.backend.dto.auth.LoginRequest;
-import com.storytts.backend.dto.auth.RegisterRequest;
 import com.storytts.backend.dto.auth.UserDto;
 import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.repository.UserRepository;
@@ -31,7 +30,7 @@ import java.util.Locale;
 @Slf4j
 public class AuthService {
 
-    /** Tên đăng nhập suy ra từ email phải hợp lệ với luật của {@code RegisterRequest}. */
+    /** Tên đăng nhập suy ra từ email phải hợp lệ với luật của form đăng ký. */
     private static final int MIN_USERNAME_LENGTH = 3;
     private static final int MAX_USERNAME_LENGTH = 50;
 
@@ -45,32 +44,16 @@ public class AuthService {
 
     private final SecureRandom random = new SecureRandom();
 
-    @Transactional
-    public AuthResponse register(RegisterRequest request) {
-        String username = request.username().trim();
-        String email = request.email().trim().toLowerCase();
-
-        if (userRepository.existsByUsername(username)) {
-            throw new BadRequestException("Tên đăng nhập '%s' đã được sử dụng.".formatted(username));
-        }
-        if (userRepository.existsByEmail(email)) {
-            throw new BadRequestException("Email '%s' đã được đăng ký.".formatted(email));
-        }
-
-        User user = User.builder()
-                .username(username)
-                .email(email)
-                // Mật khẩu luôn được băm bằng BCrypt, không lưu plaintext.
-                .passwordHash(passwordEncoder.encode(request.password()))
-                .displayName(request.displayName())
-                .role(Role.MEMBER)
-                .vipGranted(false)
-                .enabled(true)
-                .build();
-
-        user = userRepository.save(user);
-        log.info("Tài khoản mới đăng ký: {}", user.getUsername());
-        return buildAuthResponse(user);
+    /**
+     * Cấp JWT cho một tài khoản.
+     *
+     * <p>Công khai vì mọi đường vào hệ thống đều kết thúc ở đây: đăng nhập bằng
+     * mật khẩu, bằng Google, và bước nhập mã xác thực của
+     * {@link RegistrationService}.
+     */
+    public AuthResponse issueSession(User user) {
+        String token = jwtService.generateToken(user);
+        return AuthResponse.of(token, jwtService.getExpirationMs(), UserDto.from(user));
     }
 
     @Transactional(readOnly = true)
@@ -84,7 +67,7 @@ public class AuthService {
         if (!user.isEnabled()) {
             throw new BadRequestException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.");
         }
-        return buildAuthResponse(user);
+        return issueSession(user);
     }
 
     /**
@@ -109,7 +92,7 @@ public class AuthService {
         if (!user.isEnabled()) {
             throw new BadRequestException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.");
         }
-        return buildAuthResponse(user);
+        return issueSession(user);
     }
 
     /** Các cách đăng nhập đang bật, để frontend không hiện nút chỉ báo lỗi khi bấm. */
@@ -194,10 +177,5 @@ public class AuthService {
         byte[] bytes = new byte[32];
         random.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    private AuthResponse buildAuthResponse(User user) {
-        String token = jwtService.generateToken(user);
-        return AuthResponse.of(token, jwtService.getExpirationMs(), UserDto.from(user));
     }
 }

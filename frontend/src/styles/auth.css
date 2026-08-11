@@ -222,10 +222,50 @@
 
 /* This is now the main way over to the other form, since the header carries a
    single button rather than one for each. */
-.auth-alt a {
+.auth-alt a,
+.auth-alt .link-button {
   font-weight: 600;
   color: var(--ink);
   text-decoration-thickness: 1px;
+}
+
+/*
+ * A button that has to read as a link.
+ *
+ * Going back to correct the email address changes state on this page rather
+ * than navigating anywhere, so it cannot be an anchor — but it sits mid
+ * sentence beside real links and has to look like one.
+ */
+.link-button {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ */
+/* One-time code                                                       */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Six digits, set wide and centred.
+ *
+ * The tracking is what makes a code checkable against the one in the mail
+ * without counting characters, and tabular figures stop the field twitching
+ * as digits are typed.
+ */
+.otp-input {
+  font-size: 1.6rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5em;
+  text-align: center;
+  /* The tracking is applied after the last digit too, which would otherwise
+     push the whole string off centre by half a space. */
+  text-indent: 0.5em;
 }
 
 /* ------------------------------------------------------------------ */

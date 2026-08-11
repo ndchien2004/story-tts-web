@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import GoogleAuth from "../components/GoogleAuth";
+import RegistrationCodeForm from "../components/RegistrationCodeForm";
 import useAuthProviders from "../hooks/useAuthProviders";
 import { Alert, Button, Field, PasswordInput, TextInput } from "../components/ui";
 
@@ -23,6 +24,13 @@ export default function RegisterPage() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
+  /**
+   * Set once the server has sent a code, which is also what switches this page
+   * to its second step. The form state is kept behind it, so correcting a
+   * mistyped email does not mean filling everything in again.
+   */
+  const [pending, setPending] = useState(null);
+
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
   }
@@ -40,19 +48,37 @@ export default function RegisterPage() {
     setFieldErrors({});
 
     try {
-      await register({
+      const result = await register({
         username: form.username,
         email: form.email,
         password: form.password,
         displayName: form.displayName || undefined,
       });
-      navigate("/", { replace: true });
+
+      // No code to enter when the server has no mail account: it created the
+      // account outright and `register` already put the session in place.
+      if (result.verificationRequired) {
+        setPending(result);
+      } else {
+        navigate("/", { replace: true });
+      }
     } catch (err) {
       setError(err.message);
       setFieldErrors(err.fieldErrors ?? {});
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (pending) {
+    return (
+      <RegistrationCodeForm
+        email={pending.email}
+        minutes={pending.expiresInMinutes}
+        onBack={() => setPending(null)}
+        onVerified={() => navigate("/", { replace: true })}
+      />
+    );
   }
 
   return (

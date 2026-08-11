@@ -83,7 +83,8 @@ public class SecurityConfig {
                         // Liệt kê từng đường thay vì /api/auth/**, để /me và
                         // /logout vẫn nằm sau lớp xác thực.
                         .requestMatchers(
-                                "/api/auth/register", "/api/auth/login", "/api/auth/google",
+                                "/api/auth/register", "/api/auth/register/verify",
+                                "/api/auth/register/resend", "/api/auth/login", "/api/auth/google",
                                 "/api/auth/forgot-password", "/api/auth/reset-password",
                                 "/api/auth/providers").permitAll()
 
@@ -105,7 +106,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,
                                 "/api/stories/**", "/api/chapters/**",
                                 "/api/genres/**", "/api/authors/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/chapters/*/tts").permitAll()
 
                         .anyRequest().authenticated())
                 .authenticationProvider(authenticationProvider(passwordEncoder()))

@@ -50,8 +50,23 @@ export default function AuthProvider({ children }) {
     [applySession],
   );
 
+  /**
+   * Starts a registration and returns what the server decided.
+   *
+   * A session only comes back when the server had no way to send a code, so
+   * everywhere else the caller is expected to go on to `verifyRegistration`.
+   */
   const register = useCallback(
-    async (payload) => applySession(await authApi.register(payload)),
+    async (payload) => {
+      const result = await authApi.register(payload);
+      if (result.session) applySession(result.session);
+      return result;
+    },
+    [applySession],
+  );
+
+  const verifyRegistration = useCallback(
+    async (payload) => applySession(await authApi.verifyRegistration(payload)),
     [applySession],
   );
 
@@ -87,11 +102,12 @@ export default function AuthProvider({ children }) {
       isVip: Boolean(user?.vip),
       login,
       register,
+      verifyRegistration,
       loginWithGoogle,
       logout,
       refresh,
     }),
-    [user, initialising, login, register, loginWithGoogle, logout, refresh],
+    [user, initialising, login, register, verifyRegistration, loginWithGoogle, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

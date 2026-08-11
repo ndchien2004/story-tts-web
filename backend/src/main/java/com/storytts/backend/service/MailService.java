@@ -60,6 +60,33 @@ public class MailService {
         send(user.getEmail(), subject, body);
     }
 
+    /**
+     * Gửi mã xác thực cho một lượt đăng ký đang chờ.
+     *
+     * <p>Nhận thẳng email và tên chứ không nhận {@code User}: ở thời điểm này
+     * chưa có tài khoản nào trong cơ sở dữ liệu, và đó chính là điều luồng này
+     * bảo đảm.
+     */
+    @Async
+    public void sendRegistrationCode(String email, String displayName, String code, int ttlMinutes) {
+        String subject = "Mã xác thực tài khoản Truyện Nghe";
+        String body = """
+                <div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#1c1c21;line-height:1.6">
+                  <p>Chào %s,</p>
+                  <p>Đây là mã xác thực để hoàn tất việc đăng ký tài khoản Truyện Nghe:</p>
+                  <p style="margin:24px 0">
+                    <span style="display:inline-block;padding:14px 26px;font-size:30px;font-weight:700;
+                       letter-spacing:0.34em;background:#f0f0f2;border-radius:6px">%s</span>
+                  </p>
+                  <p>Mã có hiệu lực trong %d phút. Nhập mã vào trang đăng ký thì tài khoản mới được tạo.</p>
+                  <p style="color:#6e6e78">Nếu bạn không đăng ký tài khoản nào, hãy bỏ qua email này —
+                     chưa có gì được tạo ra cả.</p>
+                </div>
+                """.formatted(escape(displayName), code, ttlMinutes);
+
+        send(email, subject, body);
+    }
+
     private void send(String to, String subject, String htmlBody) {
         try {
             MimeMessage message = mailSender.createMimeMessage();

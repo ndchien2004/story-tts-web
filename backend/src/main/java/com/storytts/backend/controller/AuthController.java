@@ -6,10 +6,14 @@ import com.storytts.backend.dto.auth.ForgotPasswordRequest;
 import com.storytts.backend.dto.auth.GoogleLoginRequest;
 import com.storytts.backend.dto.auth.LoginRequest;
 import com.storytts.backend.dto.auth.RegisterRequest;
+import com.storytts.backend.dto.auth.RegisterResponse;
+import com.storytts.backend.dto.auth.ResendCodeRequest;
 import com.storytts.backend.dto.auth.ResetPasswordRequest;
 import com.storytts.backend.dto.auth.UserDto;
+import com.storytts.backend.dto.auth.VerifyRegistrationRequest;
 import com.storytts.backend.service.AuthService;
 import com.storytts.backend.service.PasswordResetService;
+import com.storytts.backend.service.RegistrationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -27,6 +31,7 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final RegistrationService registrationService;
     private final PasswordResetService passwordResetService;
 
     @GetMapping("/providers")
@@ -35,10 +40,33 @@ public class AuthController {
         return authService.providers();
     }
 
+    /**
+     * Chưa tạo tài khoản ở bước này: máy chủ gửi mã xác thực về email và chỉ ghi
+     * vào cơ sở dữ liệu sau khi mã được nhập đúng ở {@code /register/verify}.
+     * Ngoại lệ duy nhất là khi máy chủ chưa cấu hình email — xem
+     * {@code RegistrationService}.
+     */
     @PostMapping("/register")
-    @Operation(summary = "Đăng ký tài khoản mới (mặc định là Thành viên thường)")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
+    @Operation(summary = "Bắt đầu đăng ký: gửi mã xác thực về email")
+    public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
+        RegisterResponse response = registrationService.start(request);
+        HttpStatus status = response.verificationRequired() ? HttpStatus.ACCEPTED : HttpStatus.CREATED;
+        return ResponseEntity.status(status).body(response);
+    }
+
+    @PostMapping("/register/verify")
+    @Operation(summary = "Nhập mã xác thực; đúng mã thì tài khoản mới được tạo")
+    public ResponseEntity<AuthResponse> verifyRegistration(
+            @Valid @RequestBody VerifyRegistrationRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(registrationService.verify(request.email(), request.code()));
+    }
+
+    @PostMapping("/register/resend")
+    @Operation(summary = "Gửi lại mã xác thực cho một lượt đăng ký đang chờ")
+    public Map<String, String> resendRegistrationCode(@Valid @RequestBody ResendCodeRequest request) {
+        registrationService.resendCode(request.email());
+        return Map.of("message", "Đã gửi lại mã xác thực. Vui lòng kiểm tra cả hộp thư rác.");
     }
 
     @PostMapping("/login")
