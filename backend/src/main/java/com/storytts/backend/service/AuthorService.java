@@ -21,9 +21,17 @@ public class AuthorService {
     private final AuthorRepository authorRepository;
     private final StoryRepository storyRepository;
 
+    /**
+     * Mọi tác giả kèm số truyện của từng người.
+     * <p>
+     * Trang danh mục bên quản trị dựa vào con số này để nói trước vì sao một tác giả
+     * không xóa được, thay vì để Admin bấm xóa rồi mới nhận thông báo từ chối.
+     */
     @Transactional(readOnly = true)
     public List<AuthorDto> findAll() {
-        return authorRepository.findAllByOrderByNameAsc().stream().map(AuthorDto::from).toList();
+        return authorRepository.findAllByOrderByNameAsc().stream()
+                .map(author -> AuthorDto.from(author, storyRepository.countByAuthorId(author.getId())))
+                .toList();
     }
 
     @Transactional

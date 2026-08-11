@@ -12,26 +12,15 @@ function initialsOf(title) {
     .toUpperCase();
 }
 
-/** Rotates placeholder cover colours so a grid of them stays readable. */
-const PLACEHOLDER_TINTS = [
-  "var(--accent)",
-  "var(--info)",
-  "var(--success)",
-  "var(--violet)",
-  "var(--warning)",
-  "var(--danger)",
-];
-
 export default function StoryCard({ story }) {
-  const tint = PLACEHOLDER_TINTS[story.id % PLACEHOLDER_TINTS.length];
   const hasCover = Boolean(story.coverImage);
 
   return (
-    <Link to={`/truyen/${story.id}`} className="nb-card story-card">
-      <div
-        className={`story-cover ${hasCover ? "" : "story-cover-placeholder"}`}
-        style={hasCover ? undefined : { background: tint }}
-      >
+    <Link to={`/truyen/${story.id}`} className="story-card">
+      {/* A missing cover used to be filled with one of six rotating tints.
+          With a single-colour palette there is nothing left to rotate, so the
+          initials themselves carry the difference. */}
+      <div className={`story-cover ${hasCover ? "" : "story-cover-placeholder"}`}>
         {hasCover ? (
           <img src={story.coverImage} alt="" loading="lazy" />
         ) : (

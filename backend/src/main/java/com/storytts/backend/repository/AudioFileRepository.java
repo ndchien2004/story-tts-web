@@ -48,5 +48,22 @@ public interface AudioFileRepository extends JpaRepository<AudioFile, Long> {
 
     long countBySource(AudioSource source);
 
+    /** Số chương đã có ít nhất một bản audio dùng được — tử số của "độ phủ audio". */
+    @Query("""
+            SELECT COUNT(DISTINCT a.chapter.id) FROM AudioFile a
+            WHERE a.status = com.storytts.backend.domain.AudioStatus.READY
+            """)
+    long countChaptersWithReadyAudio();
+
+    long countByStatus(AudioStatus status);
+
+    /** Các chương (trong danh sách truyền vào) đang có bản audio ở trạng thái đã cho. */
+    @Query("""
+            SELECT DISTINCT a.chapter.id FROM AudioFile a
+            WHERE a.chapter.id IN :chapterIds AND a.status = :status
+            """)
+    List<Long> findChapterIdsByStatus(@Param("chapterIds") java.util.Collection<Long> chapterIds,
+                                      @Param("status") AudioStatus status);
+
     void deleteByChapterId(Long chapterId);
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { adminApi } from "../../api/endpoints";
+import AdminPage from "./AdminPage";
 import { Alert, Button, Field, Select, Spinner, TextArea, TextInput } from "../../components/ui";
 
 const ACCESS_LEVELS = [
@@ -20,6 +21,10 @@ const EMPTY_FORM = {
  * Create and edit form for a chapter.
  *
  * Creating uses `:storyId`, editing uses `:chapterId`; exactly one is present.
+ *
+ * The metadata fields sit in a narrow column and the chapter text takes the
+ * whole remaining pane, so the editor grows with the screen instead of being a
+ * fixed box in the middle of a scrolling page.
  */
 export default function AdminChapterFormPage() {
   const { storyId, chapterId } = useParams();
@@ -55,6 +60,8 @@ export default function AdminChapterFormPage() {
     setForm((current) => ({ ...current, [name]: value }));
   }
 
+  const backTo = `/admin/truyen/${parentStoryId}/chuong`;
+
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
@@ -75,7 +82,7 @@ export default function AdminChapterFormPage() {
       } else {
         await adminApi.createChapter(storyId, payload);
       }
-      navigate(`/admin/truyen/${parentStoryId}/chuong`);
+      navigate(backTo);
     } catch (err) {
       setError(err.message);
       setFieldErrors(err.fieldErrors ?? {});
@@ -84,89 +91,136 @@ export default function AdminChapterFormPage() {
     }
   }
 
-  if (loading) return <Spinner />;
+  const title = isEdit ? "Sửa chương" : "Thêm chương mới";
+
+  if (loading) {
+    return (
+      <AdminPage crumbs={[{ to: "/admin/truyen", label: "Truyện" }]} title={title}>
+        <Spinner />
+      </AdminPage>
+    );
+  }
 
   const characterCount = form.content.length;
+  // A rough reading estimate; the synthesised narration lands in the same range.
+  const minutes = Math.max(1, Math.round(characterCount / 900));
 
   return (
-    <div className="container-narrow">
-      <form className="nb-card stack" onSubmit={handleSubmit}>
-        <div className="nb-section-title">
-          <h1>{isEdit ? "Sửa chương" : "Thêm chương mới"}</h1>
-        </div>
+    <AdminPage
+      crumbs={[
+        { to: "/admin/truyen", label: "Truyện" },
+        { to: backTo, label: "Chương" },
+      ]}
+      title={title}
+      actions={
+        <Button variant="ghost" onClick={() => navigate(backTo)}>
+          Hủy
+        </Button>
+      }
+    >
+      {error && <Alert tone="error">{error}</Alert>}
 
-        {error && <Alert tone="error">{error}</Alert>}
+      <form className="admin-split" onSubmit={handleSubmit}>
+        <aside className="admin-panel">
+          <div className="admin-panel-head">
+            <span className="admin-panel-title">Thông tin chương</span>
+          </div>
 
-        <Field label="Tiêu đề chương" htmlFor="title" error={fieldErrors.title}>
-          <TextInput
-            id="title"
-            required
-            placeholder="Chương 1: …"
-            value={form.title}
-            onChange={(event) => updateField("title", event.target.value)}
-          />
-        </Field>
+          <div className="admin-panel-body admin-panel-body-pad scroll-area">
+            <div className="stack">
+              <Field label="Tiêu đề chương" htmlFor="title" error={fieldErrors.title}>
+                <TextInput
+                  id="title"
+                  required
+                  placeholder="Chương 1: …"
+                  value={form.title}
+                  onChange={(event) => updateField("title", event.target.value)}
+                />
+              </Field>
 
-        <Field
-          label="Số thứ tự"
-          htmlFor="chapterNumber"
-          error={fieldErrors.chapterNumber}
-          hint={isEdit ? undefined : "Để trống để hệ thống tự đánh số tiếp theo"}
-        >
-          <TextInput
-            id="chapterNumber"
-            type="number"
-            min="1"
-            value={form.chapterNumber}
-            onChange={(event) => updateField("chapterNumber", event.target.value)}
-          />
-        </Field>
+              <Field
+                label="Số thứ tự"
+                htmlFor="chapterNumber"
+                error={fieldErrors.chapterNumber}
+                hint={isEdit ? undefined : "Để trống để hệ thống tự đánh số tiếp theo"}
+              >
+                <TextInput
+                  id="chapterNumber"
+                  type="number"
+                  min="1"
+                  value={form.chapterNumber}
+                  onChange={(event) => updateField("chapterNumber", event.target.value)}
+                />
+              </Field>
 
-        <Field
-          label="Mức truy cập"
-          htmlFor="accessLevel"
-          hint="Quyết định ai được đọc và nghe chương này"
-        >
-          <Select
-            id="accessLevel"
-            value={form.accessLevel}
-            onChange={(event) => updateField("accessLevel", event.target.value)}
-          >
-            {ACCESS_LEVELS.map((level) => (
-              <option key={level.value} value={level.value}>
-                {level.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
+              <Field
+                label="Mức truy cập"
+                htmlFor="accessLevel"
+                hint="Quyết định ai được đọc và nghe chương này"
+              >
+                <Select
+                  id="accessLevel"
+                  value={form.accessLevel}
+                  onChange={(event) => updateField("accessLevel", event.target.value)}
+                >
+                  {ACCESS_LEVELS.map((level) => (
+                    <option key={level.value} value={level.value}>
+                      {level.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
 
-        <Field
-          label="Nội dung chương"
-          htmlFor="content"
-          error={fieldErrors.content}
-          hint={`${characterCount.toLocaleString("vi-VN")} ký tự`}
-        >
-          <TextArea
-            id="content"
-            required
-            style={{ minHeight: "22rem" }}
-            value={form.content}
-            onChange={(event) => updateField("content", event.target.value)}
-          />
-        </Field>
+              <div className="row" style={{ gap: "var(--space-2)" }}>
+                <span className="admin-stat">
+                  <b>{characterCount.toLocaleString("vi-VN")}</b>
+                  <span>ký tự</span>
+                </span>
+                <span className="admin-stat">
+                  <b>~{minutes}</b>
+                  <span>phút nghe</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </aside>
 
-        <div className="row">
-          <Button type="submit" variant="primary" size="lg" loading={submitting}>
-            {isEdit ? "Lưu thay đổi" : "Đăng chương"}
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => navigate(`/admin/truyen/${parentStoryId}/chuong`)}
-          >
-            Hủy
-          </Button>
-        </div>
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <span className="admin-panel-title">Nội dung chương</span>
+            {fieldErrors.content && <span className="nb-error">{fieldErrors.content}</span>}
+          </div>
+
+          <div className="admin-panel-body admin-panel-body-pad admin-panel-body-fill">
+            <div className="admin-editor">
+              <TextArea
+                id="content"
+                required
+                aria-label="Nội dung chương"
+                placeholder="Dán hoặc gõ nội dung chương ở đây…"
+                value={form.content}
+                onChange={(event) => updateField("content", event.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* The save bar is pinned to the panel, so it stays reachable no
+              matter how long the chapter is. */}
+          <div className="admin-panel-foot">
+            <span className="muted" style={{ fontSize: "0.85rem", fontWeight: 500 }}>
+              {isEdit ? "Đang sửa chương đã đăng" : "Chương mới chưa được lưu"}
+            </span>
+            <div className="row" style={{ gap: "var(--space-2)" }}>
+              <Button variant="ghost" onClick={() => navigate(backTo)}>
+                Hủy
+              </Button>
+              <Button type="submit" variant="primary" loading={submitting}>
+                {isEdit ? "Lưu thay đổi" : "Đăng chương"}
+              </Button>
+            </div>
+          </div>
+        </section>
       </form>
-    </div>
+    </AdminPage>
   );
 }

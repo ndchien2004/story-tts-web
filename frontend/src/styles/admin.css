@@ -1,0 +1,1071 @@
+/**
+ * Admin console.
+ *
+ * The console is a separate shell from the reader, not a page inside it: a
+ * permanent sidebar plus a work area that fills the viewport exactly. Nothing
+ * here scrolls the page itself — toolbars and action bars stay pinned and only
+ * the panel bodies scroll, so a long table never pushes "Lưu" or "Thêm" out of
+ * reach.
+ */
+
+.admin-shell {
+  --admin-sidebar-width: 16.5rem;
+
+  display: grid;
+  grid-template-columns: var(--admin-sidebar-width) minmax(0, 1fr);
+  height: 100vh;
+  /* dvh keeps the browser chrome on mobile from cropping the action bars. */
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* ------------------------------------------------------------------ */
+/* Sidebar                                                             */
+/* ------------------------------------------------------------------ */
+
+.admin-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+  padding: var(--space-4);
+  background: var(--surface);
+  border-right: var(--outline-width) solid var(--outline);
+  overflow-y: auto;
+}
+
+/* Brand on the left, the collapse control pushed to the edge beside it. */
+.admin-sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.admin-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1 1 auto;
+  text-decoration: none;
+}
+
+.admin-collapse-btn {
+  flex: 0 0 auto;
+  color: var(--ink-muted);
+}
+
+.admin-collapse-btn:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+/* Hidden on narrow screens: there the sidebar is already a drawer, and a rail
+   inside a drawer would be a second answer to the same problem. */
+@media (max-width: 1100px) {
+  .admin-collapse-btn {
+    display: none;
+  }
+}
+
+/* The site's own mark. No frame and no fill behind it — the backdrop is cut
+   out of the asset itself (see src/brand.js), as in the reader's header. */
+.admin-brand-mark {
+  flex: 0 0 auto;
+  width: 2.4rem;
+  height: 2.4rem;
+  object-fit: contain;
+}
+
+.admin-brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.admin-brand-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.admin-brand-sub {
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.admin-nav-label {
+  padding-inline: 0.2rem;
+  padding-bottom: var(--space-1);
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.admin-nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0.5rem 0.7rem;
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition), background-color var(--transition);
+}
+
+.admin-nav-link:hover {
+  color: var(--ink);
+  background: var(--bg-alt);
+}
+
+/* The page you are on is the one filled block in the sidebar. */
+.admin-nav-link.active {
+  color: var(--on-tint);
+  background: var(--accent);
+}
+
+.admin-nav-icon {
+  flex: 0 0 auto;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+/* Pushes everything after it to the bottom of the sidebar. */
+.admin-sidebar-spacer {
+  flex: 1 1 auto;
+  min-height: var(--space-4);
+}
+
+.admin-sidebar-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+.admin-whoami {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  background: transparent;
+  border: 0;
+}
+
+.admin-whoami-avatar {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  font-weight: 600;
+  color: var(--on-tint);
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+}
+
+.admin-whoami-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.admin-whoami-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-whoami-role {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+/* The short form of the logout label, shown only in the rail. */
+.admin-logout-short {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Collapsed sidebar (the rail)                                        */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Everything that is a word disappears and everything that is a shape stays,
+ * so the console keeps its full set of destinations in a quarter of the
+ * width. The tooltips added in the markup carry the labels.
+ */
+.admin-shell-collapsed {
+  --admin-sidebar-width: 4.5rem;
+}
+
+.admin-shell-collapsed .admin-sidebar {
+  padding-inline: var(--space-2);
+  align-items: stretch;
+}
+
+.admin-shell-collapsed .admin-brand-text,
+.admin-shell-collapsed .admin-nav-label,
+.admin-shell-collapsed .admin-nav-text,
+.admin-shell-collapsed .admin-whoami-text {
+  display: none;
+}
+
+.admin-shell-collapsed .admin-logout-short {
+  display: inline;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+/* The mark alone, centred in the rail. */
+.admin-shell-collapsed .admin-sidebar-head {
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.admin-shell-collapsed .admin-brand {
+  justify-content: center;
+}
+
+.admin-shell-collapsed .admin-nav-link,
+.admin-shell-collapsed .admin-whoami,
+.admin-shell-collapsed .admin-logout {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+/* A rule where the section label used to be, so the groups still read apart. */
+.admin-shell-collapsed .admin-nav {
+  padding-top: var(--space-3);
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+/* ------------------------------------------------------------------ */
+/* Work area                                                           */
+/* ------------------------------------------------------------------ */
+
+.admin-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.admin-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: var(--surface);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.admin-topbar-heading {
+  min-width: 0;
+}
+
+.admin-topbar h1 {
+  font-size: clamp(1.15rem, 1.6vw, 1.5rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.admin-crumbs a {
+  text-decoration: none;
+}
+
+.admin-crumbs a:hover {
+  text-decoration: underline;
+}
+
+.admin-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* The theme switch sits at the far corner, one step clear of the page's own
+   actions so the two groups do not read as a single row of buttons. */
+.admin-topbar-actions > .nb-icon-btn:last-child:not(:only-child) {
+  margin-left: var(--space-2);
+}
+
+/* Only visible once the sidebar collapses into a drawer. */
+.admin-menu-toggle {
+  display: none;
+}
+
+.admin-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* Panels                                                              */
+/* ------------------------------------------------------------------ */
+
+/* A work area divided by rules, not a card floating in the console. */
+/*
+ * The work surface. It sits one step above the console background, which is
+ * what separates a table from the page — no shadow and no heavy frame needed.
+ */
+.admin-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--surface);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+/* Padded to the same gutter as the table cells below, so the panel title sits
+   on the same vertical line as the first column. */
+.admin-panel-head,
+.admin-panel-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+}
+
+.admin-panel-head {
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.admin-panel-foot {
+  justify-content: space-between;
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+/* Pagination already centres itself; inside a bar it must not add margin. */
+.admin-panel-foot .pagination {
+  margin-top: 0;
+}
+
+.admin-panel-title {
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.admin-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.admin-panel-body-pad {
+  padding: var(--space-4);
+}
+
+/* Body whose content is meant to fill the panel rather than scroll it — the
+   editor panes. A percentage height would fight the padding, so the child
+   claims the space as a flex item instead. */
+.admin-panel-body-fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* Catalogue: genres and authors                                       */
+/* ------------------------------------------------------------------ */
+
+/* Two independent panels side by side, each scrolling its own list. Stacked
+   they would have made a page where the second list is always below the fold. */
+.admin-catalog {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.admin-catalog-form {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+/* The row currently loaded into the form above, so it is obvious which name is
+   being retyped. */
+.admin-row-editing > td {
+  background: var(--bg-alt);
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+
+@media (max-width: 1100px) {
+  .admin-catalog {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: auto;
+  }
+
+  .admin-catalog .admin-panel {
+    min-height: 24rem;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Dashboard                                                           */
+/* ------------------------------------------------------------------ */
+
+.admin-dash {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Groups size to their tiles rather than stretching to fill the column. */
+.admin-dash-group {
+  flex: 0 0 auto;
+}
+
+/*
+ * Figures in a row, set apart by the space around them.
+ *
+ * They were divided by upright rules, which put a stray vertical stroke to the
+ * left of every big number — including the first in each row, where it lined
+ * up with nothing. Numbers this large already separate themselves.
+ */
+.admin-dash-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--space-5) var(--space-4);
+  padding: var(--space-5) var(--space-4);
+}
+
+.admin-dash-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.admin-dash-value {
+  font-size: 1.7rem;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.admin-dash-label {
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.admin-dash-hint {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+/*
+ * These used to be five different tinted edges, one per kind of figure. With
+ * a single-colour palette there is nothing left to tell apart by hue, so the
+ * classes are kept for the markup's sake and carry no styling of their own.
+ */
+
+/* What needs doing, above what is merely worth knowing. */
+.admin-dash-alerts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--space-3);
+  flex: 0 0 auto;
+}
+
+/* Something that needs doing is marked by a heavy rule down its left edge —
+   the same device the alerts use, so the console and the site read alike. */
+.admin-dash-todo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: var(--space-2) var(--space-4);
+  color: var(--ink);
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid var(--ink);
+  border-radius: 0;
+  transition: background-color var(--transition);
+}
+
+.admin-dash-todo strong {
+  color: var(--ink);
+}
+
+.admin-dash-todo span {
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+a.admin-dash-todo:hover {
+  background: var(--bg-alt);
+}
+
+.admin-dash-todo-danger {
+  border-left-color: var(--danger);
+}
+
+.admin-dash-todo-danger strong {
+  color: var(--danger);
+}
+
+/* Not a link and not a problem — just the server being busy. */
+.admin-dash-todo-quiet {
+  border-left-color: var(--line-strong);
+}
+
+/* ------------------------------------------------------------------ */
+/* Charts                                                              */
+/* ------------------------------------------------------------------ */
+
+.admin-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  flex: 0 0 auto;
+}
+
+/* The daily series is the one with 14 points along the bottom; it takes the
+   full width so the dates stay readable without tilting them. */
+.admin-charts > .admin-chart-card:first-child {
+  grid-column: 1 / -1;
+}
+
+.admin-chart-card {
+  flex: 0 0 auto;
+}
+
+/* Chart.js sizes its canvas to the parent, so the parent must have a height of
+   its own — a canvas in an auto-height box collapses to nothing. */
+.admin-chart-body {
+  position: relative;
+  height: 17rem;
+  padding: var(--space-3);
+}
+
+/* The lock-ratio chart is a single bar; that much height would be all air. */
+.admin-charts > .admin-chart-card:last-child .admin-chart-body {
+  height: 10rem;
+}
+
+.admin-chart-table {
+  max-height: 14rem;
+  overflow: auto;
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+@media (max-width: 1100px) {
+  .admin-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Bulk selection                                                      */
+/* ------------------------------------------------------------------ */
+
+/* Appears only once rows are ticked, between the panel head and the table. */
+.admin-bulkbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-alt);
+  color: var(--ink);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.admin-bulkbar .muted {
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+}
+
+/* The tick column: wide enough for the box to sit centred under its header
+   without crowding the gutter or the number beside it. */
+.admin-cell-check {
+  width: 3rem;
+  padding-right: 0;
+  text-align: center;
+}
+
+.admin-cell-check input {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ */
+/* Moderation                                                          */
+/* ------------------------------------------------------------------ */
+
+.admin-user-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.admin-batch-report {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-4);
+  font-size: 0.85rem;
+}
+
+/* Alerts sit above the panels and must keep their natural height. */
+.admin-body > .nb-alert {
+  flex: 0 0 auto;
+}
+
+/* Search box in a panel header: grows into the free space, never past it. */
+.admin-search {
+  flex: 1 1 12rem;
+  max-width: 24rem;
+  margin-left: auto;
+}
+
+/*
+ * A row of narrowing controls under the panel head.
+ *
+ * Once there is more than one, they stop fitting beside the panel title, and
+ * a wrapped title reads as two separate headings. On their own row they line
+ * up and share the width evenly.
+ */
+.admin-filterbar {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.admin-search .nb-input {
+  padding-block: 0.35rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Two-pane work layouts                                               */
+/* ------------------------------------------------------------------ */
+
+.admin-split {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: var(--admin-aside, 21rem) minmax(0, 1fr);
+  gap: var(--space-4);
+  min-height: 0;
+}
+
+/* Same split with the narrow column on the right. */
+.admin-split-end {
+  grid-template-columns: minmax(0, 1fr) var(--admin-aside, 21rem);
+}
+
+.admin-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Table extras                                                        */
+/* ------------------------------------------------------------------ */
+
+/* The table lives inside a scrolling panel body, so the header pins itself
+   rather than scrolling away with the rows. */
+.admin-panel-body > .nb-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.admin-panel-body > .nb-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  /* A sticky cell drops its border in some engines; an inset shadow stays.
+     It also needs a fill of its own, or the rows scroll visibly behind it. */
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--line-strong);
+  border-bottom: none;
+}
+
+/*
+ * The one column allowed to take the slack.
+ *
+ * Everything else is sized to its content, so this is what absorbs a wide
+ * window — and what gives way first on a narrow one, rather than the table
+ * running off the side of the console.
+ */
+.admin-cell-main {
+  width: 100%;
+  min-width: 12rem;
+  white-space: normal;
+}
+
+/* Columns that must stay on one line, and therefore claim no more width than
+   the text they hold. */
+.admin-cell-actions,
+.admin-cell-date,
+.admin-cell-rating {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.admin-cell-date {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Buttons may fall onto a second line.
+ *
+ * Three actions on one row is what made the members table wider than the
+ * window; wrapping costs a little height on a narrow screen and saves the
+ * whole table from scrolling sideways.
+ */
+.admin-row-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/*
+ * A cell whose text opens the record it belongs to.
+ *
+ * A button rather than a link: it opens a dialog, it goes nowhere. One line,
+ * clipped — the full text is what the dialog is for.
+ */
+.admin-cell-link {
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.admin-cell-link:hover {
+  text-decoration: underline;
+}
+
+/* Reader identity in a cell: picture, then name over handle. */
+.admin-user-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.admin-user-name strong,
+.admin-user-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-user-name span {
+  font-size: 0.8rem;
+}
+
+/* The comment in full, inside the detail dialog. */
+.admin-comment-full {
+  padding-top: var(--space-3);
+  border-top: var(--outline-width) solid var(--outline);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Title cell: cover thumbnail beside the name. */
+.admin-title-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.admin-thumb {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 3.1rem;
+  overflow: hidden;
+  font-weight: 600;
+  color: var(--ink-muted);
+  background: var(--bg-alt);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: 3px;
+}
+
+.admin-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-title-link {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.admin-title-link:hover {
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------------ */
+/* Small pieces                                                        */
+/* ------------------------------------------------------------------ */
+
+/* Count beside a panel title. Reads as one phrase — "128 truyện" — so it is
+   set on a single line and carries no rule of its own. */
+.admin-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  line-height: 1.2;
+  color: var(--ink-muted);
+}
+
+.admin-stat b {
+  font-size: 0.92rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.admin-stat span {
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+}
+
+/* Definition rows in the story summary card. */
+.admin-meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.admin-meta-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.admin-meta-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.admin-meta-key {
+  flex: 0 0 auto;
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.admin-meta-value {
+  min-width: 0;
+  font-weight: 500;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.admin-cover-preview {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: 15rem;
+  object-fit: cover;
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius-sm);
+  margin-inline: auto;
+}
+
+/* Editor pane: the textarea takes every pixel the panel body leaves. */
+.admin-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.admin-editor .nb-textarea {
+  flex: 1 1 auto;
+  min-height: 6rem;
+  resize: none;
+}
+
+/* Cover URL and description on the left, live preview on the right. */
+.admin-cover-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 12rem;
+  gap: var(--space-4);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive: below this width the split shell stops paying off        */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 1100px) {
+  .admin-shell {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  /* The sidebar becomes a drawer so the work area keeps the full width. */
+  .admin-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 70;
+    width: min(17rem, 82vw);
+    transform: translateX(-101%);
+    transition: transform var(--transition);
+  }
+
+  .admin-sidebar.open {
+    transform: none;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .admin-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: rgba(10, 10, 10, 0.5);
+  }
+
+  .admin-menu-toggle {
+    display: inline-flex;
+  }
+
+  .admin-main {
+    overflow: visible;
+  }
+
+  .admin-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    flex-wrap: wrap;
+  }
+
+  .admin-body {
+    overflow: visible;
+    padding-inline: var(--space-4);
+  }
+
+  .admin-split,
+  .admin-split-end {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-panel {
+    flex: 0 0 auto;
+  }
+
+  /* The panel stops scrolling vertically here — but the tables inside it are
+     `white-space: nowrap`, so it has to keep scrolling sideways or a wide
+     table drags the whole page along with it. */
+  .admin-panel-body {
+    overflow-y: visible;
+    overflow-x: auto;
+  }
+
+  .admin-editor .nb-textarea {
+    min-height: 18rem;
+    resize: vertical;
+  }
+
+  .admin-cover-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

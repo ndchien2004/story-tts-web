@@ -10,6 +10,7 @@ import com.storytts.backend.dto.story.StorySummaryDto;
 import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.ResourceNotFoundException;
 import com.storytts.backend.repository.ChapterRepository;
+import com.storytts.backend.repository.ReadingProgressRepository;
 import com.storytts.backend.repository.StoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,9 +36,16 @@ public class StoryService {
 
     private final StoryRepository storyRepository;
     private final ChapterRepository chapterRepository;
+    // Repository chứ không phải ReadingProgressService: chỗ này chỉ cần hai truy vấn
+    // đọc thuần, mà service kia lại gọi ngược sang đây khi dựng trang chi tiết truyện.
+    private final ReadingProgressRepository progressRepository;
+    private final CurrentUserService currentUserService;
     private final ChapterService chapterService;
     private final GenreService genreService;
     private final AuthorService authorService;
+    private final RatingCommentService ratingCommentService;
+    private final FavoriteService favoriteService;
+    private final ReadingProgressService readingProgressService;
 
     /**
      * Danh sách truyện: tìm theo tên/tác giả, lọc thể loại, sắp xếp.
@@ -60,8 +69,49 @@ public class StoryService {
     }
 
     /**
-     * Trang chi tiết truyện: thông tin + danh sách chương kèm cờ khóa cho người dùng hiện tại.
+     * Gợi ý truyện tương tự dựa trên thể loại người dùng đã đọc/nghe (mục 4.3 của đề bài).
+     *
+     * <p>Ba bước: lấy thể loại của những truyện có trong lịch sử đọc gần đây → loại bỏ
+     * chính những truyện đã đọc → còn lại sắp theo lượt xem. Ai chưa đọc gì thì không có
+     * căn cứ nào để gợi ý, trả về danh sách rỗng và giao diện tự ẩn khu vực đó đi — bịa ra
+     * gợi ý bằng truyện phổ biến chung sẽ trùng luôn với mục "Được xem nhiều" ngay bên cạnh.
+     */
+    @Transactional(readOnly = true)
+    public List<StorySummaryDto> recommendations(int limit) {
+        Long userId = currentUserService.currentUserId().orElse(null);
+        if (userId == null) {
+            return List.of();
+        }
+
+        List<Long> genreIds = progressRepository.findRecentGenreIds(userId);
+        if (genreIds.isEmpty()) {
+            return List.of();
+        }
+
+        // Truy vấn dùng NOT IN, mà NOT IN () rỗng là lỗi cú pháp SQL. Người mới đọc
+        // truyện chưa có thể loại nào thì đã thoát ở trên, nhưng danh sách truyện đã
+        // đọc vẫn có thể rỗng về lý thuyết, nên chèn một id không bao giờ tồn tại.
+        List<Long> readStoryIds = new ArrayList<>(progressRepository.findReadStoryIds(userId));
+        if (readStoryIds.isEmpty()) {
+            readStoryIds.add(-1L);
+        }
+
+        List<Story> stories = storyRepository.findRecommendations(
+                genreIds, readStoryIds, PageRequest.of(0, Math.min(Math.max(limit, 1), 12)));
+
+        Map<Long, Long> chapterCounts = countChapters(stories);
+        return stories.stream()
+                .map(story -> StorySummaryDto.from(story, chapterCounts.getOrDefault(story.getId(), 0L)))
+                .toList();
+    }
+
+    /**
+     * Trang chi tiết truyện: thông tin + danh sách chương kèm cờ khóa cho người dùng hiện tại,
+     * kèm đánh giá, trạng thái yêu thích và tiến độ đọc.
      * Nội dung chương KHÔNG nằm trong kết quả này.
+     *
+     * <p>Gom tất cả vào một request để trang chi tiết không phải gọi bốn API rồi ghép ở
+     * frontend; phần tương tác đều rỗng một cách vô hại với Khách chưa đăng nhập.
      */
     @Transactional
     public StoryDetailDto getDetail(Long storyId) {
@@ -72,7 +122,14 @@ public class StoryService {
 
         List<ChapterSummaryDto> chapters = chapterService.listByStory(storyId);
         long chapterCount = chapters.size();
-        return new StoryDetailDto(StorySummaryDto.from(story, chapterCount), chapters);
+
+        return new StoryDetailDto(
+                StorySummaryDto.from(story, chapterCount),
+                chapters,
+                ratingCommentService.summary(storyId),
+                favoriteService.status(storyId),
+                List.copyOf(readingProgressService.completedChapterIds(storyId)),
+                readingProgressService.resumeChapterId(storyId).orElse(null));
     }
 
     @Transactional(readOnly = true)

@@ -1,5 +1,6 @@
 package com.storytts.backend.controller.admin;
 
+import com.storytts.backend.domain.Role;
 import com.storytts.backend.dto.auth.UserDto;
 import com.storytts.backend.dto.common.PageResponse;
 import com.storytts.backend.service.UserAdminService;
@@ -43,6 +44,15 @@ public class AdminUserController {
         return userAdminService.setEnabled(id, request.value());
     }
 
+    @PatchMapping("/{id}/role")
+    @Operation(summary = "Nâng lên hoặc hạ khỏi quyền quản trị")
+    public UserDto setRole(@PathVariable Long id, @Valid @RequestBody RoleRequest request) {
+        return userAdminService.setRole(id, request.role());
+    }
+
     public record FlagRequest(@NotNull(message = "Thiếu giá trị") Boolean value) {
+    }
+
+    public record RoleRequest(@NotNull(message = "Vui lòng chọn quyền") Role role) {
     }
 }

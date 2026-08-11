@@ -21,9 +21,18 @@ public class GenreService {
     private final GenreRepository genreRepository;
     private final StoryRepository storyRepository;
 
+    /**
+     * Mọi thể loại kèm số truyện của từng thể loại.
+     * <p>
+     * Menu "Thể loại" trên thanh điều hướng hiện con số này, để người đọc biết trước
+     * mục nào có gì thay vì bấm vào rồi mới thấy trống. Mỗi thể loại một câu đếm —
+     * danh sách chỉ vài dòng nên không đáng đổi lấy một truy vấn gộp khó đọc hơn.
+     */
     @Transactional(readOnly = true)
     public List<GenreDto> findAll() {
-        return genreRepository.findAllByOrderByNameAsc().stream().map(GenreDto::from).toList();
+        return genreRepository.findAllByOrderByNameAsc().stream()
+                .map(genre -> GenreDto.from(genre, storyRepository.countByGenreId(genre.getId())))
+                .toList();
     }
 
     @Transactional

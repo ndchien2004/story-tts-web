@@ -5,6 +5,9 @@ import App from "./App";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/components.css";
+import "./styles/player.css";
+import "./styles/auth.css";
+import "./styles/admin.css";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

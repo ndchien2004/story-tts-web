@@ -1,51 +1,89 @@
 /**
  * Design tokens.
  *
- * The visual language is neobrutalist: flat fills, hard outlines and offset
- * shadows with no blur. Every value the rest of the stylesheets need is
- * declared here once so that switching themes only swaps this block.
+ * The visual language is editorial monochrome: black on white, with structure
+ * carried by hairline rules instead of by a frame and an offset shadow around
+ * every box. Colour is spent on one thing only — an error — so that when
+ * something does turn red it means something.
+ *
+ * Every value the rest of the stylesheets need is declared here once so that
+ * switching themes only swaps this block.
  */
 
 :root {
-  /* Surfaces */
-  --bg: #fffdf5;
-  --bg-alt: #f1eee1;
+  /**
+   * Surfaces.
+   *
+   * The page is a shade off white and a working surface is white, so a panel
+   * or a table lifts off its background without needing a shadow or a heavier
+   * frame. That one step is what keeps a colourless page from reading flat.
+   */
+  --bg: #fafafa;
+  --bg-alt: #f0f0f2;
   --surface: #ffffff;
-  --surface-sunken: #f7f5ec;
+  --surface-sunken: #f6f6f7;
   --surface-raised: #ffffff;
 
-  /* Text */
-  --ink: #0a0a0a;
-  --ink-muted: #625f56;
+  /**
+   * Text.
+   *
+   * Not pure black: #1c1c21 is a very dark slate that still clears 15:1 on
+   * white, but loses the glare that #000 has against a light page.
+   */
+  --ink: #1c1c21;
+  --ink-muted: #6e6e78;
 
   /**
-   * Text placed on a tinted fill (accent, info, danger…).
+   * Text placed on a filled block.
    *
-   * The tints stay light in both themes, so this deliberately does NOT flip
-   * with the theme — otherwise light text would land on a light button.
+   * Every fill in the app is the ink colour, so the text on it is always the
+   * page colour — which means this does flip with the theme, unlike the
+   * pale-tint scheme it replaces.
    */
-  --on-tint: #0a0a0a;
+  --on-tint: #ffffff;
 
-  /* Outline used by every bordered element */
-  --outline: #0a0a0a;
-  --outline-width: 3px;
+  /**
+   * Two weights of rule.
+   *
+   * `--outline` separates regions of the page and should be barely there;
+   * `--line-strong` draws the edge of something interactive, where the eye
+   * needs to find the hit area.
+   */
+  --outline: #e7e7ea;
+  --outline-width: 1px;
+  --line-strong: #d3d3da;
 
-  /* Accents. Kept deliberately few so pages stay readable. */
-  --accent: #ffd84d;
-  --accent-strong: #ffc700;
-  --info: #7ce3e3;
-  --success: #b8f24e;
-  --warning: #ffb35c;
-  --danger: #ff8ba0;
-  --violet: #c0a8ff;
+  /**
+   * The "accent" is the ink itself.
+   *
+   * Keeping the name means every component that fills itself with the accent —
+   * primary buttons, the played part of a scrubber, the active page number —
+   * turns into the same black block without needing a rule of its own.
+   */
+  --accent: #1c1c21;
+  --accent-strong: #000000;
+  --accent-soft: rgba(28, 28, 33, 0.06);
 
-  /* Offset shadows. The blur radius is always 0 by design. */
-  --shadow-sm: 3px 3px 0 var(--outline);
-  --shadow: 5px 5px 0 var(--outline);
-  --shadow-lg: 8px 8px 0 var(--outline);
+  /* What used to be a palette of tints. They survive as greys so the shared
+     components keep working; only a destructive action still has a hue. */
+  --info: #52525b;
+  --success: #3f3f46;
+  --warning: #52525b;
+  --violet: #3f3f46;
+  --danger: #b42318;
 
-  --radius: 10px;
-  --radius-sm: 6px;
+  /**
+   * Flat by design.
+   *
+   * Only genuinely floating things — dropdown menus, modals — are allowed
+   * elevation, and they reach for `--shadow-lg` explicitly.
+   */
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-lg: 0 12px 28px -10px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.06);
+
+  --radius: 6px;
+  --radius-sm: 4px;
   --radius-pill: 999px;
 
   /* Spacing scale */
@@ -71,42 +109,62 @@
     "Noto Sans", Roboto, Arial, sans-serif;
   --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
 
-  --transition: 120ms ease-out;
+  /* Small caps label, used for every section heading and field label. */
+  --label-size: 0.72rem;
+  --label-tracking: 0.07em;
+
+  --transition: 130ms ease;
 
   /* Height of the sticky header; the reader subtracts it from the viewport. */
-  --navbar-height: 4.25rem;
+  --navbar-height: 4rem;
 
-  /* Reader preferences, driven by the reader settings controls. */
-  --reader-font-size: 1.125rem;
+  /* Reader preferences, driven by the reader settings controls.
+     Kept in step with DEFAULT_FONT_SIZE in ThemeProvider: this is the value on
+     screen for the moment before the provider writes the stored one, so a
+     mismatch shows up as the text resizing itself on load. */
+  --reader-font-size: 1.75rem;
   --reader-line-height: 1.85;
 }
 
 [data-theme="dark"] {
-  --bg: #15151c;
-  --bg-alt: #22222e;
-  --surface: #23232f;
-  --surface-sunken: #1b1b24;
-  --surface-raised: #2b2b3a;
+  /*
+   * Same idea inverted: the page sits below, a working surface sits a step
+   * above it.
+   *
+   * Deliberately lifted off black — a near-black page makes every panel edge
+   * and every grey label fight for the little contrast left, and long reading
+   * sessions on it are harsher than the paper look they replace. #16171b is
+   * dark enough to read as a dark theme and light enough to have room
+   * underneath it for the sunken step.
+   */
+  --bg: #16171b;
+  --bg-alt: #232429;
+  --surface: #1c1d22;
+  --surface-sunken: #191a1f;
+  --surface-raised: #24262c;
 
-  --ink: #f4f2ea;
-  --ink-muted: #9d9a92;
+  --ink: #e8e9ed;
+  --ink-muted: #9a9ba5;
 
-  /* Deliberately unchanged; see the note in :root. */
-  --on-tint: #0a0a0a;
+  /* Inverted along with the fill: dark text on a light block. */
+  --on-tint: #16171b;
 
-  /* The hard outline survives the theme switch, only inverted, so the
-     brutalist silhouette still reads. */
-  --outline: #f4f2ea;
+  --outline: #2e3037;
+  --line-strong: #3d4048;
 
-  /* Tints are darkened just enough to sit calmly on a dark page while
-     staying light enough for --on-tint text to keep its contrast. */
-  --accent: #f5c93f;
-  --accent-strong: #e0b62c;
-  --info: #63cfcf;
-  --success: #a6d94a;
-  --warning: #e8a457;
-  --danger: #f08098;
-  --violet: #b09aff;
+  --accent: #e9e9ee;
+  --accent-strong: #ffffff;
+  --accent-soft: rgba(233, 233, 238, 0.1);
+
+  --info: #a1a1aa;
+  --success: #a1a1aa;
+  --warning: #a1a1aa;
+  --violet: #a1a1aa;
+
+  /* Lifted off the light-mode red, which goes muddy on a dark ground. */
+  --danger: #f97066;
+
+  --shadow-lg: 0 12px 28px -10px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
 /* Respect users who ask the OS to reduce motion. */

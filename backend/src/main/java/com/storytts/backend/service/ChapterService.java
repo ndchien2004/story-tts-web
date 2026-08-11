@@ -5,6 +5,7 @@ import com.storytts.backend.domain.AudioSource;
 import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
 import com.storytts.backend.domain.Story;
+import com.storytts.backend.domain.ViewType;
 import com.storytts.backend.dto.chapter.ChapterDetailDto;
 import com.storytts.backend.dto.chapter.ChapterRequest;
 import com.storytts.backend.dto.chapter.ChapterSummaryDto;
@@ -35,6 +36,7 @@ public class ChapterService {
     private final StoryRepository storyRepository;
     private final AudioFileRepository audioFileRepository;
     private final AccessControlService accessControlService;
+    private final ViewEventService viewEventService;
 
     /**
      * Danh sách chương của một truyện.
@@ -72,6 +74,9 @@ public class ChapterService {
         chapterRepository.incrementViewCount(chapterId);
 
         Story story = chapter.getStory();
+
+        // Sau chốt chặn quyền, nên chương bị khóa không bao giờ được tính là một lượt đọc.
+        viewEventService.record(story.getId(), chapterId, ViewType.READ);
         Long previousId = chapterRepository
                 .findPrevious(story.getId(), chapter.getChapterNumber())
                 .map(Chapter::getId).orElse(null);
@@ -172,6 +177,33 @@ public class ChapterService {
         log.info("Admin đổi mức truy cập chương {} thành {}", chapterId, accessLevel);
         boolean hasAudio = audioFileRepository.existsByChapterIdAndStatus(chapterId, AudioStatus.READY);
         return toSummary(saved, chapter.getStory().getId(), hasAudio);
+    }
+
+    /**
+     * Đổi mức khóa cho nhiều chương cùng lúc.
+     *
+     * <p>Một giao dịch duy nhất: đặt mức khóa cho nửa danh sách rồi hỏng giữa chừng sẽ
+     * để lại một truyện có chương khóa lẫn lộn, mà nhìn vào không đoán được là cố ý
+     * hay do lỗi.
+     *
+     * @return số chương đã đổi
+     */
+    @Transactional
+    public int changeAccessLevelBulk(List<Long> chapterIds, AccessLevel accessLevel) {
+        if (chapterIds == null || chapterIds.isEmpty()) {
+            throw new BadRequestException("Chưa chọn chương nào.");
+        }
+
+        List<Chapter> chapters = chapterRepository.findAllById(chapterIds);
+        if (chapters.size() != chapterIds.size()) {
+            throw new ResourceNotFoundException("Có chương trong danh sách không còn tồn tại.");
+        }
+
+        chapters.forEach(chapter -> chapter.setAccessLevel(accessLevel));
+        chapterRepository.saveAll(chapters);
+
+        log.info("Admin đổi mức truy cập {} chương thành {}", chapters.size(), accessLevel);
+        return chapters.size();
     }
 
     // ==================== Hàm hỗ trợ ====================

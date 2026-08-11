@@ -1,5 +1,6 @@
 package com.storytts.backend.service;
 
+import com.storytts.backend.domain.Role;
 import com.storytts.backend.domain.User;
 import com.storytts.backend.dto.auth.UserDto;
 import com.storytts.backend.dto.common.PageResponse;
@@ -36,8 +37,42 @@ public class UserAdminService {
         if (user.isAdmin()) {
             throw new BadRequestException("Tài khoản quản trị viên đã có toàn quyền, không cần gán VIP.");
         }
-        user.setVip(vip);
+        user.setVipGranted(vip);
         log.info("Admin {} quyền VIP cho tài khoản {}", vip ? "cấp" : "thu hồi", user.getUsername());
+        return UserDto.from(userRepository.save(user));
+    }
+
+    /**
+     * Nâng lên hoặc hạ khỏi quyền quản trị.
+     *
+     * <p>Hai lối thoát hiểm được canh ở đây, vì cả hai đều dẫn tới tình trạng không tự
+     * sửa được bằng giao diện nữa: tự hạ quyền chính mình (đóng cửa từ bên trong), và
+     * hạ quyền người quản trị cuối cùng (không còn ai vào được bảng quản trị). Sửa lúc
+     * đó chỉ còn cách vào thẳng cơ sở dữ liệu.
+     *
+     * <p>Lên Admin thì bỏ luôn cờ VIP: Admin vốn đọc được mọi chương, giữ thêm cờ VIP
+     * chỉ khiến bảng thành viên trông như có hai nguồn quyền khác nhau.
+     */
+    @Transactional
+    public UserDto setRole(Long userId, Role role) {
+        User user = findUser(userId);
+        Long currentId = currentUserService.currentUserId().orElse(null);
+
+        if (user.getId().equals(currentId)) {
+            throw new BadRequestException(
+                    "Bạn không thể tự đổi quyền của chính mình. Hãy nhờ một quản trị viên khác.");
+        }
+        if (user.isAdmin() && role != Role.ADMIN && userRepository.countByRole(Role.ADMIN) <= 1) {
+            throw new BadRequestException(
+                    "Đây là quản trị viên cuối cùng. Hãy cấp quyền cho người khác trước khi hạ quyền tài khoản này.");
+        }
+
+        user.setRole(role);
+        if (role == Role.ADMIN) {
+            user.setVipGranted(false);
+        }
+
+        log.info("Đổi quyền tài khoản {} thành {}", user.getUsername(), role);
         return UserDto.from(userRepository.save(user));
     }
 

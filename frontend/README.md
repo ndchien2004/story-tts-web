@@ -1,16 +1,39 @@
-# React + Vite
+# Frontend — Truyện Nghe
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Giao diện React (Vite) của website đọc & nghe truyện. Hướng dẫn cài đặt đầy đủ cho cả backend lẫn
+frontend nằm ở **[README ở thư mục gốc](../README.md)**.
 
-Currently, two official plugins are available:
+## Chạy nhanh
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+cp .env.example .env     # trỏ tới backend, mặc định http://localhost:8080
+npm install
+npm run dev              # http://localhost:5173
+```
 
-## React Compiler
+Backend phải chạy trước, nếu không mọi lời gọi API đều lỗi. Xem README gốc phần "Cài đặt và chạy".
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Lệnh
 
-## Expanding the Oxlint configuration
+| Lệnh | Tác dụng |
+|---|---|
+| `npm run dev` | Chế độ phát triển, có hot reload |
+| `npm run build` | Build cho production vào `dist/` |
+| `npm run preview` | Xem thử bản build |
+| `npm run lint` | Kiểm tra mã bằng oxlint |
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Tổ chức thư mục
+
+```
+src/
+├─ api/          client Axios (tự gắn JWT) + khai báo toàn bộ endpoint
+├─ components/   component dùng lại; ui.jsx chứa các thành phần cơ bản
+├─ context/      Auth (người dùng + token) và Theme (sáng/tối)
+├─ hooks/        useChapterAudio, useDebouncedValue
+├─ pages/        một file một route; admin/ là khu quản trị
+├─ styles/       CSS thuần, chia theo nhóm; tokens.css là bảng biến màu/khoảng cách
+└─ brand.js      đường dẫn logo trên Cloudinary
+```
+
+Không dùng thư viện UI và không có state manager ngoài React Context. Mọi màu sắc, khoảng cách, bo góc
+đều lấy từ biến CSS trong `styles/tokens.css` — đổi giao diện thì sửa ở đó, không sửa rải rác.

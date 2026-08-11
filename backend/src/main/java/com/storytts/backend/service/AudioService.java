@@ -4,6 +4,7 @@ import com.storytts.backend.domain.AudioFile;
 import com.storytts.backend.domain.AudioSource;
 import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
+import com.storytts.backend.domain.ViewType;
 import com.storytts.backend.dto.audio.AudioInfoDto;
 import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.ResourceNotFoundException;
@@ -41,12 +42,18 @@ public class AudioService {
     private final ChapterService chapterService;
     private final AccessControlService accessControlService;
     private final StorageService storageService;
+    private final ViewEventService viewEventService;
 
     /** All usable tracks for a chapter, uploaded and generated alike. */
-    @Transactional(readOnly = true)
+    @Transactional
     public List<AudioInfoDto> listForChapter(Long chapterId) {
         Chapter chapter = chapterService.findDetailEntity(chapterId);
         accessControlService.requireAccess(chapter);
+
+        // Một lượt nghe được tính ở đây chứ không ở endpoint stream: trình phát gọi
+        // stream nhiều lần cho mỗi lần tua, còn danh sách track thì chỉ hỏi một lần
+        // khi mở chương — đúng một lượt cho một phiên nghe.
+        viewEventService.record(chapter.getStory().getId(), chapterId, ViewType.LISTEN);
 
         return audioFileRepository.findByChapterId(chapterId).stream()
                 .filter(audio -> audio.getStatus() != AudioStatus.FAILED)

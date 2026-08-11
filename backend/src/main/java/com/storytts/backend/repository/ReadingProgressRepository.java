@@ -13,6 +13,14 @@ public interface ReadingProgressRepository extends JpaRepository<ReadingProgress
 
     Optional<ReadingProgress> findByUserIdAndChapterId(Long userId, Long chapterId);
 
+    /** Toàn bộ tiến độ của một người trong một truyện — để đánh dấu chương đã đọc. */
+    @Query("""
+            SELECT p FROM ReadingProgress p
+            WHERE p.user.id = :userId AND p.chapter.story.id = :storyId
+            """)
+    List<ReadingProgress> findByUserAndStory(@Param("userId") Long userId,
+                                             @Param("storyId") Long storyId);
+
     /** Chương đọc gần nhất của một truyện — để nút "Đọc tiếp" nhảy đúng chỗ. */
     @Query("""
             SELECT p FROM ReadingProgress p
@@ -32,6 +40,21 @@ public interface ReadingProgressRepository extends JpaRepository<ReadingProgress
             ORDER BY p.updatedAt DESC
             """)
     List<ReadingProgress> findRecentByUser(@Param("userId") Long userId, Pageable pageable);
+
+    /**
+     * Toàn bộ tiến độ của một người, mới nhất trước.
+     * <p>
+     * Tủ truyện cần đếm số chương đã đọc xong của từng truyện nên không cắt bớt được
+     * như {@link #findRecentByUser}: cắt đi là đếm thiếu và truyện đọc xong bị xếp nhầm.
+     */
+    @Query("""
+            SELECT p FROM ReadingProgress p
+            JOIN FETCH p.chapter c
+            JOIN FETCH c.story s
+            WHERE p.user.id = :userId
+            ORDER BY p.updatedAt DESC
+            """)
+    List<ReadingProgress> findAllByUser(@Param("userId") Long userId);
 
     /** Thể loại của các truyện người dùng đọc gần đây — đầu vào cho gợi ý. */
     @Query("""

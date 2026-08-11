@@ -8,10 +8,14 @@ import com.storytts.backend.service.ChapterService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/chapters")
@@ -49,7 +53,20 @@ public class AdminChapterController {
         return ResponseEntity.noContent().build();
     }
 
+    /** Đặt cùng một mức khóa cho nhiều chương — thay vì mở từng dropdown một. */
+    @PatchMapping("/access-level")
+    @Operation(summary = "Đổi mức khóa cho nhiều chương cùng lúc")
+    public Map<String, Integer> changeAccessLevelBulk(@Valid @RequestBody BulkAccessLevelRequest request) {
+        int updated = chapterService.changeAccessLevelBulk(request.chapterIds(), request.accessLevel());
+        return Map.of("updated", updated);
+    }
+
     public record AccessLevelRequest(
+            @NotNull(message = "Vui lòng chọn mức truy cập") AccessLevel accessLevel) {
+    }
+
+    public record BulkAccessLevelRequest(
+            @NotEmpty(message = "Chưa chọn chương nào") List<Long> chapterIds,
             @NotNull(message = "Vui lòng chọn mức truy cập") AccessLevel accessLevel) {
     }
 }

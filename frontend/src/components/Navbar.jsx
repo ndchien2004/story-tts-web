@@ -1,81 +1,105 @@
-import { useState } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
+import { LOGO_MARK } from "../brand";
 import { useAuth } from "../context/auth-context";
-import { useTheme } from "../context/theme-context";
-import { Badge, Button, ButtonLink } from "./ui";
+import GenreMenu from "./GenreMenu";
+import ThemeToggle from "./ThemeToggle";
+import UserMenu from "./UserMenu";
+import { ButtonLink } from "./ui";
 
+const AUTH_PATHS = ["/dang-nhap", "/dang-ky"];
+
+const MenuIcon = ({ open }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    {open ? <path d="m6 6 12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+  </svg>
+);
+
+/**
+ * The site header.
+ *
+ * Two halves with a clear job each: on the left the brand and two ways into the
+ * catalogue, on the right the controls that belong to the person looking at the
+ * screen, folded behind one account button.
+ *
+ * The two links are plain text that simply darkens under the cursor. In a bar
+ * this short, boxes and glyphs were decoration competing with the only thing
+ * that had to stand out — the brand on one side, the account on the other.
+ * Everything else a reader owns (their shelf, the console) lives in the account
+ * menu rather than spread across the bar.
+ *
+ * Below 900px the links collapse behind the menu button, while the theme switch
+ * and the account button stay in the bar: those two are needed most often and
+ * cost the least room.
+ */
 export default function Navbar() {
-  const { user, isAuthenticated, isAdmin, isVip, logout } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
+  const { isAuthenticated } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
-  const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   const closeMenu = () => setMenuOpen(false);
 
-  const handleLogout = () => {
-    logout();
-    closeMenu();
-    navigate("/");
-  };
+  // Following a link inside the collapsed menu should put it away; the route
+  // changing is the one signal that covers every way of leaving.
+  useEffect(closeMenu, [pathname]);
 
   return (
     <header className="navbar">
-      <div className="container navbar-inner" style={{ position: "relative" }}>
+      <div className="container navbar-inner">
         <Link to="/" className="navbar-brand" onClick={closeMenu}>
-          <span className="navbar-brand-mark" aria-hidden="true" />
-          Truyện Nghe
+          <img className="navbar-logo" src={LOGO_MARK} alt="" width="40" height="40" />
+          <span className="navbar-wordmark">
+            <strong>Truyện Nghe</strong>
+            <small>Đọc &amp; nghe truyện online</small>
+          </span>
         </Link>
 
         <div className="grow" />
 
-        <Button
-          className="navbar-toggle"
-          size="sm"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          Menu
-        </Button>
-
-        <nav className={`navbar-links ${menuOpen ? "open" : ""}`}>
+        <nav className={`navbar-links ${menuOpen ? "open" : ""}`} aria-label="Điều hướng chính">
           <NavLink to="/" end className="navbar-link" onClick={closeMenu}>
             Trang chủ
           </NavLink>
-          <NavLink to="/truyen" className="navbar-link" onClick={closeMenu}>
-            Danh sách truyện
-          </NavLink>
-          {isAdmin && (
-            <NavLink to="/admin" className="navbar-link" onClick={closeMenu}>
-              Quản trị
-            </NavLink>
-          )}
 
-          <Button size="sm" onClick={toggleTheme}>
-            {isDark ? "Giao diện sáng" : "Giao diện tối"}
-          </Button>
+          <GenreMenu onNavigate={closeMenu} />
+        </nav>
+
+        <div className="navbar-actions">
+          <ThemeToggle />
 
           {isAuthenticated ? (
-            <>
-              <span className="navbar-user">
-                {user.displayName || user.username}
-                {isAdmin && <Badge tone="info">Admin</Badge>}
-                {!isAdmin && isVip && <Badge tone="vip">VIP</Badge>}
-              </span>
-              <Button size="sm" onClick={handleLogout}>
-                Đăng xuất
-              </Button>
-            </>
+            <UserMenu onNavigate={closeMenu} />
           ) : (
-            <>
-              <ButtonLink to="/dang-nhap" size="sm" onClick={closeMenu}>
+            /* One entry point, not two look-alike buttons side by side. The
+               login page carries the link to registration, and so does the
+               home page, so nothing becomes unreachable by dropping it here.
+               On the auth pages themselves the button would point at the form
+               already on screen, so it steps aside. */
+            !AUTH_PATHS.includes(pathname) && (
+              <ButtonLink to="/dang-nhap" size="sm" variant="primary">
                 Đăng nhập
               </ButtonLink>
-              <ButtonLink to="/dang-ky" size="sm" variant="primary" onClick={closeMenu}>
-                Đăng ký
-              </ButtonLink>
-            </>
+            )
           )}
-        </nav>
+
+          <button
+            type="button"
+            className="nb-btn nb-btn-sm nb-icon-btn navbar-toggle"
+            aria-expanded={menuOpen}
+            aria-label={menuOpen ? "Đóng menu" : "Mở menu"}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <MenuIcon open={menuOpen} />
+          </button>
+        </div>
       </div>
     </header>
   );

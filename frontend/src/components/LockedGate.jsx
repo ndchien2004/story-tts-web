@@ -38,7 +38,7 @@ export default function LockedGate({ requiredAccessLevel, message }) {
           </ButtonLink>
         </div>
       ) : (
-        <p style={{ fontWeight: 700 }}>
+        <p style={{ fontWeight: 500 }}>
           Tài khoản của bạn chưa được cấp quyền VIP. Vui lòng liên hệ quản trị viên để nâng cấp.
         </p>
       )}

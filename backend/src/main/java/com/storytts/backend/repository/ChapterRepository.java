@@ -53,6 +53,48 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
 
     long countByAccessLevel(AccessLevel accessLevel);
 
+    /**
+     * Chương kèm bộ lọc theo truyện và theo tình trạng audio — màn hình quản lý audio.
+     * <p>
+     * Điều kiện audio phải nằm trong SQL chứ không lọc sau khi lấy trang về: cả mục đích
+     * của màn hình này là tìm những chương còn thiếu audio, lọc sau khi phân trang sẽ ra
+     * những trang vơi đầy thất thường và tổng số đếm sai.
+     *
+     * @param withAudio null = không lọc, true = đã có audio, false = còn thiếu
+     */
+    @Query(value = """
+            SELECT c FROM Chapter c
+            JOIN FETCH c.story s
+            WHERE (:storyId IS NULL OR s.id = :storyId)
+              AND (:withAudio IS NULL
+                   OR (:withAudio = TRUE AND EXISTS (
+                        SELECT 1 FROM AudioFile a
+                        WHERE a.chapter = c
+                          AND a.status = com.storytts.backend.domain.AudioStatus.READY))
+                   OR (:withAudio = FALSE AND NOT EXISTS (
+                        SELECT 1 FROM AudioFile a
+                        WHERE a.chapter = c
+                          AND a.status = com.storytts.backend.domain.AudioStatus.READY)))
+            ORDER BY s.title ASC, c.chapterNumber ASC
+            """,
+            countQuery = """
+                    SELECT COUNT(c) FROM Chapter c
+                    WHERE (:storyId IS NULL OR c.story.id = :storyId)
+                      AND (:withAudio IS NULL
+                           OR (:withAudio = TRUE AND EXISTS (
+                                SELECT 1 FROM AudioFile a
+                                WHERE a.chapter = c
+                                  AND a.status = com.storytts.backend.domain.AudioStatus.READY))
+                           OR (:withAudio = FALSE AND NOT EXISTS (
+                                SELECT 1 FROM AudioFile a
+                                WHERE a.chapter = c
+                                  AND a.status = com.storytts.backend.domain.AudioStatus.READY)))
+                    """)
+    org.springframework.data.domain.Page<Chapter> searchForAudioAdmin(
+            @Param("storyId") Long storyId,
+            @Param("withAudio") Boolean withAudio,
+            org.springframework.data.domain.Pageable pageable);
+
     @Modifying
     @Query("UPDATE Chapter c SET c.viewCount = c.viewCount + 1 WHERE c.id = :id")
     void incrementViewCount(@Param("id") Long id);

@@ -1,0 +1,255 @@
+/**
+ * Audio transport.
+ *
+ * The native `<audio controls>` widget is drawn by the browser and ignores the
+ * theme entirely, so it read as a foreign object on the page. Here the element
+ * is kept for playback only — hidden — and every control is rebuilt in the
+ * app's own language: controls sitting straight on the page with no panel
+ * around them, and a single filled button to start from.
+ */
+
+.nb-player {
+  /* Sized against its own box, not the viewport: the same player sits in the
+     narrow reading sidebar and in wider panels, and only its own width
+     decides whether the controls still fit on one row. */
+  container-type: inline-size;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Elapsed time, scrubber and total on one line — the times flank the bar
+   instead of costing a row of their own. */
+.nb-player-seek {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.nb-player-seek .nb-range {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nb-player-time {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+}
+
+/*
+ * One control row that must not wrap: transport on the left, speed and volume
+ * pushed to the right. Everything in it is fixed-width except the volume
+ * slider, which absorbs the difference by shrinking.
+ */
+.nb-player-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: nowrap;
+}
+
+.nb-player-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.nb-player-group-end {
+  margin-left: auto;
+}
+
+/* Primary play/pause control: the one filled shape in the column, so the eye
+   knows where to start. */
+.nb-player-play {
+  flex: 0 0 auto;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+
+.nb-player-play svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/*
+ * Playback rate.
+ *
+ * A native select spent most of its width on the dropdown arrow and pushed the
+ * rest of the row out of shape, so the current rate is the button and the
+ * choices only exist while the menu is open.
+ */
+.nb-rate {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.nb-rate-btn {
+  min-width: 2.6rem;
+  height: 2.1rem;
+  padding: 0 0.4rem;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Floats over the page, so it keeps an edge and an elevation. */
+.nb-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 4.5rem;
+  padding: 0.25rem;
+  margin: 0;
+  list-style: none;
+  background: var(--surface-raised);
+  border: var(--outline-width) solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+}
+
+.nb-menu button {
+  width: 100%;
+  padding: 0.28rem 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.nb-menu button:hover {
+  background: var(--bg-alt);
+}
+
+.nb-menu button[aria-checked="true"] {
+  color: var(--on-tint);
+  background: var(--accent);
+}
+
+.nb-player-volume {
+  flex: 1 1 3.5rem;
+  min-width: 2rem;
+  max-width: 6rem;
+}
+
+/* Only a genuinely cramped player gives up the single row. */
+@container (max-width: 17rem) {
+  .nb-player-controls {
+    flex-wrap: wrap;
+  }
+
+  .nb-player-group-end {
+    margin-left: 0;
+  }
+}
+
+/* Empty state shown before any track exists for the chapter. */
+.nb-player-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 0 0 var(--space-3);
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-left: 2px solid var(--line-strong);
+  border-radius: 0;
+}
+
+.nb-player-empty svg {
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Range input                                                         */
+/* ------------------------------------------------------------------ */
+
+/*
+ * `--range-fill` is set inline from the component so the played portion is
+ * painted by the track gradient. WebKit has no `::-moz-range-progress`
+ * equivalent, hence the gradient rather than two elements.
+ */
+.nb-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.4rem;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* A thin rail with a small square handle: the played part is simply the part
+   drawn in ink. */
+.nb-range::-webkit-slider-runnable-track {
+  height: 0.25rem;
+  background: linear-gradient(
+    to right,
+    var(--ink) var(--range-fill, 0%),
+    var(--bg-alt) var(--range-fill, 0%)
+  );
+  border: none;
+  border-radius: 2px;
+}
+
+.nb-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-top: -0.275rem;
+  background: var(--ink);
+  border: none;
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+.nb-range::-moz-range-track {
+  height: 0.25rem;
+  background: var(--bg-alt);
+  border: none;
+  border-radius: 2px;
+}
+
+.nb-range::-moz-range-progress {
+  height: 0.25rem;
+  background: var(--ink);
+  border: none;
+  border-radius: 2px;
+}
+
+.nb-range::-moz-range-thumb {
+  width: 0.8rem;
+  height: 0.8rem;
+  background: var(--ink);
+  border: none;
+  border-radius: 2px;
+}
+
+.nb-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

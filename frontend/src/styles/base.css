@@ -16,16 +16,22 @@ html {
 
 body {
   min-height: 100vh;
+  /*
+   * Lets a full-bleed element measure itself in `vw` without putting a
+   * horizontal scrollbar on every page — `100vw` counts the vertical
+   * scrollbar's width, so it overhangs the content box by a few pixels.
+   *
+   * `clip`, not `hidden`: `hidden` would make the body a scroll container and
+   * the sticky header would stop sticking.
+   */
+  overflow-x: clip;
   font-family: var(--font-sans);
   font-size: 1rem;
   line-height: 1.6;
   color: var(--ink);
+  /* Plain fill. The rules dividing the page are what give it structure; a
+     patterned backdrop underneath them only added noise. */
   background-color: var(--bg);
-  /* Faint grid to keep large empty areas from looking unfinished. */
-  background-image:
-    linear-gradient(var(--bg-alt) 1px, transparent 1px),
-    linear-gradient(90deg, var(--bg-alt) 1px, transparent 1px);
-  background-size: 32px 32px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -56,7 +62,9 @@ h2,
 h3,
 h4 {
   line-height: 1.25;
-  font-weight: 800;
+  /* 600 is as heavy as this look goes: at 800 the headings read as a poster
+     rather than as a page of text. */
+  font-weight: 600;
   letter-spacing: normal;
 }
 
@@ -74,7 +82,7 @@ h3 {
 
 a {
   color: inherit;
-  text-decoration-thickness: 2px;
+  text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
 
@@ -85,13 +93,28 @@ ol {
 
 /* Visible, high-contrast focus ring for keyboard users. */
 :focus-visible {
-  outline: 3px solid var(--violet);
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--accent);
-  color: var(--on-tint);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+/**
+ * Small-caps label.
+ *
+ * The one repeated typographic device in the app: section headings, field
+ * labels and table headers are all set this way, so a label never has to be a
+ * filled strip to be recognised as one.
+ */
+.label {
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--ink-muted);
 }
 
 /* Screen-reader-only helper. */
@@ -110,11 +133,11 @@ ol {
 /* Scrollbars inside reader panes, kept in theme. */
 .scroll-area {
   scrollbar-width: thin;
-  scrollbar-color: var(--outline) transparent;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
 .scroll-area::-webkit-scrollbar {
-  width: 10px;
+  width: 8px;
 }
 
 .scroll-area::-webkit-scrollbar-track {
@@ -122,7 +145,8 @@ ol {
 }
 
 .scroll-area::-webkit-scrollbar-thumb {
-  background: var(--outline);
-  border: 2px solid var(--surface);
+  background: var(--line-strong);
+  border: 2px solid transparent;
+  background-clip: content-box;
   border-radius: var(--radius-pill);
 }

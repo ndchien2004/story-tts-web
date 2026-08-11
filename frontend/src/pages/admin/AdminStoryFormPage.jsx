@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { adminApi, catalogApi, storyApi } from "../../api/endpoints";
+import AdminPage from "./AdminPage";
 import { Alert, Button, Field, Select, Spinner, TextArea, TextInput } from "../../components/ui";
 
 const EMPTY_FORM = {
@@ -97,117 +98,204 @@ export default function AdminStoryFormPage() {
     }
   }
 
-  if (loading) return <Spinner />;
+  const title = isEdit ? "Sửa truyện" : "Thêm truyện mới";
+
+  if (loading) {
+    return (
+      <AdminPage crumbs={[{ to: "/admin/truyen", label: "Truyện" }]} title={title}>
+        <Spinner />
+      </AdminPage>
+    );
+  }
 
   return (
-    <div className="container-narrow">
-      <form className="nb-card stack" onSubmit={handleSubmit}>
-        <div className="nb-section-title">
-          <h1>{isEdit ? "Sửa truyện" : "Thêm truyện mới"}</h1>
-        </div>
+    <AdminPage
+      crumbs={[{ to: "/admin/truyen", label: "Truyện" }]}
+      title={title}
+      actions={
+        <Button variant="ghost" onClick={() => navigate("/admin/truyen")}>
+          Hủy
+        </Button>
+      }
+    >
+      {error && <Alert tone="error">{error}</Alert>}
 
-        {error && <Alert tone="error">{error}</Alert>}
+      <form className="admin-split" onSubmit={handleSubmit}>
+        <aside className="admin-panel">
+          <div className="admin-panel-head">
+            <span className="admin-panel-title">Thông tin cơ bản</span>
+          </div>
 
-        <Field label="Tên truyện" htmlFor="title" error={fieldErrors.title}>
-          <TextInput
-            id="title"
-            required
-            value={form.title}
-            onChange={(event) => updateField("title", event.target.value)}
-          />
-        </Field>
+          <div className="admin-panel-body admin-panel-body-pad scroll-area">
+            <div className="stack">
+              <Field label="Tên truyện" htmlFor="title" error={fieldErrors.title}>
+                <TextInput
+                  id="title"
+                  required
+                  value={form.title}
+                  onChange={(event) => updateField("title", event.target.value)}
+                />
+              </Field>
 
-        <Field label="Tác giả" htmlFor="authorId" hint="Chọn tác giả có sẵn, hoặc để trống rồi nhập tên mới bên dưới">
-          <Select
-            id="authorId"
-            value={form.authorId}
-            onChange={(event) => updateField("authorId", event.target.value)}
-          >
-            <option value="">— Nhập tác giả mới —</option>
-            {authors.map((author) => (
-              <option key={author.id} value={author.id}>
-                {author.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+              <Field
+                label="Tác giả"
+                htmlFor="authorId"
+                hint="Chọn tác giả có sẵn, hoặc để trống rồi nhập tên mới bên dưới"
+              >
+                <Select
+                  id="authorId"
+                  value={form.authorId}
+                  onChange={(event) => updateField("authorId", event.target.value)}
+                >
+                  <option value="">— Nhập tác giả mới —</option>
+                  {authors.map((author) => (
+                    <option key={author.id} value={author.id}>
+                      {author.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
 
-        {!form.authorId && (
-          <Field label="Tên tác giả mới" htmlFor="authorName" error={fieldErrors.authorName}>
-            <TextInput
-              id="authorName"
-              required
-              value={form.authorName}
-              onChange={(event) => updateField("authorName", event.target.value)}
-            />
-          </Field>
-        )}
+              {!form.authorId && (
+                <Field label="Tên tác giả mới" htmlFor="authorName" error={fieldErrors.authorName}>
+                  <TextInput
+                    id="authorName"
+                    required
+                    value={form.authorName}
+                    onChange={(event) => updateField("authorName", event.target.value)}
+                  />
+                </Field>
+              )}
 
-        <Field label="Thể loại" htmlFor="genreId" hint="Chọn thể loại có sẵn, hoặc để trống rồi nhập tên mới bên dưới">
-          <Select
-            id="genreId"
-            value={form.genreId}
-            onChange={(event) => updateField("genreId", event.target.value)}
-          >
-            <option value="">— Nhập thể loại mới —</option>
-            {genres.map((genre) => (
-              <option key={genre.id} value={genre.id}>
-                {genre.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+              <Field
+                label="Thể loại"
+                htmlFor="genreId"
+                hint="Chọn thể loại có sẵn, hoặc để trống rồi nhập tên mới bên dưới"
+              >
+                <Select
+                  id="genreId"
+                  value={form.genreId}
+                  onChange={(event) => updateField("genreId", event.target.value)}
+                >
+                  <option value="">— Nhập thể loại mới —</option>
+                  {genres.map((genre) => (
+                    <option key={genre.id} value={genre.id}>
+                      {genre.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
 
-        {!form.genreId && (
-          <Field label="Tên thể loại mới" htmlFor="genreName" error={fieldErrors.genreName}>
-            <TextInput
-              id="genreName"
-              required
-              value={form.genreName}
-              onChange={(event) => updateField("genreName", event.target.value)}
-            />
-          </Field>
-        )}
+              {!form.genreId && (
+                <Field label="Tên thể loại mới" htmlFor="genreName" error={fieldErrors.genreName}>
+                  <TextInput
+                    id="genreName"
+                    required
+                    value={form.genreName}
+                    onChange={(event) => updateField("genreName", event.target.value)}
+                  />
+                </Field>
+              )}
 
-        <Field label="Ảnh bìa (URL)" htmlFor="coverImage" error={fieldErrors.coverImage} hint="Không bắt buộc">
-          <TextInput
-            id="coverImage"
-            type="url"
-            placeholder="https://…"
-            value={form.coverImage}
-            onChange={(event) => updateField("coverImage", event.target.value)}
-          />
-        </Field>
+              <Field label="Trạng thái" htmlFor="status">
+                <Select
+                  id="status"
+                  value={form.status}
+                  onChange={(event) => updateField("status", event.target.value)}
+                >
+                  <option value="ONGOING">Đang ra</option>
+                  <option value="COMPLETED">Hoàn thành</option>
+                </Select>
+              </Field>
+            </div>
+          </div>
+        </aside>
 
-        <Field label="Trạng thái" htmlFor="status">
-          <Select
-            id="status"
-            value={form.status}
-            onChange={(event) => updateField("status", event.target.value)}
-          >
-            <option value="ONGOING">Đang ra</option>
-            <option value="COMPLETED">Hoàn thành</option>
-          </Select>
-        </Field>
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <span className="admin-panel-title">Ảnh bìa &amp; mô tả</span>
+          </div>
 
-        <Field label="Mô tả" htmlFor="description" error={fieldErrors.description}>
-          <TextArea
-            id="description"
-            style={{ minHeight: "8rem", fontFamily: "var(--font-sans)" }}
-            value={form.description}
-            onChange={(event) => updateField("description", event.target.value)}
-          />
-        </Field>
+          <div className="admin-panel-body admin-panel-body-pad admin-panel-body-fill">
+            {/* Cover and description share the wide pane: the URL is typed on
+                the left and previewed on the right, so a broken link shows up
+                before saving. */}
+            <div className="admin-cover-grid">
+              <div className="admin-editor">
+                <Field
+                  label="Ảnh bìa (URL)"
+                  htmlFor="coverImage"
+                  error={fieldErrors.coverImage}
+                  hint="Không bắt buộc"
+                >
+                  <TextInput
+                    id="coverImage"
+                    type="url"
+                    placeholder="https://…"
+                    value={form.coverImage}
+                    onChange={(event) => updateField("coverImage", event.target.value)}
+                  />
+                </Field>
 
-        <div className="row">
-          <Button type="submit" variant="primary" size="lg" loading={submitting}>
-            {isEdit ? "Lưu thay đổi" : "Tạo truyện"}
-          </Button>
-          <Button variant="ghost" onClick={() => navigate("/admin")}>
-            Hủy
-          </Button>
-        </div>
+                <div className="admin-editor" style={{ marginTop: "var(--space-4)" }}>
+                  <label className="nb-label" htmlFor="description">
+                    Mô tả
+                  </label>
+                  <TextArea
+                    id="description"
+                    style={{ fontFamily: "var(--font-sans)", marginTop: "var(--space-2)" }}
+                    value={form.description}
+                    onChange={(event) => updateField("description", event.target.value)}
+                  />
+                  {fieldErrors.description && (
+                    <span className="nb-error">{fieldErrors.description}</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <span className="nb-label">Xem trước</span>
+                {form.coverImage ? (
+                  <img
+                    className="admin-cover-preview"
+                    style={{ marginTop: "var(--space-2)" }}
+                    src={form.coverImage}
+                    alt="Xem trước ảnh bìa"
+                  />
+                ) : (
+                  <div
+                    className="admin-cover-preview"
+                    style={{
+                      marginTop: "var(--space-2)",
+                      display: "grid",
+                      placeItems: "center",
+                      background: "var(--surface-sunken)",
+                    }}
+                  >
+                    <span className="muted" style={{ fontSize: "0.8rem", textAlign: "center" }}>
+                      Chưa có ảnh bìa
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="admin-panel-foot">
+            <span className="muted" style={{ fontSize: "0.85rem", fontWeight: 500 }}>
+              {isEdit ? "Lưu xong sẽ quay lại danh sách chương" : "Tạo xong sẽ tới bước thêm chương"}
+            </span>
+            <div className="row" style={{ gap: "var(--space-2)" }}>
+              <Button variant="ghost" onClick={() => navigate("/admin/truyen")}>
+                Hủy
+              </Button>
+              <Button type="submit" variant="primary" loading={submitting}>
+                {isEdit ? "Lưu thay đổi" : "Tạo truyện"}
+              </Button>
+            </div>
+          </div>
+        </section>
       </form>
-    </div>
+    </AdminPage>
   );
 }

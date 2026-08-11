@@ -37,6 +37,9 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     @Query("SELECT s FROM Story s LEFT JOIN FETCH s.author LEFT JOIN FETCH s.genre WHERE s.id = :id")
     Optional<Story> findDetailById(@Param("id") Long id);
 
+    /** Tên truyện không phải khóa duy nhất, nên chỉ dùng để dò dữ liệu mẫu lúc khởi động. */
+    Optional<Story> findFirstByTitle(String title);
+
     /**
      * Gợi ý truyện cùng thể loại mà người dùng chưa đọc.
      */
@@ -53,6 +56,12 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     @Modifying
     @Query("UPDATE Story s SET s.viewCount = s.viewCount + 1 WHERE s.id = :id")
     void incrementViewCount(@Param("id") Long id);
+
+    /** Truyện được xem nhiều nhất — biểu đồ "top truyện" ở trang thống kê. */
+    @Query("SELECT s FROM Story s ORDER BY s.viewCount DESC, s.title ASC")
+    List<Story> findTopByViewCount(Pageable pageable);
+
+    long countByStatus(StoryStatus status);
 
     long countByGenreId(Long genreId);
 

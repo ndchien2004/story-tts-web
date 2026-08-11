@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { audioApi, chapterApi } from "../api/endpoints";
+import { audioApi, chapterApi, progressApi } from "../api/endpoints";
 import AudioPlayer from "../components/AudioPlayer";
 import LockedGate from "../components/LockedGate";
 import ReaderSettings from "../components/ReaderSettings";
+import { useAuth } from "../context/auth-context";
 import useChapterAudio from "../hooks/useChapterAudio";
-import { AccessBadge, Alert, Button, Spinner } from "../components/ui";
+import { Alert, Button, ChevronIcon, Spinner } from "../components/ui";
 
 const AUTO_CONTINUE_KEY = "storytts.autoContinue";
+
+/** How close to the bottom of the text still counts as having reached the end. */
+const END_THRESHOLD_PX = 40;
 
 /**
  * Reading screen.
@@ -19,6 +23,12 @@ const AUTO_CONTINUE_KEY = "storytts.autoContinue";
 export default function ChapterPage() {
   const { chapterId } = useParams();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+
+  // One "đã đọc" call per chapter: reaching the end, clicking on and letting the
+  // narration run out can all fire, and only the first needs to reach the server.
+  const markedRead = useRef(false);
+  const contentRef = useRef(null);
 
   const [chapter, setChapter] = useState(null);
   const [lockError, setLockError] = useState(null);
@@ -76,16 +86,64 @@ export default function ChapterPage() {
   }, [autoContinue]);
 
   /**
+   * Open the chapter's progress record, so "Đọc tiếp" on the story page knows
+   * where the reader stopped even if they never reach the end.
+   */
+  useEffect(() => {
+    markedRead.current = false;
+    if (!chapter || !isAuthenticated) return;
+
+    // Progress is a convenience, never something worth interrupting reading for.
+    progressApi.save(chapterId, { lastPosition: 0 }).catch(() => {});
+  }, [chapter, chapterId, isAuthenticated]);
+
+  /** Records the chapter as finished; safe to call more than once. */
+  const markRead = useCallback(() => {
+    if (markedRead.current || !isAuthenticated) return;
+    markedRead.current = true;
+    progressApi.markRead(chapterId).catch(() => {});
+  }, [chapterId, isAuthenticated]);
+
+  /**
+   * Reaching the bottom of the text counts as having read the chapter — that
+   * also covers the last chapter of a story, where there is no "next" to click.
+   */
+  const handleScroll = useCallback(
+    (event) => {
+      const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
+      if (scrollTop + clientHeight >= scrollHeight - END_THRESHOLD_PX) markRead();
+    },
+    [markRead],
+  );
+
+  /**
+   * A chapter short enough to fit the pane never fires a scroll event, so it
+   * would never reach the check above. Nothing is left to read in that case,
+   * so opening it is finishing it.
+   */
+  useEffect(() => {
+    const pane = contentRef.current;
+    if (!chapter || !pane) return;
+    if (pane.scrollHeight <= pane.clientHeight + END_THRESHOLD_PX) markRead();
+  }, [chapter, markRead]);
+
+  function goToChapter(id) {
+    markRead();
+    navigate(`/chuong/${id}`);
+  }
+
+  /**
    * Continuous listening: move to the next chapter when playback finishes.
    *
    * Only the navigation happens here. The next page loads its own audio and the
    * access check runs again server-side either way.
    */
   const handleTrackEnded = useCallback(() => {
+    markRead();
     if (autoContinue && chapter?.nextChapterId) {
       navigate(`/chuong/${chapter.nextChapterId}`);
     }
-  }, [autoContinue, chapter, navigate]);
+  }, [autoContinue, chapter, markRead, navigate]);
 
   if (loading) {
     return (
@@ -120,41 +178,49 @@ export default function ChapterPage() {
     <div className="reader">
       <div className="reader-bar">
         <Button
+          className="reader-nav-btn"
           disabled={!chapter.previousChapterId}
-          onClick={() => navigate(`/chuong/${chapter.previousChapterId}`)}
+          onClick={() => goToChapter(chapter.previousChapterId)}
         >
+          <ChevronIcon />
           Chương trước
         </Button>
 
+        {/* The story it belongs to sits above the chapter's own name, so the
+            bar answers "where am I" without a second header below it. */}
         <div className="reader-bar-title">
+          <Link to={`/truyen/${chapter.storyId}`} className="reader-bar-story">
+            {chapter.storyTitle}
+          </Link>
           <strong>{chapter.title}</strong>
-          <AccessBadge level={chapter.accessLevel} label={chapter.requirementLabel} />
         </div>
 
         <Button
+          className="reader-nav-btn"
           variant="primary"
           disabled={!chapter.nextChapterId}
-          onClick={() => navigate(`/chuong/${chapter.nextChapterId}`)}
+          onClick={() => goToChapter(chapter.nextChapterId)}
         >
           Chương sau
+          <ChevronIcon right />
         </Button>
       </div>
 
       <div className="reader-grid">
         <section className="reader-pane">
+          {/* The size control sits in the corner of the text it changes, so
+              the result of a click is in view when you make it. */}
           <header className="reader-pane-header">
-            <h2>Nội dung chương</h2>
-            <Link to={`/truyen/${chapter.storyId}`} className="muted" style={{ fontWeight: 700 }}>
-              {chapter.storyTitle}
-            </Link>
+            <h2>Nội dung</h2>
+            <ReaderSettings />
           </header>
 
-          <div className="reader-pane-body scroll-area">
+          <div className="reader-pane-body scroll-area" ref={contentRef} onScroll={handleScroll}>
             <div className="reader-content">{chapter.content}</div>
           </div>
         </section>
 
-        <aside className="reader-pane">
+        <aside className="reader-pane reader-aside">
           <header className="reader-pane-header">
             <h2>Nghe chương này</h2>
           </header>
@@ -168,10 +234,6 @@ export default function ChapterPage() {
               onTrackEnded={handleTrackEnded}
               hasNextChapter={Boolean(chapter.nextChapterId)}
             />
-
-            <div className="reader-side-section">
-              <ReaderSettings />
-            </div>
           </div>
         </aside>
       </div>

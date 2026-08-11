@@ -21,6 +21,23 @@ export function RequireAuth() {
 }
 
 /**
+ * Branch that only makes sense while signed out.
+ *
+ * Signing in or registering again is meaningless once a session exists, so
+ * those pages send an authenticated visitor home instead of showing a form
+ * that would replace their own session.
+ */
+export function RequireGuest() {
+  const { isAuthenticated, initialising } = useAuth();
+
+  if (initialising) return <Spinner label="Đang kiểm tra phiên đăng nhập…" />;
+
+  if (isAuthenticated) return <Navigate to="/" replace />;
+
+  return <Outlet />;
+}
+
+/**
  * Admin-only branch.
  *
  * This is a convenience guard only: the API enforces the same rule server-side,

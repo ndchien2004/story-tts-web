@@ -1,28 +1,48 @@
 import { Link } from "react-router-dom";
-import { AccessBadge, Badge } from "./ui";
+import { Badge } from "./ui";
+
+const CheckIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={3.2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="m4.5 12.5 5 5 10-11" />
+  </svg>
+);
 
 /**
  * One line in a story's chapter list.
  *
- * Locked chapters stay visible and clickable on purpose: the reader page
- * explains what is required, which is friendlier than hiding the row.
+ * The access level is deliberately not spelled out here. Every row is clickable
+ * and the reader page states what is missing when the server refuses, which
+ * keeps the list clean instead of stamping requirements on rows the visitor may
+ * well be allowed to open.
+ *
+ * @param read the current reader has finished this chapter
  */
-export default function ChapterRow({ chapter }) {
+export default function ChapterRow({ chapter, read = false }) {
   return (
     <li>
       <Link
         to={`/chuong/${chapter.id}`}
-        className={`chapter-row ${chapter.locked ? "chapter-row-locked" : ""}`}
+        className={`chapter-row ${chapter.locked ? "chapter-row-locked" : ""} ${read ? "chapter-row-read" : ""}`}
       >
-        <span className="chapter-number">{chapter.chapterNumber}</span>
+        {/* The number badge turns into the tick, so a read chapter costs no
+            extra width in a list that is already tight. */}
+        <span className="chapter-number" title={read ? "Đã đọc" : undefined}>
+          {read ? <CheckIcon /> : chapter.chapterNumber}
+        </span>
 
         <span className="chapter-title">{chapter.title}</span>
 
-        {chapter.hasAudio && <Badge tone="info">Có audio</Badge>}
+        {read && <span className="sr-only">Đã đọc</span>}
 
-        {chapter.accessLevel !== "PUBLIC" && (
-          <AccessBadge level={chapter.accessLevel} label={chapter.requirementLabel} />
-        )}
+        {chapter.hasAudio && <Badge tone="info">Có audio</Badge>}
       </Link>
     </li>
   );

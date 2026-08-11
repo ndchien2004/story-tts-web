@@ -1,4 +1,4 @@
-import { Button } from "./ui";
+import { Button, ChevronIcon } from "./ui";
 
 const MAX_VISIBLE_PAGES = 5;
 
@@ -17,8 +17,15 @@ export default function Pagination({ page, totalPages, onChange }) {
 
   return (
     <nav className="pagination" aria-label="Phân trang">
-      <Button size="sm" disabled={page === 0} onClick={() => onChange(page - 1)}>
-        Trước
+      <Button
+        size="sm"
+        className="nb-icon-btn"
+        disabled={page === 0}
+        aria-label="Trang trước"
+        title="Trang trước"
+        onClick={() => onChange(page - 1)}
+      >
+        <ChevronIcon />
       </Button>
 
       {visiblePages(page, totalPages).map((index) => (
@@ -33,8 +40,15 @@ export default function Pagination({ page, totalPages, onChange }) {
         </Button>
       ))}
 
-      <Button size="sm" disabled={page >= totalPages - 1} onClick={() => onChange(page + 1)}>
-        Sau
+      <Button
+        size="sm"
+        className="nb-icon-btn"
+        disabled={page >= totalPages - 1}
+        aria-label="Trang sau"
+        title="Trang sau"
+        onClick={() => onChange(page + 1)}
+      >
+        <ChevronIcon right />
       </Button>
     </nav>
   );

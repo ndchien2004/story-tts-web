@@ -2,12 +2,24 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ThemeContext } from "./theme-context";
 
 const THEME_KEY = "storytts.theme";
-const FONT_SIZE_KEY = "storytts.readerFontSize";
+
+/**
+ * Versioned on purpose.
+ *
+ * The size is written to storage on every mount, not only when the reader
+ * touches the control, so by now every visitor has a value saved — including
+ * those who never chose one. Keeping the old key would mean the new default
+ * below reaches nobody. The suffix resets that once; whatever the reader picks
+ * afterwards sticks as before.
+ */
+const FONT_SIZE_KEY = "storytts.readerFontSize.v2";
 
 const MIN_FONT_SIZE = 0.95;
 const MAX_FONT_SIZE = 1.75;
 const FONT_SIZE_STEP = 0.1;
-const DEFAULT_FONT_SIZE = 1.125;
+
+/** The reading pane opens at the largest size on offer. */
+const DEFAULT_FONT_SIZE = MAX_FONT_SIZE;
 
 function clampFontSize(value) {
   return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Number(value.toFixed(3))));
