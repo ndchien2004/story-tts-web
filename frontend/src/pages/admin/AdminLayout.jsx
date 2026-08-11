@@ -50,14 +50,6 @@ function GaugeIcon() {
   );
 }
 
-function WaveIcon() {
-  return (
-    <svg {...iconProps}>
-      <path d="M3.5 12h1.8M8 8.2v7.6M12 5.4v13.2M16 8.2v7.6M20.5 12h-1.8" />
-    </svg>
-  );
-}
-
 function CommentIcon() {
   return (
     <svg {...iconProps}>
@@ -121,9 +113,11 @@ const NAV_ITEMS = [
     Icon: GaugeIcon,
     isActive: (pathname) => pathname === "/admin" || pathname === "/admin/",
   },
+  // Audio has no tab of its own: it belongs to a chapter, and every way of
+  // reaching a chapter already runs through here.
   {
     to: "/admin/truyen",
-    label: "Truyện & chương",
+    label: "Truyện, chương & audio",
     Icon: BooksIcon,
     // Chapter screens live under /admin/chuong too, and both belong here.
     isActive: (pathname) =>
@@ -134,12 +128,6 @@ const NAV_ITEMS = [
     label: "Thể loại & tác giả",
     Icon: TagsIcon,
     isActive: (pathname) => pathname.startsWith("/admin/danh-muc"),
-  },
-  {
-    to: "/admin/audio",
-    label: "Audio & giọng đọc",
-    Icon: WaveIcon,
-    isActive: (pathname) => pathname.startsWith("/admin/audio"),
   },
   {
     to: "/admin/binh-luan",

@@ -82,15 +82,15 @@ export default function AdminDashboardPage() {
         {(missingAudio > 0 || stats.audioFailed > 0 || stats.audioProcessing > 0) && (
           <section className="admin-dash-alerts">
             {missingAudio > 0 && (
-              <Link to="/admin/audio?thieu=1" className="admin-dash-todo">
+              <Link to="/admin/truyen" className="admin-dash-todo">
                 <strong>{missingAudio} chương chưa có audio</strong>
-                <span>Mở trang audio để tạo bằng AI hàng loạt →</span>
+                <span>Mở truyện rồi lọc “Chưa có audio” để tạo hàng loạt →</span>
               </Link>
             )}
             {stats.audioFailed > 0 && (
-              <Link to="/admin/audio" className="admin-dash-todo admin-dash-todo-danger">
+              <Link to="/admin/truyen" className="admin-dash-todo admin-dash-todo-danger">
                 <strong>{stats.audioFailed} bản audio tạo hỏng</strong>
-                <span>Nên thử tạo lại →</span>
+                <span>Mở truyện để tạo lại →</span>
               </Link>
             )}
             {stats.audioProcessing > 0 && (
@@ -132,7 +132,7 @@ export default function AdminDashboardPage() {
             hint={`${stats.chaptersWithAudio}/${stats.chapters} chương`}
             tone={audioCoverage >= 80 ? "success" : audioCoverage >= 40 ? "warning" : "danger"}
           />
-          <Stat label="Tạo bằng AI" value={stats.audioFromTts} />
+          <Stat label="Máy tạo" value={stats.audioFromTts} />
           <Stat label="Tải lên thủ công" value={stats.audioUploaded} />
           <Stat label="Đang tạo" value={stats.audioProcessing} tone={stats.audioProcessing ? "info" : undefined} />
           <Stat label="Tạo hỏng" value={stats.audioFailed} tone={stats.audioFailed ? "danger" : undefined} />

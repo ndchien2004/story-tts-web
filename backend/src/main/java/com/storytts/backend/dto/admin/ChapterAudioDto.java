@@ -5,7 +5,8 @@ import com.storytts.backend.domain.Chapter;
 /**
  * Một chương nhìn từ màn hình quản lý audio.
  *
- * @param hasAudio      đã có ít nhất một bản audio dùng được
+ * @param audioId       bản audio dùng được, null nếu chưa có; Admin cần id này
+ *                      để nghe thử ngay trên dòng
  * @param processing    đang có bản audio tạo dở — bấm tạo thêm lúc này là thừa
  * @param failed        lần tạo gần nhất hỏng, nên thử lại
  * @param characters    độ dài nội dung, ước lượng thô cho chi phí gọi TTS
@@ -17,13 +18,14 @@ public record ChapterAudioDto(
         Long storyId,
         String storyTitle,
         String accessLevel,
+        Long audioId,
         boolean hasAudio,
         boolean processing,
         boolean failed,
         int characters
 ) {
 
-    public static ChapterAudioDto from(Chapter chapter, boolean hasAudio,
+    public static ChapterAudioDto from(Chapter chapter, Long audioId,
                                        boolean processing, boolean failed) {
         var story = chapter.getStory();
         return new ChapterAudioDto(
@@ -33,7 +35,8 @@ public record ChapterAudioDto(
                 story.getId(),
                 story.getTitle(),
                 chapter.getAccessLevel() == null ? null : chapter.getAccessLevel().name(),
-                hasAudio,
+                audioId,
+                audioId != null,
                 processing,
                 failed,
                 chapter.getContent() == null ? 0 : chapter.getContent().length());

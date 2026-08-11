@@ -1,13 +1,9 @@
 package com.storytts.backend.controller;
 
 import com.storytts.backend.dto.audio.AudioInfoDto;
-import com.storytts.backend.dto.audio.TtsRequest;
-import com.storytts.backend.dto.audio.VoiceOptionDto;
 import com.storytts.backend.service.AudioService;
-import com.storytts.backend.service.tts.TtsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourceRegion;
@@ -18,8 +14,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,22 +22,25 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * Playback and synthesis endpoints.
+ * Nghe audio của một chương.
  *
- * Access is decided in the service layer, so a locked chapter yields 403 here
- * exactly as it does when reading the text.
+ * <p>Chỉ có phát, không có tạo. Việc tạo audio thuộc về khu quản trị: người đọc
+ * bấm một nút là sinh ra một file trên đĩa và một lần gọi API tính tiền, nên đó
+ * là thứ phải nằm dưới quyền Admin chứ không phải dưới tay mọi khách ghé qua.
+ *
+ * <p>Quyền truy cập quyết định ở tầng service, nên chương bị khóa trả 403 ở đây
+ * y như khi đọc chữ.
  */
 @RestController
 @RequestMapping("/api/chapters/{chapterId}")
 @RequiredArgsConstructor
-@Tag(name = "Audio", description = "Nghe audio và tạo audio bằng AI")
+@Tag(name = "Audio", description = "Nghe audio của chương")
 public class AudioController {
 
     /** Bytes served per ranged response; large enough to seek smoothly. */
     private static final long CHUNK_SIZE = 1024L * 1024;
 
     private final AudioService audioService;
-    private final TtsService ttsService;
 
     @GetMapping("/audio")
     @Operation(summary = "Danh sách bản audio của chương")
@@ -92,22 +89,4 @@ public class AudioController {
                 .body(new ResourceRegion(resource, start, count));
     }
 
-    @PostMapping("/tts")
-    @Operation(summary = "Tạo audio bằng AI cho chương (dùng lại bản đã tạo nếu có)")
-    public AudioInfoDto requestTts(@PathVariable Long chapterId,
-                                   @Valid @RequestBody(required = false) TtsRequest request) {
-        return ttsService.requestForChapter(chapterId, request);
-    }
-
-    @GetMapping("/tts/{audioId}/status")
-    @Operation(summary = "Trạng thái tạo audio (PROCESSING / READY / FAILED)")
-    public AudioInfoDto ttsStatus(@PathVariable Long chapterId, @PathVariable Long audioId) {
-        return ttsService.getStatus(chapterId, audioId);
-    }
-
-    @GetMapping("/tts/voices")
-    @Operation(summary = "Danh sách giọng đọc có thể chọn")
-    public List<VoiceOptionDto> voices(@PathVariable Long chapterId) {
-        return ttsService.availableVoices();
-    }
 }

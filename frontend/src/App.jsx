@@ -21,7 +21,6 @@ import NotFoundPage from "./pages/NotFoundPage";
 
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboardPage from "./pages/admin/AdminDashboardPage";
-import AdminAudioPage from "./pages/admin/AdminAudioPage";
 import AdminCommentsPage from "./pages/admin/AdminCommentsPage";
 import AdminStoriesPage from "./pages/admin/AdminStoriesPage";
 import AdminStoryFormPage from "./pages/admin/AdminStoryFormPage";
@@ -97,7 +96,6 @@ export default function App() {
                 <Route path="truyen" element={<AdminStoriesPage />} />
                 <Route path="danh-muc" element={<AdminCatalogPage />} />
                 <Route path="binh-luan" element={<AdminCommentsPage />} />
-                <Route path="audio" element={<AdminAudioPage />} />
                 <Route path="thanh-vien" element={<AdminUsersPage />} />
                 <Route path="vip" element={<AdminVipPage />} />
                 <Route path="truyen/moi" element={<AdminStoryFormPage />} />

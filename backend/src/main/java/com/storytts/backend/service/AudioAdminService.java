@@ -4,6 +4,7 @@ import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
 import com.storytts.backend.dto.admin.BatchTtsResultDto;
 import com.storytts.backend.dto.admin.ChapterAudioDto;
+import com.storytts.backend.dto.audio.AudioInfoDto;
 import com.storytts.backend.dto.audio.TtsRequest;
 import com.storytts.backend.dto.audio.VoiceOptionDto;
 import com.storytts.backend.dto.common.PageResponse;
@@ -19,8 +20,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -55,6 +58,23 @@ public class AudioAdminService {
     }
 
     /**
+     * Mọi bản audio của một chương, kể cả bản hỏng.
+     *
+     * <p>Không dùng chung với {@code AudioService.listForChapter} của trang đọc:
+     * đường đó giấu bản FAILED — đúng cho người nghe, sai cho người phải dọn nó —
+     * và còn ghi một lượt nghe, nên Admin mở bảng quản lý sẽ tự thổi phồng thống kê.
+     */
+    @Transactional(readOnly = true)
+    public List<AudioInfoDto> chapterAudio(Long chapterId) {
+        if (!chapterRepository.existsById(chapterId)) {
+            throw ResourceNotFoundException.of("chương", chapterId);
+        }
+        return audioFileRepository.findByChapterId(chapterId).stream()
+                .map(audio -> AudioInfoDto.from(audio, chapterId))
+                .toList();
+    }
+
+    /**
      * Danh sách chương kèm tình trạng audio.
      *
      * @param withAudio null = tất cả, true = đã có audio, false = còn thiếu
@@ -69,13 +89,13 @@ public class AudioAdminService {
         // Ba trạng thái audio hỏi gộp một lần cho cả trang, thay vì ba câu truy vấn
         // nhân với mỗi dòng.
         List<Long> chapterIds = result.getContent().stream().map(Chapter::getId).toList();
-        Set<Long> ready = new HashSet<>(audioFileRepository.findChapterIdsWithReadyAudio(idsOrEmpty(chapterIds)));
+        Map<Long, Long> readyAudioIds = readyAudioIds(chapterIds);
         Set<Long> processing = statusSet(chapterIds, AudioStatus.PROCESSING);
         Set<Long> failed = statusSet(chapterIds, AudioStatus.FAILED);
 
         return PageResponse.from(result, chapter -> ChapterAudioDto.from(
                 chapter,
-                ready.contains(chapter.getId()),
+                readyAudioIds.get(chapter.getId()),
                 processing.contains(chapter.getId()),
                 failed.contains(chapter.getId())));
     }
@@ -120,6 +140,21 @@ public class AudioAdminService {
                 return new BatchTtsResultDto(chapterId, title, false, ex.getMessage());
             }
         }).toList();
+    }
+
+    /**
+     * Chương nào có bản audio dùng được, và là bản nào.
+     *
+     * <p>Chương có thể có nhiều bản READY — một bản tải lên và một bản máy tạo
+     * chẳng hạn. Lấy bản đầu tiên theo id: đó là bản cũ nhất, và cũng chính là
+     * bản trang đọc chọn khi không có bản tải lên nào.
+     */
+    private Map<Long, Long> readyAudioIds(List<Long> chapterIds) {
+        Map<Long, Long> byChapter = new HashMap<>();
+        for (Object[] row : audioFileRepository.findReadyAudioIds(idsOrEmpty(chapterIds))) {
+            byChapter.putIfAbsent((Long) row[0], (Long) row[1]);
+        }
+        return byChapter;
     }
 
     private Set<Long> statusSet(List<Long> chapterIds, AudioStatus status) {

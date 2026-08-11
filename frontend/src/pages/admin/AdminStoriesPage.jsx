@@ -60,7 +60,7 @@ export default function AdminStoriesPage() {
 
   return (
     <AdminPage
-      title="Truyện & chương"
+      title="Truyện, chương & audio"
       actions={
         <ButtonLink to="/admin/truyen/moi" variant="primary">
           + Thêm truyện

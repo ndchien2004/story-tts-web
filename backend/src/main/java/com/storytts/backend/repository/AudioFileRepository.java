@@ -46,6 +46,20 @@ public interface AudioFileRepository extends JpaRepository<AudioFile, Long> {
             """)
     List<Long> findChapterIdsWithReadyAudio(@Param("chapterIds") java.util.Collection<Long> chapterIds);
 
+    /**
+     * Cặp (chương, bản audio dùng được) cho danh sách chương truyền vào.
+     *
+     * <p>Trang quản trị cần đúng id của bản audio để dựng đường nghe thử ngay
+     * trên dòng, mà biết "chương này có audio" thì chưa đủ để phát nó.
+     */
+    @Query("""
+            SELECT a.chapter.id, a.id FROM AudioFile a
+            WHERE a.chapter.id IN :chapterIds
+              AND a.status = com.storytts.backend.domain.AudioStatus.READY
+            ORDER BY a.id
+            """)
+    List<Object[]> findReadyAudioIds(@Param("chapterIds") java.util.Collection<Long> chapterIds);
+
     long countBySource(AudioSource source);
 
     /** Số chương đã có ít nhất một bản audio dùng được — tử số của "độ phủ audio". */

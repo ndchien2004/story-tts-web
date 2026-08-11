@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { adminApi } from "../../api/endpoints";
 import AdminPage from "./AdminPage";
+import ChapterAudioPanel from "../../components/admin/ChapterAudioPanel";
 import { Alert, Button, Field, Select, Spinner, TextArea, TextInput } from "../../components/ui";
 
 const ACCESS_LEVELS = [
@@ -32,6 +33,16 @@ export default function AdminChapterFormPage() {
   const isEdit = Boolean(chapterId);
 
   const [form, setForm] = useState(EMPTY_FORM);
+
+  /**
+   * The chapter as the server last confirmed it.
+   *
+   * Kept so the page can tell whether what is on screen has been saved — which
+   * matters to the audio panel below: narration is built from the chapter in
+   * the database, not from the text sitting unsaved in this textarea.
+   */
+  const [savedForm, setSavedForm] = useState(EMPTY_FORM);
+
   const [parentStoryId, setParentStoryId] = useState(storyId ?? null);
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
@@ -44,12 +55,14 @@ export default function AdminChapterFormPage() {
     adminApi
       .getChapter(chapterId)
       .then((chapter) => {
-        setForm({
+        const loaded = {
           title: chapter.title,
           content: chapter.content,
           chapterNumber: String(chapter.chapterNumber),
           accessLevel: chapter.accessLevel,
-        });
+        };
+        setForm(loaded);
+        setSavedForm(loaded);
         setParentStoryId(chapter.storyId);
       })
       .catch((err) => setError(err.message))
@@ -62,26 +75,46 @@ export default function AdminChapterFormPage() {
 
   const backTo = `/admin/truyen/${parentStoryId}/chuong`;
 
+  const dirty = useMemo(
+    () => Object.keys(form).some((key) => form[key] !== savedForm[key]),
+    [form, savedForm],
+  );
+
+  /**
+   * Writes the chapter and remembers what was written.
+   *
+   * Separate from the submit handler because the audio panel needs the same
+   * thing without leaving the page — narration of the version still only in
+   * this textarea would be narration of nothing the server has ever seen.
+   *
+   * @throws the API error, so callers can stop instead of carrying on
+   */
+  const saveChapter = useCallback(async () => {
+    const snapshot = form;
+    const payload = {
+      title: snapshot.title,
+      content: snapshot.content,
+      // Left blank on create, the server assigns the next free number.
+      chapterNumber: snapshot.chapterNumber ? Number(snapshot.chapterNumber) : undefined,
+      accessLevel: snapshot.accessLevel,
+    };
+
+    if (isEdit) {
+      await adminApi.updateChapter(chapterId, payload);
+    } else {
+      await adminApi.createChapter(storyId, payload);
+    }
+    setSavedForm(snapshot);
+  }, [form, isEdit, chapterId, storyId]);
+
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     setFieldErrors({});
 
-    const payload = {
-      title: form.title,
-      content: form.content,
-      // Left blank on create, the server assigns the next free number.
-      chapterNumber: form.chapterNumber ? Number(form.chapterNumber) : undefined,
-      accessLevel: form.accessLevel,
-    };
-
     try {
-      if (isEdit) {
-        await adminApi.updateChapter(chapterId, payload);
-      } else {
-        await adminApi.createChapter(storyId, payload);
-      }
+      await saveChapter();
       navigate(backTo);
     } catch (err) {
       setError(err.message);
@@ -181,6 +214,22 @@ export default function AdminChapterFormPage() {
                   <span>phút nghe</span>
                 </span>
               </div>
+
+              {/* Only once the chapter exists: audio hangs off a chapter id, and
+                  a chapter being created has none yet. */}
+              {isEdit && (
+                <div className="stack" style={{ gap: "var(--space-3)" }}>
+                  <div className="nb-section-title" style={{ marginBottom: 0 }}>
+                    <h3>Audio của chương</h3>
+                  </div>
+                  <ChapterAudioPanel
+                    chapterId={chapterId}
+                    chapterTitle={form.title}
+                    dirty={dirty}
+                    onSaveFirst={saveChapter}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </aside>

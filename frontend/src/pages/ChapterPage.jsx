@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { audioApi, chapterApi, progressApi } from "../api/endpoints";
+import { chapterApi, progressApi } from "../api/endpoints";
 import AudioPlayer from "../components/AudioPlayer";
 import LockedGate from "../components/LockedGate";
 import ReaderSettings from "../components/ReaderSettings";
@@ -34,10 +34,13 @@ export default function ChapterPage() {
   const [lockError, setLockError] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [voices, setVoices] = useState([]);
   const [autoContinue, setAutoContinue] = useState(
     () => localStorage.getItem(AUTO_CONTINUE_KEY) === "true",
   );
+
+  // Set only when the previous chapter finished playing; the player reads it to
+  // decide whether it may start on its own, then clears it.
+  const [autoPlayNext, setAutoPlayNext] = useState(false);
 
   // Audio is only fetched once the chapter itself proved readable, so a locked
   // chapter never triggers a second request that is bound to be refused.
@@ -72,14 +75,6 @@ export default function ChapterPage() {
       cancelled = true;
     };
   }, [chapterId]);
-
-  useEffect(() => {
-    if (!chapter) return;
-    audioApi
-      .voices(chapterId)
-      .then(setVoices)
-      .catch(() => setVoices([]));
-  }, [chapter, chapterId]);
 
   useEffect(() => {
     localStorage.setItem(AUTO_CONTINUE_KEY, String(autoContinue));
@@ -141,9 +136,14 @@ export default function ChapterPage() {
   const handleTrackEnded = useCallback(() => {
     markRead();
     if (autoContinue && chapter?.nextChapterId) {
+      // The one case where audio may start by itself: the listener is already
+      // listening, and asked for the next chapter to follow on.
+      setAutoPlayNext(true);
       navigate(`/chuong/${chapter.nextChapterId}`);
     }
   }, [autoContinue, chapter, markRead, navigate]);
+
+  const handleAutoPlayed = useCallback(() => setAutoPlayNext(false), []);
 
   if (loading) {
     return (
@@ -228,10 +228,11 @@ export default function ChapterPage() {
           <div className="reader-pane-body scroll-area">
             <AudioPlayer
               audio={audio}
-              voices={voices}
               autoContinue={autoContinue}
               onToggleAutoContinue={() => setAutoContinue((value) => !value)}
               onTrackEnded={handleTrackEnded}
+              autoPlay={autoPlayNext}
+              onAutoPlayed={handleAutoPlayed}
               hasNextChapter={Boolean(chapter.nextChapterId)}
             />
           </div>

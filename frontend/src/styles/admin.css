@@ -680,6 +680,77 @@ a.admin-dash-todo:hover {
   font-size: 0.85rem;
 }
 
+/* ------------------------------------------------------------------ */
+/* Audio of one chapter                                                */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A chapter rarely has more than two tracks — an upload and a generated one —
+ * so this is a short ruled list rather than another table.
+ */
+.admin-audio-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-audio-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding-block: var(--space-2);
+  border-top: var(--outline-width) solid var(--outline);
+  font-size: 0.9rem;
+}
+
+.admin-audio-item:last-child {
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+/* The name and its state read as one thing; the delete button is pushed away
+   from them so it cannot be hit by accident. */
+.admin-audio-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Spinner beside the badge while a track is being produced. */
+.admin-audio-working {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/*
+ * The browser's own player, used only to check a track.
+ *
+ * Given the whole width because that is the width its controls want; anything
+ * narrower crushes the scrubber into the buttons.
+ */
+.admin-audio-preview {
+  flex: 1 0 100%;
+  width: 100%;
+  height: 2.4rem;
+  margin-top: var(--space-2);
+}
+
+/* The row a preview player sits in: no hover highlight, since there is nothing
+   in it to act on. */
+.admin-row-preview > td {
+  background: var(--surface-sunken);
+}
+
+.admin-row-preview .admin-audio-preview {
+  margin-top: 0;
+}
+
 /* Alerts sit above the panels and must keep their natural height. */
 .admin-body > .nb-alert {
   flex: 0 0 auto;
