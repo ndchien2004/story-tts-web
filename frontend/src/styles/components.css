@@ -610,36 +610,6 @@
   transition: background-color var(--transition), transform var(--transition);
 }
 
-/*
- * The genre's initial.
- *
- * It used to be a coloured tile, one hue per genre. With a single-colour
- * palette that distinction has to be carried by the letter itself, so the tile
- * is now an outline and the rotating `.genre-mark-*` classes all resolve to
- * it — they are kept so the markup does not have to change.
- */
-.genre-mark {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--ink-muted);
-  background: transparent;
-  border: var(--outline-width) solid var(--outline);
-  border-radius: var(--radius-sm);
-  transition: color var(--transition), border-color var(--transition);
-}
-
-.genre-grid-item:hover .genre-mark,
-.genre-grid-item:focus-visible .genre-mark,
-.genre-grid-item.current .genre-mark {
-  color: var(--ink);
-  border-color: var(--ink);
-}
-
 .genre-grid-text {
   display: flex;
   flex-direction: column;
@@ -661,27 +631,10 @@
   color: var(--ink-muted);
 }
 
-.genre-count {
-  flex: 0 0 auto;
-  min-width: 1.6rem;
-  padding: 0.05rem 0.4rem;
-  font-size: 0.72rem;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  color: var(--ink-muted);
-  background: transparent;
-}
-
 .genre-grid-item:hover,
 .genre-grid-item:focus-visible {
   background: var(--bg-alt);
   transform: translateX(2px);
-}
-
-.genre-grid-item:hover .genre-count,
-.genre-grid-item:focus-visible .genre-count {
-  color: var(--ink);
 }
 
 /* The genre already being browsed, marked by a rule down its left edge. */

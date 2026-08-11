@@ -43,5 +43,8 @@ export const FAVICON = `${CLOUDINARY}/${CUTOUT}/c_fit,w_64,h_64/f_png/story-tts-
  * width cap would throw away pixels the layout can use. `q_auto:best` keeps
  * compression off the illustration's flat areas, where ordinary `q_auto`
  * leaves visible banding.
+ *
+ * The version prefix is kept: replacing the artwork under the same public id
+ * would otherwise leave the old one sitting in every CDN and browser cache.
  */
-export const HERO_BANNER = `${CLOUDINARY}/f_auto,q_auto:best/story-tts-web/brand/hero-banner.png`;
+export const HERO_BANNER = `${CLOUDINARY}/f_auto,q_auto:best/v1786431511/hero_banner_iekpd5.png`;

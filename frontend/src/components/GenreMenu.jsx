@@ -6,13 +6,6 @@ import { catalogApi } from "../api/endpoints";
 const CLOSE_DELAY_MS = 140;
 
 /**
- * Tints cycled across the grid so a genre keeps the same colour every time the
- * menu opens — position in an alphabetical list is stable, and a colour that
- * moved between visits would be worse than no colour at all.
- */
-const TINTS = ["accent", "info", "success", "violet", "warning", "danger"];
-
-/**
  * The "Thể loại" navbar item and the panel of genres it opens.
  *
  * Hover opens it, which is what a pointer expects of a menu in a bar like this
@@ -174,7 +167,7 @@ export default function GenreMenu({ onNavigate }) {
             </p>
           ) : (
             <div className="genre-grid">
-              {genres.map((genre, index) => (
+              {genres.map((genre) => (
                 <Link
                   key={genre.id}
                   to={`/truyen?genreId=${genre.id}`}
@@ -184,21 +177,10 @@ export default function GenreMenu({ onNavigate }) {
                   aria-current={String(genre.id) === currentGenreId ? "page" : undefined}
                   onClick={closeNow}
                 >
-                  <span
-                    className={`genre-mark genre-mark-${TINTS[index % TINTS.length]}`}
-                    aria-hidden="true"
-                  >
-                    {genre.name.slice(0, 1).toUpperCase()}
-                  </span>
-
                   <span className="genre-grid-text">
                     <strong>{genre.name}</strong>
                     {genre.description && <span>{genre.description}</span>}
                   </span>
-
-                  {genre.storyCount !== null && genre.storyCount !== undefined && (
-                    <span className="genre-count">{genre.storyCount}</span>
-                  )}
                 </Link>
               ))}
             </div>
