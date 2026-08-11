@@ -2,7 +2,7 @@ import { Outlet } from "react-router-dom";
 import Navbar from "./Navbar";
 
 const POINTS = [
-  "Nghe chương bằng giọng đọc AI tiếng Việt, không cần chờ bản thu",
+  "Nghe được mọi chương, kể cả chương chưa có bản thu",
   "Tự chuyển chương khi nghe hết, đọc và nghe nối tiếp nhau",
   "Lưu cỡ chữ, nền sáng tối và bản audio đã tạo cho lần sau",
 ];
@@ -27,12 +27,12 @@ export default function AuthLayout() {
             <span className="auth-eyebrow">Truyện Nghe</span>
 
             <h2 className="auth-headline">
-              Đọc truyện. Nghe truyện. Bằng cả <span className="auth-mark">giọng AI</span>.
+              Đọc truyện. Và <span className="auth-mark">nghe truyện</span>.
             </h2>
 
             <p className="auth-blurb">
-              Chưa có bản thu âm? Bấm một nút để hệ thống tự chuyển chương truyện thành giọng đọc
-              tiếng Việt và nghe ngay trên trình duyệt.
+              Chưa có bản thu âm? Bấm một nút là hệ thống chuẩn bị giọng đọc tiếng Việt cho chương
+              đó, nghe ngay trên trình duyệt.
             </p>
 
             <ul className="auth-points">

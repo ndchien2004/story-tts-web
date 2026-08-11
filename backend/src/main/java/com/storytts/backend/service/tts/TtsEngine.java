@@ -75,14 +75,14 @@ public class TtsEngine {
      */
     public SynthesisResult synthesize(String text, String voiceCode, int speed) {
         if (!properties.enabled()) {
-            throw new TtsException("Chức năng đọc bằng AI đang tạm tắt trên máy chủ.");
+            throw new TtsException("Chức năng tạo audio đang tạm tắt trên máy chủ.");
         }
 
         List<TtsProvider> candidates = orderedCandidates(voiceCode);
         if (candidates.isEmpty()) {
             throw new TtsException(
                     "Chưa cấu hình nhà cung cấp giọng đọc nào. "
-                            + "Vui lòng đặt FPT_TTS_API_KEY hoặc ELEVENLABS_API_KEY trong file .env.");
+                            + "Vui lòng đặt ELEVENLABS_API_KEY trong file .env.");
         }
 
         List<String> failures = new ArrayList<>();

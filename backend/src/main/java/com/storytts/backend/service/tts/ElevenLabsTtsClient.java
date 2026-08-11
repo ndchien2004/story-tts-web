@@ -24,16 +24,18 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * ElevenLabs text-to-speech, used as a stand-in when the primary provider is
- * unavailable.
+ * ElevenLabs text-to-speech — the narration backend.
  *
- * Unlike FPT.AI this vendor returns the audio in the response body, so there is
- * no polling. Voices are account-specific rather than a fixed list, so they are
- * fetched from the API and cached; the configured voice id is the fallback when
- * that call is unavailable.
+ * The vendor returns the audio in the response body, so there is no polling.
+ * Voices are account-specific rather than a fixed list, so they are fetched from
+ * the API and cached; the configured voice id is the fallback when that call is
+ * unavailable.
  *
  * Vietnamese needs one of the multilingual models — the monolingual ones read
  * the text as if it were English.
+ *
+ * The `speed` argument is ignored: this API has no speed control, and the
+ * listener already has one on the player itself.
  */
 @Component
 @RequiredArgsConstructor

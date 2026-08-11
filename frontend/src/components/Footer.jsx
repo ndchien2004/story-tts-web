@@ -21,8 +21,8 @@ export default function Footer() {
             <strong>Truyện Nghe</strong>
           </Link>
           <p className="muted">
-            Đọc truyện chữ và nghe bản audio của cùng một chương, với giọng đọc tiếng Việt do AI
-            tổng hợp khi truyện chưa có bản thu.
+            Đọc truyện chữ và nghe bản audio của cùng một chương. Chương chưa có bản thu thì hệ
+            thống tự chuẩn bị giọng đọc tiếng Việt.
           </p>
         </div>
 

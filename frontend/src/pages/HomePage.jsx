@@ -89,28 +89,6 @@ export default function HomePage() {
           height="768"
           fetchPriority="high"
         />
-
-        <div>
-          <h1 style={{ marginBottom: "0.75rem" }}>
-            {isAuthenticated
-              ? `Chào ${user.displayName || user.username}, hôm nay nghe gì?`
-              : "Đọc truyện. Nghe truyện. Bằng cả giọng AI."}
-          </h1>
-          <p style={{ maxWidth: "56ch", fontWeight: 600 }}>
-            Chưa có bản thu âm? Bấm một nút để hệ thống tự chuyển chương truyện thành giọng đọc
-            tiếng Việt và nghe ngay trên trình duyệt.
-          </p>
-        </div>
-        <div className="row">
-          <ButtonLink to="/truyen" size="lg" className="nb-btn-info">
-            Khám phá truyện
-          </ButtonLink>
-          {!isAuthenticated && !initialising && (
-            <ButtonLink to="/dang-ky" size="lg">
-              Tạo tài khoản
-            </ButtonLink>
-          )}
-        </div>
       </section>
 
       {error && <Alert tone="error">{error}</Alert>}
