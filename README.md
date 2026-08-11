@@ -1,8 +1,9 @@
-# Truyện Nghe — Website đọc & nghe truyện có Text-to-Speech
+# Truyện Nghe — Website đọc truyện & nghe audio
 
-Website đọc truyện chữ, nghe audio thu sẵn, và **chuyển chương truyện thành giọng nói bằng AI** khi
-chương đó chưa có bản audio. Quản trị viên khóa từng chương ở ba mức (Công khai / Yêu cầu đăng nhập /
-VIP) để quyết định nội dung nào được đọc và nghe tự do.
+Website đọc truyện chữ và nghe audio. Audio của mỗi chương **do quản trị viên chuẩn bị** — tải lên bản
+thu sẵn, hoặc để máy chủ dựng giọng đọc tiếng Việt từ nội dung chương. Người đọc chỉ phát bản đã có;
+chương chưa có audio thì trang đọc nói rõ là đang chuẩn bị. Quản trị viên khóa từng chương ở ba mức
+(Công khai / Yêu cầu đăng nhập / VIP) để quyết định nội dung nào được đọc và nghe tự do.
 
 Backend Java (Spring Boot, REST API thuần) + frontend React (Vite), hai phần tách rời, nói chuyện với
 nhau bằng JWT.
@@ -31,13 +32,14 @@ nhau bằng JWT.
 | Nhóm | Chức năng |
 |---|---|
 | Tài khoản | Đăng ký, đăng nhập, đăng xuất; mật khẩu băm BCrypt; phiên làm việc bằng JWT |
+| Xác thực email | Đăng ký phải nhập mã OTP 6 chữ số gửi về hòm thư; **tài khoản chỉ được tạo sau khi mã đúng** |
 | Đăng nhập Google | Một nút, lần đầu thì tạo luôn tài khoản; đã có tài khoản cùng email thì ghép vào tài khoản đó |
 | Quên mật khẩu | Nhận liên kết đặt lại qua email, dùng một lần và có hạn |
 | Duyệt truyện | Danh sách có phân trang, lọc theo thể loại, sắp xếp (mới nhất / phổ biến / A-Z), tìm theo tên truyện hoặc tác giả |
 | Đọc | Trang đọc riêng, chuyển chương trước/sau, chỉnh cỡ chữ và giãn dòng, giao diện sáng/tối |
 | Khóa chương | Chương không đủ quyền hiện icon 🔒 kèm mức yêu cầu; nội dung **không bao giờ** được gửi về trình duyệt |
 | Nghe | Trình phát HTML5 có tua (HTTP Range), nhớ vị trí đang nghe, chế độ nghe liên tục tự chuyển chương |
-| Nghe bằng AI | Tạo audio từ nội dung chương qua API TTS, chọn giọng và tốc độ, chạy nền và tự cập nhật khi xong |
+| Chương chưa có audio | Trang đọc nói rõ là ban quản trị đang chuẩn bị; người đọc **không tạo được audio** |
 | Cá nhân | Tủ truyện (đang đọc dở / đã đọc xong / yêu thích), tiến độ đọc, hồ sơ + ảnh đại diện |
 | Gợi ý | Truyện cùng thể loại với những truyện đã đọc, hiện ở trang chủ |
 | Tương tác | Chấm sao, bình luận, xóa bình luận của chính mình |
@@ -48,9 +50,9 @@ nhau bằng JWT.
 | Màn hình | Chức năng |
 |---|---|
 | Tổng quan | Số liệu toàn hệ thống, **ba biểu đồ Chart.js**, nêu trước những việc cần làm (chương thiếu audio, bản audio hỏng) |
-| Truyện & chương | CRUD truyện và chương, đặt mức khóa từng chương, **đổi mức khóa hàng loạt**, upload audio thu sẵn |
+| Truyện, chương & audio | Vào tab thấy danh sách truyện (sửa thông tin, xóa); bấm vào một truyện thì mở danh sách chương của nó, nơi sửa nội dung, đặt mức khóa, **đổi mức khóa hàng loạt**, lọc theo tình trạng audio, upload bản thu và **tạo audio hàng loạt** (tối đa 20 chương/lượt) |
+| Audio của một chương | Trong màn hình sửa chương: xem mọi bản audio kể cả bản hỏng, tải lên bản mới, chọn giọng, tạo lại, xóa từng bản |
 | Thể loại & tác giả | CRUD, kèm số truyện của từng mục; chặn xóa mục còn truyện đang dùng |
-| Audio & giọng đọc | Lọc chương theo tình trạng audio, **tạo audio AI hàng loạt** (tối đa 20 chương/lượt) |
 | Bình luận | Kiểm duyệt toàn bộ bình luận của mọi truyện, tìm kiếm và xóa |
 | Thành viên | Cấp/thu hồi VIP vĩnh viễn, khóa/mở tài khoản, nâng/hạ quyền quản trị |
 | Gói VIP & thanh toán | Tự đặt gói bán ra (số tháng và giá tùy ý), bật/tắt bán; xem mọi đơn và đối chiếu lại đơn còn treo với cổng thanh toán |
@@ -68,7 +70,7 @@ nhau bằng JWT.
 | Cơ sở dữ liệu | MySQL 8 (chạy bằng Docker Compose) |
 | Frontend | React 19, Vite 8, React Router 7, Axios |
 | Biểu đồ | Chart.js 4 + react-chartjs-2 (tải theo yêu cầu, chỉ ở trang quản trị) |
-| TTS | FPT.AI Text-to-Speech (chính), ElevenLabs (dự phòng) |
+| Giọng đọc | ElevenLabs Text-to-Speech, model đa ngôn ngữ |
 | Thanh toán | PayOS (tạo link thanh toán + webhook, ký HMAC-SHA256) |
 | Lưu ảnh đại diện, ảnh thương hiệu | Cloudinary |
 | Lưu audio | Thư mục local `backend/uploads/audio` |
@@ -109,7 +111,7 @@ Có đúng **ba** đường chạm tới nội dung chương, và cả ba đều
 |---|---|
 | Đọc chữ | `GET /api/chapters/{id}` |
 | Nghe audio | `GET /api/chapters/{id}/audio/{audioId}` |
-| Tạo audio AI | `POST /api/chapters/{id}/tts` |
+| Tạo audio (chỉ Admin) | `POST /api/admin/audio/batch-tts` |
 
 | access_level | Khách | Thành viên | VIP | Admin |
 |---|:---:|:---:|:---:|:---:|
@@ -118,33 +120,42 @@ Có đúng **ba** đường chạm tới nội dung chương, và cả ba đều
 | VIP | ✘ | ✘ | ✔ | ✔ |
 
 Không đủ quyền thì trả **403** kèm thông báo, React hiện màn hình yêu cầu đăng nhập hoặc nâng cấp VIP.
-Đường TTS bắt buộc phải qua cùng cửa này, nếu không người dùng có thể dùng TTS để lách qua chương bị khóa.
+Đường tạo audio bắt buộc phải qua cùng cửa này, nếu không người dùng có thể dùng nó để lách qua chương
+bị khóa — và nó còn nằm sau `hasRole('ADMIN')` nữa, vì tạo audio là việc của quản trị viên.
 
 Hàm `AccessControlService.canAccess(accessLevel, principal)` được viết dạng thuần, không phụ thuộc
 `SecurityContext`, để có thể kiểm thử mà không cần dựng Spring.
 
-### Luồng "Nghe bằng AI"
+### Luồng tạo audio (chỉ Admin)
 
 ```
-React: AudioPlayer → useChapterAudio → POST /api/chapters/{id}/tts
+Admin: chọn chương trong "Truyện, chương & audio" → POST /api/admin/audio/batch-tts
    │
    ▼
-JwtAuthenticationFilter → AudioController → TtsService.requestForChapter
-   │
-   ├─ accessControlService.requireAccess(chapter)     ← 403 nếu không đủ quyền
+hasRole('ADMIN') → AdminConsoleController → AudioAdminService.generateBatch
+   │  từng chương một, chương này hỏng không kéo chương kia chết theo
+   ▼
+TtsService.requestForChapter
+   ├─ accessControlService.requireAccess(chapter)
    ├─ audioFileRepository.findTtsCache(chương, giọng, tốc độ)
    │     └─ đã có bản READY → trả về ngay, KHÔNG gọi API
    ├─ chưa có → ghi audio_files với status = PROCESSING
    └─ publishEvent(...) rồi return luôn  ────────────────┐
                                                           │ @Async
-React poll GET /tts/{audioId}/status                      ▼
-   cho tới khi READY                        TtsGenerationWorker
+                                                          ▼
+                                            TtsGenerationWorker
                                               ├─ TtsEngine chọn nhà cung cấp
-                                              │    fptai → elevenlabs (bỏ qua cái chưa có key)
+                                              │    elevenlabs (bỏ qua cái chưa có key)
                                               ├─ cắt nội dung thành khúc ≤ 4500 ký tự, ghép lại
                                               ├─ StorageService lưu uploads/audio/<uuid>.mp3
                                               └─ cập nhật status = READY (hoặc FAILED kèm lý do)
-   │
+```
+
+Người đọc chỉ chạm tới phần phát:
+
+```
+React: AudioPlayer → useChapterAudio → GET /api/chapters/{id}/audio
+   │     rỗng → "chương chưa có audio, mời đón chờ"
    ▼
 <audio src="…/audio/{audioId}?access_token=…">
    AudioController đọc header Range → 206 Partial Content → tua được ngay
@@ -152,10 +163,11 @@ React poll GET /tts/{audioId}/status                      ▼
 
 Ba điểm đáng chú ý:
 
-1. **Cache khóa theo bộ ba (chương, giọng, tốc độ)** — đổi giọng là một bản audio khác, nên khóa cache
-   phải gồm cả ba. Nghe lại cùng giọng thì không tốn thêm lần gọi API nào.
-2. **Bất đồng bộ bằng event** — request trả về sau vài chục mili giây với trạng thái `PROCESSING`, việc
-   gọi API TTS mất 10-60 giây chạy ở luồng nền. Làm đồng bộ thì chương dài sẽ timeout.
+1. **Người đọc không có đường tạo audio.** Trước đây trang đọc có nút tự tạo, và mỗi người ghé qua một
+   truyện khác nhau là thêm một file trên đĩa cùng một lần gọi API tính tiền — không ai cầm được danh
+   sách những gì đã sinh ra. Giờ endpoint tạo audio duy nhất nằm dưới `/api/admin/**`.
+2. **Cache khóa theo bộ ba (chương, giọng, tốc độ)** — đổi giọng là một bản audio khác, nên khóa cache
+   phải gồm cả ba. Tạo lại cùng giọng thì không tốn thêm lần gọi API nào.
 3. **Token qua query param cho audio** — thẻ `<audio>` của HTML không gửi được header, nên
    `JwtAuthenticationFilter` chấp nhận thêm tham số `access_token`. Không có đường này thì không stream
    được chương bị khóa.
@@ -185,6 +197,35 @@ Ba điểm đáng chú ý:
 
 Chạy dưới `localhost` thì PayOS không gọi webhook vào được; đường dự phòng ở trang kết quả (hỏi lại
 `GET /v2/payment-requests/{orderCode}`) là lý do luồng vẫn chạy đủ khi phát triển.
+
+### Luồng đăng ký có xác thực email
+
+```
+POST /api/auth/register  { username, email, password }
+      │
+      ├─ kiểm tên đăng nhập và email còn trống
+      ├─ ghi pending_registrations: thông tin khai + mật khẩu ĐÃ băm + SHA-256 của mã 6 số
+      └─ @Async gửi mã về email          ← bảng users vẫn chưa có gì
+      ▼
+POST /api/auth/register/verify  { email, code }
+      ├─ sai mã → tăng số lần thử, hết 5 lượt thì hủy luôn lượt đăng ký
+      └─ đúng mã → kiểm lại tên/email còn trống → GHI VÀO users → trả JWT
+```
+
+Ba điểm đáng chú ý:
+
+1. **Bảng `users` chỉ được ghi ở bước hai.** Không có bảng chờ thì hoặc phải tạo sẵn một tài khoản
+   "chưa xác thực" — nó sẽ chiếm mất địa chỉ email của người chưa từng đồng ý — hoặc phải tin vào dữ
+   liệu client gửi lại ở bước hai. Cả hai đều tệ hơn.
+2. **Giới hạn số lần thử mới là thứ bảo vệ mã.** Mã chỉ có sáu chữ số nên việc băm nó không cản được
+   ai; cái cản là bộ đếm 5 lượt. Bộ đếm đó dùng `noRollbackFor` để không bị giao dịch cuộn ngược theo
+   ngoại lệ — nếu không thì nó không bao giờ tăng và mã dò được thoải mái.
+3. **Bấm đăng ký lại không gửi thêm thư.** Trong 60 giây kể từ lần gửi trước, thông tin khai được cập
+   nhật nhưng mã giữ nguyên: đổi mã mà không gửi lại sẽ làm hỏng cái người ta vừa nhận, còn gửi thêm
+   một lá nữa là biến form đăng ký thành công cụ dội thư vào hòm thư người khác.
+
+Máy chủ chưa cấu hình SMTP thì không có đường nào gửi mã đi, nên luồng lùi về cách cũ — tạo tài khoản
+ngay ở bước một. Nếu không, một bản clone chưa điền `.env` sẽ không đăng ký nổi một tài khoản nào.
 
 ### Luồng đăng nhập bằng Google
 
@@ -243,7 +284,7 @@ Ba điểm đáng chú ý:
 
 `users` · `genres` · `authors` · `stories` · `chapters` · `audio_files` · `reading_progress` ·
 `favorites` · `ratings_comments` · `view_events` · `vip_plans` · `vip_orders` ·
-`password_reset_tokens`
+`password_reset_tokens` · `pending_registrations`
 
 `view_events` ghi mỗi lượt mở chương để đọc hoặc nghe. Cần bảng riêng vì `view_count` chỉ là số cộng
 dồn — biết tổng nhưng không tách được ra từng ngày, mà biểu đồ theo ngày lại hỏi đúng câu đó.
@@ -251,6 +292,9 @@ dồn — biết tổng nhưng không tách được ra từng ngày, mà biểu
 Quyền VIP đến từ hai nguồn tách bạch: `users.is_vip` là quyền Admin cấp tay, không hạn; `users.vip_until`
 là hạn của gói đã mua. `User.isVip()` xét cả hai, nên phần còn lại của hệ thống không cần biết sự khác
 biệt đó.
+
+`pending_registrations` giữ những lượt đăng ký chưa nhập mã. Bản ghi ở đó không phải là tài khoản: hết
+hạn hoặc hết lượt thử là bị xóa, và chỉ khi mã đúng thì nội dung mới được chép sang `users`.
 
 `users.google_id` giữ claim `sub` của tài khoản Google, null nghĩa là chưa liên kết. Tài khoản tạo bằng
 Google vẫn có `password_hash` — cột đó NOT NULL — nhưng là một chuỗi ngẫu nhiên không ai đoán được;
@@ -362,26 +406,28 @@ Giao diện ở `http://localhost:5173`.
 
 Tất cả đều nằm trong `.env` ở thư mục gốc. Không có key nào được viết cứng trong mã nguồn.
 
-### Text-to-Speech (bắt buộc nếu muốn dùng chức năng đọc bằng AI)
+### Giọng đọc — ElevenLabs (bắt buộc nếu Admin muốn tạo audio thay vì tự upload)
 
 ```properties
-# Thứ tự thử. Nhà cung cấp nào chưa có key thì tự động bị bỏ qua.
-TTS_PROVIDERS=fptai,elevenlabs
-
-# FPT.AI — giọng Việt. Lấy key tại https://fpt.ai/tts (Dashboard → API Key)
-FPT_TTS_API_KEY=
-FPT_TTS_VOICE=banmai
-FPT_TTS_SPEED=0
-
-# ElevenLabs — dự phòng. https://elevenlabs.io → Profile → API Keys
+# https://elevenlabs.io → Profile → API Keys
 ELEVENLABS_API_KEY=
+# voice_id lấy trong mục Voices; đây là giọng dùng cho mọi chương.
 ELEVENLABS_VOICE_ID=
 # Bắt buộc dùng model đa ngôn ngữ thì tiếng Việt mới đọc đúng
 ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+
+# Thứ tự thử các nhà cung cấp. Hiện chỉ có một, để đây để thêm nhà cung cấp
+# khác mà không phải sửa mã nguồn.
+TTS_PROVIDERS=elevenlabs
 ```
 
-Không điền key nào thì phần còn lại của web vẫn chạy bình thường, chỉ nút "Nghe bằng AI" báo lỗi rõ
-ràng là máy chủ chưa cấu hình.
+Không điền key thì phần còn lại của web vẫn chạy bình thường: Admin vẫn upload được bản thu, chỉ nút
+"Tạo audio" trong trang quản trị báo rõ là máy chủ chưa cấu hình. Người đọc không bị ảnh hưởng — họ
+đằng nào cũng chỉ phát bản đã có.
+
+`ELEVENLABS_VOICE_ID` là giọng dùng khi lần tạo đó không chỉ định giọng nào. Muốn đổi giọng cho một
+chương hoặc một lô chương thì chọn ngay trong trang quản trị — danh sách giọng của tài khoản
+ElevenLabs được tải về để chọn.
 
 ### Cloudinary (ảnh đại diện người dùng, ảnh thương hiệu)
 
@@ -434,8 +480,9 @@ tài khoản rồi tạo tại **https://myaccount.google.com/apppasswords**. Ch
 `MAIL_FROM` để trống thì lấy luôn `MAIL_USERNAME` làm địa chỉ người gửi. `MAIL_RESET_URL` phải trỏ đúng
 route `/dat-lai-mat-khau` của frontend — đó là nơi liên kết trong email dẫn tới.
 
-Để trống `MAIL_USERNAME` thì liên kết "Quên mật khẩu?" **tự ẩn** khỏi trang đăng nhập, và trang
-`/quen-mat-khau` nói rõ là máy chủ chưa cấu hình email thay vì để người dùng gửi rồi chờ vô ích.
+Để trống `MAIL_USERNAME` thì liên kết "Quên mật khẩu?" **tự ẩn** khỏi trang đăng nhập, trang
+`/quen-mat-khau` nói rõ là máy chủ chưa cấu hình email thay vì để người dùng gửi rồi chờ vô ích, và
+đăng ký **bỏ luôn bước nhập mã** — tài khoản được tạo ngay như trước khi có chức năng này.
 
 ### PayOS (thanh toán nâng cấp VIP)
 
@@ -501,7 +548,9 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | Method | Đường dẫn | Mô tả |
 |---|---|---|
 | GET | `/api/auth/providers` | Máy chủ đang bật cách đăng nhập nào (Google, quên mật khẩu) |
-| POST | `/api/auth/register` | Đăng ký |
+| POST | `/api/auth/register` | Bắt đầu đăng ký — gửi mã OTP, **chưa tạo tài khoản** |
+| POST | `/api/auth/register/verify` | Nhập mã; đúng mã thì tài khoản mới được ghi vào `users` |
+| POST | `/api/auth/register/resend` | Gửi lại mã, chặn bấm liên tục trong 60 giây |
 | POST | `/api/auth/login` | Đăng nhập, trả JWT |
 | POST | `/api/auth/google` | Đăng nhập bằng ID token của Google; lần đầu thì tạo luôn tài khoản |
 | POST | `/api/auth/forgot-password` | Gửi liên kết đặt lại mật khẩu — **trả lời như nhau dù email có tồn tại hay không** |
@@ -511,8 +560,6 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | GET | `/api/chapters/{id}` | Nội dung chương — **403 nếu không đủ quyền** |
 | GET | `/api/chapters/{id}/audio` | Các bản audio của chương |
 | GET | `/api/chapters/{id}/audio/{audioId}` | Stream audio, hỗ trợ Range |
-| POST | `/api/chapters/{id}/tts` | Tạo audio bằng AI |
-| GET | `/api/chapters/{id}/tts/{audioId}/status` | Trạng thái tạo audio |
 | GET | `/api/genres`, `/api/authors` | Danh mục |
 | GET | `/api/stories/{id}/comments` | Bình luận của một truyện |
 | GET | `/api/vip/plans` | Bảng giá các gói VIP đang bán |
@@ -545,9 +592,11 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | POST/PUT/DELETE | `/api/admin/stories`, `/api/admin/chapters` | CRUD truyện, chương |
 | PATCH | `/api/admin/chapters/{id}/access-level` | Đổi mức khóa một chương |
 | PATCH | `/api/admin/chapters/access-level` | Đổi mức khóa **nhiều chương** |
+| GET | `/api/admin/chapters/{id}/audio` | Mọi bản audio của một chương, **kể cả bản hỏng** |
 | POST | `/api/admin/chapters/{id}/audio` | Upload audio thu sẵn |
+| DELETE | `/api/admin/audio/{audioId}` | Xóa một bản audio |
 | GET | `/api/admin/audio/chapters` | Chương kèm tình trạng audio |
-| POST | `/api/admin/audio/batch-tts` | Tạo audio AI hàng loạt |
+| POST | `/api/admin/audio/batch-tts` | Tạo audio hàng loạt — **đường duy nhất tạo audio trong hệ thống** |
 | GET | `/api/admin/comments` | Toàn bộ bình luận để kiểm duyệt |
 | POST/PUT/DELETE | `/api/admin/genres`, `/api/admin/authors` | CRUD danh mục |
 | GET | `/api/admin/users` | Danh sách thành viên |
@@ -573,6 +622,7 @@ bên ngoài đều được thay bằng mock).
 |---|---|---|
 | `AccessControlServiceTest` | 19 | Toàn bộ bảng phân quyền 3 mức khóa × 4 nhóm người dùng, chương không đặt mức khóa, và `requireAccess` phải ném 403 **không kèm nội dung chương** |
 | `TtsServiceTest` | 11 | Chặn TTS với chương bị khóa (kể cả khi đã có sẵn cache), dùng lại bản READY, dọn bản FAILED rồi tạo lại, xếp hàng bất đồng bộ, kẹp tốc độ, giọng lạ quay về mặc định |
+| `RegistrationServiceTest` | 16 | Bước một không ghi gì vào `users`, chỉ băm của mã được lưu, mật khẩu không bị băm chồng ở bước hai, hết lượt thử thì hủy lượt đăng ký, và bấm gửi lại quá sớm bị chặn |
 | `PasswordResetServiceTest` | 12 | Email lạ và tài khoản bị khóa không nhận được liên kết, chỉ băm của token được lưu, liên kết cũ bị vô hiệu, và một liên kết chỉ dùng được một lần |
 | `AuthServiceGoogleTest` | 10 | Tạo tài khoản ở lần đăng nhập Google đầu tiên, ghép vào tài khoản cùng email, ưu tiên `google_id`, không ghi đè ảnh đại diện cũ, chặn tài khoản bị khóa |
 | `BackendApplicationTests` | 1 | Toàn bộ context Spring khởi động được |
@@ -581,9 +631,11 @@ Hai lớp đầu chính là hai luồng mà mục 6 của đề bài nêu đích
 `kiemQuyenTruocKhiTraCache`: nó khẳng định cache **không** trở thành cửa sau — chương đã bị khóa thì
 ngay cả bản audio tạo sẵn từ trước cũng không được trả về.
 
-Hai lớp sau kiểm phần xác thực mới. Đáng chú ý là `chiLuuBamCuaToken`: nó đối chiếu chuỗi đi trong
-email với chuỗi nằm trong cơ sở dữ liệu và khẳng định hai thứ đó khác nhau — cái sau là SHA-256 của
-cái trước. Không có bài này thì việc lưu nhầm token gốc sẽ trôi qua mà không ai biết.
+Ba lớp sau kiểm phần xác thực. Đáng chú ý là `chiLuuBamCuaToken`: nó đối chiếu chuỗi đi trong email
+với chuỗi nằm trong cơ sở dữ liệu và khẳng định hai thứ đó khác nhau — cái sau là SHA-256 của cái
+trước. Không có bài này thì việc lưu nhầm token gốc sẽ trôi qua mà không ai biết. Ở phía đăng ký,
+`buocMotKhongTaoTaiKhoan` giữ đúng lời hứa của cả luồng: bấm đăng ký xong mà bảng `users` vẫn phải
+trống.
 
 ---
 

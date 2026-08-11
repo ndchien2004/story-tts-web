@@ -62,6 +62,17 @@ public class AudioFile {
     private Integer speed;
 
     /**
+     * Băm SHA-256 của nội dung chương tại thời điểm dựng bản audio này.
+     *
+     * <p>Khóa cache (chương, giọng, tốc độ) không nhìn thấy nội dung, nên sửa
+     * chương rồi bấm tạo lại sẽ nhận đúng bản audio đọc theo bản cũ. Cột này là
+     * thứ phát hiện ra điều đó. Null với bản tải lên, và với những bản đã tạo
+     * trước khi có cột này — chúng bị coi là cũ và được dựng lại đúng một lần.
+     */
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+
+    /**
      * Which backend produced the audio.
      *
      * Recorded because a fallback means the result may not come from the

@@ -45,7 +45,8 @@ import static org.mockito.Mockito.*;
 class TtsServiceTest {
 
     private static final Long CHAPTER_ID = 7L;
-    private static final String VOICE = "banmai";
+    private static final String VOICE = "el:voice-mot";
+    private static final String CONTENT = "Nội dung chương để đọc.";
 
     @Mock
     private ChapterService chapterService;
@@ -71,7 +72,7 @@ class TtsServiceTest {
 
         when(ttsEngine.hasAnyProvider()).thenReturn(true);
         when(ttsEngine.availableVoices()).thenReturn(List.of(
-                new VoiceOptionDto(VOICE, "Ban Mai", "Nữ", "Miền Bắc", "fptai", "FPT.AI")));
+                new VoiceOptionDto(VOICE, "Giọng một", "Nữ", "Đa ngôn ngữ", "elevenlabs", "ElevenLabs")));
         when(chapterService.findDetailEntity(CHAPTER_ID)).thenReturn(chapter(AccessLevel.PUBLIC));
         when(audioFileRepository.findTtsCache(anyLong(), anyString(), any())).thenReturn(Optional.empty());
         when(audioFileRepository.save(any(AudioFile.class))).thenAnswer(invocation -> {
@@ -103,7 +104,7 @@ class TtsServiceTest {
 
         assertThatThrownBy(() -> ttsService.requestForChapter(CHAPTER_ID, null))
                 .isInstanceOf(TtsException.class)
-                .hasMessageContaining("FPT_TTS_API_KEY");
+                .hasMessageContaining("ELEVENLABS_API_KEY");
 
         verifyNoInteractions(audioFileRepository);
     }
@@ -155,6 +156,36 @@ class TtsServiceTest {
         verify(eventPublisher, never()).publishEvent(any(TtsGenerationRequested.class));
     }
 
+    /**
+     * Khóa cache là (chương, giọng, tốc độ) — không có nội dung trong đó. Không
+     * đối chiếu thêm dấu vân tay nội dung thì sửa chương xong tạo lại sẽ nhận về
+     * đúng bản audio đọc theo chữ cũ, mà nghe qua thì không ai biết là sai.
+     */
+    @Test
+    @DisplayName("Nội dung chương đã đổi → bỏ bản cũ và dựng lại, không dùng cache")
+    void noiDungDoiThiKhongDungCache() {
+        AudioFile stale = audio(AudioStatus.READY, "ban-cu.mp3", sha256Hex("Chữ của bản trước."));
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0)).thenReturn(Optional.of(stale));
+
+        AudioInfoDto result = ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0));
+
+        verify(storageService).deleteAudio("ban-cu.mp3");
+        verify(audioFileRepository).delete(stale);
+        verify(eventPublisher).publishEvent(any(TtsGenerationRequested.class));
+        assertThat(result.status()).isEqualTo(AudioStatus.PROCESSING.name());
+    }
+
+    @Test
+    @DisplayName("Bản audio tạo mới ghi lại dấu vân tay của nội dung dùng để dựng nó")
+    void banMoiGhiLaiDauVanTayNoiDung() {
+        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0));
+
+        ArgumentCaptor<AudioFile> saved = ArgumentCaptor.forClass(AudioFile.class);
+        verify(audioFileRepository).save(saved.capture());
+
+        assertThat(saved.getValue().getContentHash()).isEqualTo(sha256Hex(CONTENT));
+    }
+
     @Test
     @DisplayName("Đang tạo dở → trả trạng thái PROCESSING, không xếp hàng lần hai")
     void dangTaoThiKhongXepHangLai() {
@@ -186,12 +217,12 @@ class TtsServiceTest {
     @DisplayName("Đổi giọng là một khóa cache khác")
     void doiGiongLaCacheKhac() {
         when(ttsEngine.availableVoices()).thenReturn(List.of(
-                new VoiceOptionDto(VOICE, "Ban Mai", "Nữ", "Miền Bắc", "fptai", "FPT.AI"),
-                new VoiceOptionDto("leminh", "Lê Minh", "Nam", "Miền Bắc", "fptai", "FPT.AI")));
+                new VoiceOptionDto(VOICE, "Giọng một", "Nữ", "Đa ngôn ngữ", "elevenlabs", "ElevenLabs"),
+                new VoiceOptionDto("el:voice-hai", "Giọng hai", "Nam", "Đa ngôn ngữ", "elevenlabs", "ElevenLabs")));
 
-        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest("leminh", 0));
+        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest("el:voice-hai", 0));
 
-        verify(audioFileRepository).findTtsCache(CHAPTER_ID, "leminh", 0);
+        verify(audioFileRepository).findTtsCache(CHAPTER_ID, "el:voice-hai", 0);
     }
 
     // ==================== Xếp hàng bất đồng bộ ====================
@@ -243,12 +274,17 @@ class TtsServiceTest {
                 .title("Chương 1")
                 .chapterNumber(1)
                 .accessLevel(level)
-                .content("Nội dung chương để đọc.")
+                .content(CONTENT)
                 .story(Story.builder().id(1L).title("Truyện thử").build())
                 .build();
     }
 
+    /** Bản audio khớp với nội dung chương hiện tại — trường hợp cache dùng lại được. */
     private static AudioFile audio(AudioStatus status, String filePath) {
+        return audio(status, filePath, sha256Hex(CONTENT));
+    }
+
+    private static AudioFile audio(AudioStatus status, String filePath, String contentHash) {
         return AudioFile.builder()
                 .id(55L)
                 .chapter(chapter(AccessLevel.PUBLIC))
@@ -257,19 +293,30 @@ class TtsServiceTest {
                 .voice(VOICE)
                 .speed(0)
                 .filePath(filePath)
+                .contentHash(contentHash)
                 .contentType("audio/mpeg")
                 .build();
     }
 
+    private static String sha256Hex(String value) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest
+                    .getInstance("SHA-256")
+                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
     private static TtsProperties enabledProperties() {
-        return new TtsProperties(true, List.of("fptai"),
-                new TtsProperties.Fptai("https://api.fpt.ai/hmi/tts/v5", "khoa-gia", VOICE, 0),
-                new TtsProperties.ElevenLabs("https://api.elevenlabs.io/v1", "", "", "eleven_multilingual_v2"));
+        return new TtsProperties(true, List.of("elevenlabs"), 0,
+                new TtsProperties.ElevenLabs("https://api.elevenlabs.io/v1", "khoa-gia", VOICE,
+                        "eleven_multilingual_v2"));
     }
 
     private static TtsProperties disabledProperties() {
-        return new TtsProperties(false, List.of("fptai"),
-                new TtsProperties.Fptai("https://api.fpt.ai/hmi/tts/v5", "khoa-gia", VOICE, 0),
-                new TtsProperties.ElevenLabs("https://api.elevenlabs.io/v1", "", "", "eleven_multilingual_v2"));
+        return new TtsProperties(false, List.of("elevenlabs"), 0,
+                new TtsProperties.ElevenLabs("https://api.elevenlabs.io/v1", "khoa-gia", VOICE,
+                        "eleven_multilingual_v2"));
     }
 }
