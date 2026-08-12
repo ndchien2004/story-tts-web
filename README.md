@@ -1,9 +1,10 @@
 # Truyện Nghe — Website đọc truyện & nghe audio
 
-Website đọc truyện chữ và nghe audio. Audio của mỗi chương **do quản trị viên chuẩn bị** — tải lên bản
-thu sẵn, hoặc để máy chủ dựng giọng đọc tiếng Việt từ nội dung chương. Người đọc chỉ phát bản đã có;
-chương chưa có audio thì trang đọc nói rõ là đang chuẩn bị. Quản trị viên khóa từng chương ở ba mức
-(Công khai / Yêu cầu đăng nhập / VIP) để quyết định nội dung nào được đọc và nghe tự do.
+Website đọc truyện chữ và nghe audio. Mỗi chương có thể có bản thu do quản trị viên tải lên, hoặc bản
+giọng đọc tiếng Việt do máy chủ dựng từ nội dung chương. Chương chưa ai đọc thì **người đọc tự bấm
+"Nghe bằng AI"** — bản dựng ra được giữ lại, nên chương đó chỉ tốn một lần dựng và mọi người sau nghe
+file có sẵn. Quản trị viên khóa từng chương ở ba mức (Công khai / Yêu cầu đăng nhập / VIP) để quyết
+định nội dung nào được đọc và nghe tự do.
 
 Backend Java (Spring Boot, REST API thuần) + frontend React (Vite), hai phần tách rời, nói chuyện với
 nhau bằng JWT.
@@ -39,7 +40,7 @@ nhau bằng JWT.
 | Đọc | Trang đọc riêng, chuyển chương trước/sau, chỉnh cỡ chữ và giãn dòng, giao diện sáng/tối |
 | Khóa chương | Chương không đủ quyền hiện icon 🔒 kèm mức yêu cầu; nội dung **không bao giờ** được gửi về trình duyệt |
 | Nghe | Trình phát HTML5 có tua (HTTP Range), nhớ vị trí đang nghe, chế độ nghe liên tục tự chuyển chương |
-| Chương chưa có audio | Trang đọc nói rõ là ban quản trị đang chuẩn bị; người đọc **không tạo được audio** |
+| Chương chưa có audio | Nút **"Nghe bằng AI"** ngay trên trang đọc: dựng audio rồi tự phát, có hạn mức mỗi ngày để một lần bấm không thành một khoản chi không kiểm soát; nghe lại chương đã có audio thì không tính lượt |
 | Cá nhân | Tủ truyện (đang đọc dở / đã đọc xong / yêu thích), tiến độ đọc, hồ sơ + ảnh đại diện |
 | Gợi ý | Truyện cùng thể loại với những truyện đã đọc, hiện ở trang chủ |
 | Tương tác | Chấm sao, bình luận, xóa bình luận của chính mình |
@@ -111,7 +112,8 @@ Có đúng **ba** đường chạm tới nội dung chương, và cả ba đều
 |---|---|
 | Đọc chữ | `GET /api/chapters/{id}` |
 | Nghe audio | `GET /api/chapters/{id}/audio/{audioId}` |
-| Tạo audio (chỉ Admin) | `POST /api/admin/audio/batch-tts` |
+| Người đọc tạo audio | `POST /api/chapters/{id}/tts` |
+| Admin tạo audio hàng loạt | `POST /api/admin/audio/batch-tts` |
 
 | access_level | Khách | Thành viên | VIP | Admin |
 |---|:---:|:---:|:---:|:---:|
@@ -120,13 +122,18 @@ Có đúng **ba** đường chạm tới nội dung chương, và cả ba đều
 | VIP | ✘ | ✘ | ✔ | ✔ |
 
 Không đủ quyền thì trả **403** kèm thông báo, React hiện màn hình yêu cầu đăng nhập hoặc nâng cấp VIP.
-Đường tạo audio bắt buộc phải qua cùng cửa này, nếu không người dùng có thể dùng nó để lách qua chương
-bị khóa — và nó còn nằm sau `hasRole('ADMIN')` nữa, vì tạo audio là việc của quản trị viên.
+Hai đường tạo audio bắt buộc phải qua cùng cửa này, nếu không người dùng có thể dùng nó để lách qua
+chương bị khóa: `requireAccess` chạy **trước** cả bước tra cache, nên một chương bị khóa không lộ ra
+cả việc nó đã có bản audio hay chưa.
 
 Hàm `AccessControlService.canAccess(accessLevel, principal)` được viết dạng thuần, không phụ thuộc
 `SecurityContext`, để có thể kiểm thử mà không cần dựng Spring.
 
-### Luồng tạo audio (chỉ Admin)
+### Luồng tạo audio — hai cửa vào, một cơ chế
+
+`TtsService` chỉ biết dựng audio và dùng lại bản cũ; nó không biết ai được phép tiêu tiền. Phần đó
+nằm ở hai lớp riêng: khu quản trị dựng hàng loạt và không bị hạn mức, còn người đọc đi qua
+`ReaderTtsService` với một ngân sách.
 
 ```
 Admin: chọn chương trong "Truyện, chương & audio" → POST /api/admin/audio/batch-tts
@@ -151,26 +158,47 @@ TtsService.requestForChapter
                                               └─ cập nhật status = READY (hoặc FAILED kèm lý do)
 ```
 
-Người đọc chỉ chạm tới phần phát:
+Phía người đọc (mục 4.5 của đề bài — nút "Nghe bằng AI"):
 
 ```
-React: AudioPlayer → useChapterAudio → GET /api/chapters/{id}/audio
-   │     rỗng → "chương chưa có audio, mời đón chờ"
+React: AudioPlayer → GET /api/chapters/{id}/audio
+   │     có bản READY → phát luôn
+   │     rỗng → hiện nút "Nghe bằng AI" kèm "hôm nay bạn còn N lượt"
+   ▼
+POST /api/chapters/{id}/tts  (phải đăng nhập — xem bên dưới)
+   ▼
+ReaderTtsService → TtsService.requestForChapter(…, budget)
+   │     READY  → phát ngay, KHÔNG tốn lượt nào
+   │     PROCESSING → "Đang tạo audio…", chờ bằng GET /api/chapters/{id}/tts/{audioId}
    ▼
 <audio src="…/audio/{audioId}?access_token=…">
    AudioController đọc header Range → 206 Partial Content → tua được ngay
 ```
 
-Ba điểm đáng chú ý:
+Năm điểm đáng chú ý:
 
-1. **Người đọc không có đường tạo audio.** Trước đây trang đọc có nút tự tạo, và mỗi người ghé qua một
-   truyện khác nhau là thêm một file trên đĩa cùng một lần gọi API tính tiền — không ai cầm được danh
-   sách những gì đã sinh ra. Giờ endpoint tạo audio duy nhất nằm dưới `/api/admin/**`.
-2. **Cache khóa theo bộ ba (chương, giọng, tốc độ)** — đổi giọng là một bản audio khác, nên khóa cache
-   phải gồm cả ba. Tạo lại cùng giọng thì không tốn thêm lần gọi API nào.
-3. **Token qua query param cho audio** — thẻ `<audio>` của HTML không gửi được header, nên
+1. **Người đọc tạo được audio, nhưng có ngân sách.** Đề bài đòi cái nút này, mà mỗi bản dựng mới là
+   một file trên đĩa cùng một lần gọi API tính tiền. Thứ khiến nó chấp nhận được không phải là chặn
+   người dùng, mà là **bản đã dựng thì giữ lại**: một chương được đọc đúng một lần, mọi người sau đó
+   nghe file có sẵn và không tốn lượt nào. Chỉ bản thật sự mới mới trừ lượt. Ngoài ra còn hạn mức mỗi
+   ngày theo người, trần chung cho cả hệ thống, trần độ dài chương, và một cờ tắt hẳn — toàn bộ nằm ở
+   `app.tts.reader.*`, hạ một con số là siết lại được ngay mà không sửa code.
+2. **Chỗ hỏi ngân sách nằm ở đúng một dòng**, ngay trước lệnh ghi bản ghi mới trong `TtsService`. Nhờ
+   vậy "nghe lại không tốn lượt" là hệ quả của cấu trúc chứ không phải một quy tắc phải nhớ: các đường
+   trả về từ cache không đi qua đó. `TtsServiceTest` ghim đúng thứ tự này.
+3. **Tạo audio bắt buộc đăng nhập**, chặn ngay ở tầng URL của Spring Security. Không phải vì sợ khách,
+   mà vì không có danh tính thì không có gì để đếm hạn mức lên: một đường vô danh sẽ chỉ còn trần chung
+   chặn, tức một người bền bỉ là đủ tiêu hết phần của cả ngày.
+4. **Cache khóa theo bộ ba (chương, giọng, tốc độ)** — đổi giọng là một bản audio khác, nên khóa cache
+   phải gồm cả ba. Người đọc không chọn được hai thứ này (máy chủ quyết định), nên đường người đọc sinh
+   tối đa một file cho mỗi chương; console quản trị thì chọn giọng tự do.
+5. **Token qua query param cho audio** — thẻ `<audio>` của HTML không gửi được header, nên
    `JwtAuthenticationFilter` chấp nhận thêm tham số `access_token`. Không có đường này thì không stream
    được chương bị khóa.
+
+Việc chờ dựng xong dùng `GET /api/chapters/{id}/tts/{audioId}` chứ không phải danh sách audio: đường
+danh sách cố ý ghi một lượt nghe mỗi lần gọi, mà thăm dò vài giây một lần sẽ thổi phồng biểu đồ thống
+kê của trang quản trị lên hàng chục lượt nghe không có thật.
 
 ### Luồng mua VIP
 
@@ -422,12 +450,46 @@ TTS_PROVIDERS=elevenlabs
 ```
 
 Không điền key thì phần còn lại của web vẫn chạy bình thường: Admin vẫn upload được bản thu, chỉ nút
-"Tạo audio" trong trang quản trị báo rõ là máy chủ chưa cấu hình. Người đọc không bị ảnh hưởng — họ
-đằng nào cũng chỉ phát bản đã có.
+"Tạo audio" trong trang quản trị báo rõ là máy chủ chưa cấu hình. Trang đọc cũng không hiện nút "Nghe
+bằng AI" — `GET /api/tts/status` gộp luôn điều kiện "có nhà cung cấp nào chưa" vào cờ `enabled`, nên
+người đọc không gặp một cái nút chắc chắn sẽ lỗi.
 
 `ELEVENLABS_VOICE_ID` là giọng dùng khi lần tạo đó không chỉ định giọng nào. Muốn đổi giọng cho một
 chương hoặc một lô chương thì chọn ngay trong trang quản trị — danh sách giọng của tài khoản
 ElevenLabs được tải về để chọn.
+
+#### Ngân sách cho nút "Nghe bằng AI" của người đọc
+
+```properties
+# Tắt hẳn đường người đọc; console quản trị vẫn dựng audio bình thường.
+TTS_READER_ENABLED=true
+# Số bản audio MỚI mỗi người được tạo trong ngày. -1 = không giới hạn, 0 = chặn hẳn.
+# Nghe lại chương đã có audio không tính vào đây.
+TTS_READER_DAILY_QUOTA=3
+TTS_READER_DAILY_QUOTA_VIP=10
+# Trần chung cho toàn bộ người đọc trong ngày — cầu dao cuối về chi phí.
+TTS_READER_DAILY_QUOTA_GLOBAL=100
+# Một chương bị cắt thành nhiều lần gọi nhà cung cấp (4500 ký tự mỗi lần), nên
+# đây mới là cần chi phí thật: 20000 ký tự ≈ 5 lần gọi cho một bản audio.
+TTS_READER_MAX_CHARS=20000
+```
+
+Hạn mức đếm theo ngày ở giờ Việt Nam (`Asia/Ho_Chi_Minh`), và **lần dựng hỏng thì hoàn lượt** — người
+đọc không mất lượt vì lỗi của nhà cung cấp. Hết lượt thì API trả **429** kèm header `Retry-After` tính
+tới nửa đêm.
+
+Cách đếm: mỗi bản audio người đọc tự tạo được đóng dấu `audio_files.requested_by`, và hạn mức là một
+phép đếm trên đúng những dòng đó. Nhờ vậy hai điều sau là hệ quả của cấu trúc chứ không phải một quy
+tắc phải nhớ — dùng lại cache không tốn lượt (vì không sinh dòng nào), và một lô hàng trăm chương do
+Admin dựng không ăn vào ngân sách của người đọc (vì không có tên người).
+
+#### Về việc "tốc độ đọc" và "chọn giọng nam/nữ" (mục 4.5 [NC])
+
+Người đọc **không** chọn giọng và tốc độ khi tạo audio, vì hai thứ đó là thành phần khóa cache: để
+chọn thì mỗi lựa chọn lại sinh thêm một file cho cùng một chương. Phần "tốc độ đọc" được đáp ứng ở
+chỗ đúng hơn — menu tốc độ phát 0.75–2× ngay trên trình phát, đổi được sau khi audio đã có và không
+tốn thêm đồng nào. ElevenLabs cũng không nhận tham số tốc độ, nên một ô chọn tốc độ lúc tạo sẽ là một
+ô không có tác dụng gì. Việc chọn giọng cho từng chương nằm ở trang quản trị.
 
 ### Cloudinary (ảnh đại diện người dùng, ảnh thương hiệu)
 
@@ -558,8 +620,9 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | GET | `/api/stories` | Danh sách truyện (keyword, genreId, status, sort, page, size) |
 | GET | `/api/stories/{id}` | Chi tiết truyện + danh sách chương |
 | GET | `/api/chapters/{id}` | Nội dung chương — **403 nếu không đủ quyền** |
-| GET | `/api/chapters/{id}/audio` | Các bản audio của chương |
+| GET | `/api/chapters/{id}/audio` | Các bản audio của chương (mỗi lần gọi tính một lượt nghe) |
 | GET | `/api/chapters/{id}/audio/{audioId}` | Stream audio, hỗ trợ Range |
+| GET | `/api/tts/status` | Có tạo được audio không, và còn bao nhiêu lượt hôm nay |
 | GET | `/api/genres`, `/api/authors` | Danh mục |
 | GET | `/api/stories/{id}/comments` | Bình luận của một truyện |
 | GET | `/api/vip/plans` | Bảng giá các gói VIP đang bán |
@@ -576,6 +639,8 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | GET | `/api/me/favorites`, `/api/me/reading` | Yêu thích, lịch sử đọc |
 | POST | `/api/stories/{id}/favorite` | Bật/tắt yêu thích |
 | PUT | `/api/chapters/{id}/progress` | Ghi vị trí đang đọc/nghe |
+| POST | `/api/chapters/{id}/tts` | Nút "Nghe bằng AI" — dùng lại bản đã có thì không tốn lượt; hết lượt trả **429** |
+| GET | `/api/chapters/{id}/tts/{audioId}` | Chờ dựng xong, **không tính lượt nghe** |
 | POST | `/api/stories/{id}/comments` | Gửi đánh giá và bình luận |
 | DELETE | `/api/comments/{id}` | Xóa bình luận của mình (Admin xóa được của mọi người) |
 | GET | `/api/vip/me` | Tình trạng VIP của tài khoản hiện tại |
@@ -596,7 +661,7 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | POST | `/api/admin/chapters/{id}/audio` | Upload audio thu sẵn |
 | DELETE | `/api/admin/audio/{audioId}` | Xóa một bản audio |
 | GET | `/api/admin/audio/chapters` | Chương kèm tình trạng audio |
-| POST | `/api/admin/audio/batch-tts` | Tạo audio hàng loạt — **đường duy nhất tạo audio trong hệ thống** |
+| POST | `/api/admin/audio/batch-tts` | Tạo audio hàng loạt — chọn giọng tự do, **không bị hạn mức** |
 | GET | `/api/admin/comments` | Toàn bộ bình luận để kiểm duyệt |
 | POST/PUT/DELETE | `/api/admin/genres`, `/api/admin/authors` | CRUD danh mục |
 | GET | `/api/admin/users` | Danh sách thành viên |
@@ -621,15 +686,21 @@ bên ngoài đều được thay bằng mock).
 | Lớp test | Số bài | Kiểm điều gì |
 |---|---|---|
 | `AccessControlServiceTest` | 19 | Toàn bộ bảng phân quyền 3 mức khóa × 4 nhóm người dùng, chương không đặt mức khóa, và `requireAccess` phải ném 403 **không kèm nội dung chương** |
-| `TtsServiceTest` | 11 | Chặn TTS với chương bị khóa (kể cả khi đã có sẵn cache), dùng lại bản READY, dọn bản FAILED rồi tạo lại, xếp hàng bất đồng bộ, kẹp tốc độ, giọng lạ quay về mặc định |
+| `TtsServiceTest` | 20 | Chặn TTS với chương bị khóa (kể cả khi đã có sẵn cache), dùng lại bản READY, dọn bản FAILED rồi tạo lại, xếp hàng bất đồng bộ, kẹp tốc độ, giọng lạ quay về mặc định, và **ngân sách được hỏi ở đúng một chỗ**: sau khi kiểm quyền và tra cache, trước khi ghi |
+| `ReaderTtsServiceTest` | 16 | Ngân sách của nút "Nghe bằng AI": bắt đăng nhập, hạn mức theo bậc Thành viên/VIP/Admin, trần chung xét trước hạn mức cá nhân, trần độ dài chương, đếm theo ngày giờ Việt Nam, và **trúng bản đã có thì không đếm hạn mức của ai** |
 | `RegistrationServiceTest` | 16 | Bước một không ghi gì vào `users`, chỉ băm của mã được lưu, mật khẩu không bị băm chồng ở bước hai, hết lượt thử thì hủy lượt đăng ký, và bấm gửi lại quá sớm bị chặn |
 | `PasswordResetServiceTest` | 12 | Email lạ và tài khoản bị khóa không nhận được liên kết, chỉ băm của token được lưu, liên kết cũ bị vô hiệu, và một liên kết chỉ dùng được một lần |
 | `AuthServiceGoogleTest` | 10 | Tạo tài khoản ở lần đăng nhập Google đầu tiên, ghép vào tài khoản cùng email, ưu tiên `google_id`, không ghi đè ảnh đại diện cũ, chặn tài khoản bị khóa |
 | `BackendApplicationTests` | 1 | Toàn bộ context Spring khởi động được |
 
-Hai lớp đầu chính là hai luồng mà mục 6 của đề bài nêu đích danh. Đáng chú ý nhất là bài
+Ba lớp đầu chính là hai luồng mà mục 6 của đề bài nêu đích danh. Đáng chú ý nhất là bài
 `kiemQuyenTruocKhiTraCache`: nó khẳng định cache **không** trở thành cửa sau — chương đã bị khóa thì
 ngay cả bản audio tạo sẵn từ trước cũng không được trả về.
+
+Cặp bài đáng chú ý thứ hai là `cacheReadyThiKhongTonLuot` và `banDaCoThiKhongTonLuot`: chúng ghim lời
+hứa khiến nút "Nghe bằng AI" chấp nhận được — nghe lại một chương đã có audio không tốn lượt nào, vì
+nó không tốn thêm đồng nào. Không có hai bài này thì một lần dời chỗ gọi ngân sách trong `TtsService`
+sẽ âm thầm biến mỗi lần mở lại chương thành một lượt bị trừ.
 
 Ba lớp sau kiểm phần xác thực. Đáng chú ý là `chiLuuBamCuaToken`: nó đối chiếu chuỗi đi trong email
 với chuỗi nằm trong cơ sở dữ liệu và khẳng định hai thứ đó khác nhau — cái sau là SHA-256 của cái
