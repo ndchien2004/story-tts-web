@@ -18,8 +18,12 @@ public interface AudioFileRepository extends JpaRepository<AudioFile, Long> {
     Optional<AudioFile> findFirstByChapterIdAndSourceAndStatus(Long chapterId, AudioSource source, AudioStatus status);
 
     /**
-     * Tra cứu cache TTS: cùng chương + cùng giọng + cùng tốc độ thì tái sử dụng file cũ,
-     * không gọi lại API.
+     * Tra cứu cache TTS trong phạm vi của một người.
+     *
+     * <p>{@code requesterId} null nghĩa là khu quản trị: chỉ những bản không mang
+     * tên ai mới được tái sử dụng. Người đọc thì chỉ gặp lại bản của chính mình —
+     * bản người khác dựng không phải thứ họ được nghe, nên cũng không phải thứ
+     * dùng lại để khỏi gọi API.
      */
     @Query("""
             SELECT a FROM AudioFile a
@@ -27,12 +31,44 @@ public interface AudioFileRepository extends JpaRepository<AudioFile, Long> {
               AND a.source = com.storytts.backend.domain.AudioSource.TTS
               AND a.voice = :voice
               AND a.speed = :speed
+              AND (:requesterId IS NULL AND a.requestedBy IS NULL
+                   OR a.requestedBy.id = :requesterId)
             ORDER BY a.createdAt DESC
             LIMIT 1
             """)
     Optional<AudioFile> findTtsCache(@Param("chapterId") Long chapterId,
                                      @Param("voice") String voice,
-                                     @Param("speed") Integer speed);
+                                     @Param("speed") Integer speed,
+                                     @Param("requesterId") Long requesterId);
+
+    /**
+     * Những bản audio một người được phép thấy ở một chương: bản của khu quản trị,
+     * cộng bản do chính người ấy dựng.
+     *
+     * <p>{@code userId} null là Khách chưa đăng nhập — chỉ còn phần của quản trị.
+     */
+    @Query("""
+            SELECT a FROM AudioFile a
+            WHERE a.chapter.id = :chapterId
+              AND (a.requestedBy IS NULL OR a.requestedBy.id = :userId)
+            """)
+    List<AudioFile> findVisibleForChapter(@Param("chapterId") Long chapterId,
+                                          @Param("userId") Long userId);
+
+    /**
+     * Phần audio thuộc về khu quản trị: bản tải lên và bản admin tự dựng.
+     *
+     * <p>Bản do người đọc bấm tạo là việc riêng của họ, không phải kho của quản trị.
+     */
+    @Query("""
+            SELECT a FROM AudioFile a
+            WHERE a.chapter.id = :chapterId
+              AND a.requestedBy IS NULL
+            """)
+    List<AudioFile> findAdminOwnedForChapter(@Param("chapterId") Long chapterId);
+
+    /** Mọi bản một người đọc đã tự dựng — dùng để dọn khi phiên đăng nhập kết thúc. */
+    List<AudioFile> findByRequestedById(Long userId);
 
     boolean existsByChapterIdAndStatus(Long chapterId, AudioStatus status);
 

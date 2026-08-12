@@ -69,7 +69,11 @@ public class AudioAdminService {
         if (!chapterRepository.existsById(chapterId)) {
             throw ResourceNotFoundException.of("chương", chapterId);
         }
-        return audioFileRepository.findByChapterId(chapterId).stream()
+        // Chỉ phần khu quản trị dựng nên: bản tải lên và bản admin tự tạo. Bản do
+        // người đọc bấm nút là việc riêng của họ, sống theo phiên đăng nhập của
+        // họ và biến mất cùng phiên ấy — kéo nó vào bảng quản trị chỉ tạo ra
+        // những dòng mà admin không đặt ở đó và cũng không nên đụng vào.
+        return audioFileRepository.findAdminOwnedForChapter(chapterId).stream()
                 .map(audio -> AudioInfoDto.from(audio, chapterId))
                 .toList();
     }

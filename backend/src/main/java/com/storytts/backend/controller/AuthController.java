@@ -12,8 +12,10 @@ import com.storytts.backend.dto.auth.ResetPasswordRequest;
 import com.storytts.backend.dto.auth.UserDto;
 import com.storytts.backend.dto.auth.VerifyRegistrationRequest;
 import com.storytts.backend.service.AuthService;
+import com.storytts.backend.service.CurrentUserService;
 import com.storytts.backend.service.PasswordResetService;
 import com.storytts.backend.service.RegistrationService;
+import com.storytts.backend.service.tts.ReaderNarrationCleanup;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,6 +35,8 @@ public class AuthController {
     private final AuthService authService;
     private final RegistrationService registrationService;
     private final PasswordResetService passwordResetService;
+    private final CurrentUserService currentUserService;
+    private final ReaderNarrationCleanup readerNarrationCleanup;
 
     @GetMapping("/providers")
     @Operation(summary = "Các cách đăng nhập máy chủ đang bật (Google, quên mật khẩu)")
@@ -109,11 +113,14 @@ public class AuthController {
 
     /**
      * JWT là stateless nên "đăng xuất" thực chất là client xóa token đang lưu.
-     * Endpoint này giữ lại để frontend gọi cho thống nhất luồng.
+     *
+     * <p>Nhưng có một thứ ở phía máy chủ phải mất theo phiên: bản audio người
+     * đọc tự dựng. Nó được tạo cho một buổi đọc, không phải để nằm lại trên đĩa.
      */
     @PostMapping("/logout")
-    @Operation(summary = "Đăng xuất (client tự xóa token đã lưu)")
+    @Operation(summary = "Đăng xuất (client tự xóa token đã lưu, máy chủ bỏ audio tạm của phiên)")
     public Map<String, String> logout() {
+        currentUserService.currentUserId().ifPresent(readerNarrationCleanup::discardFor);
         return Map.of("message", "Đã đăng xuất. Vui lòng xóa token ở phía client.");
     }
 }

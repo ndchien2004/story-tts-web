@@ -3,13 +3,33 @@ import { audioApi } from "../api/endpoints";
 import { pollUntilSettled } from "../utils/poll";
 
 /**
+ * Thứ tự tìm bản để phát.
+ *
+ * Khu quản trị đặt gì ở chương này thì cái đó thắng, và bản người thu thắng bản
+ * máy đọc. Chỉ khi cả hai đều không có, người đọc mới nghe bản mình tự dựng —
+ * và cũng chỉ khi ấy trang mới mời họ bấm nút.
+ *
+ * Máy chủ đã lọc theo người gọi rồi, nên bản mang nhãn SESSION lọt tới đây chắc
+ * chắn là của chính người đang đọc.
+ */
+function preferredTrack(ready) {
+  const fromLibrary = ready.filter((track) => track.owner !== "SESSION");
+  return (
+    fromLibrary.find((track) => track.source === "UPLOAD") ??
+    fromLibrary[0] ??
+    ready[0] ??
+    null
+  );
+}
+
+/**
  * A chapter's audio, and the means to have some made.
  *
- * Narration for a chapter nobody has recorded is produced on demand, but the
- * server keeps every finished track: asking again for a chapter that already
- * has one is answered from storage, costs nothing and comes back instantly.
- * Only a genuinely new one counts against the reader's daily allowance, which
- * is why this hook can offer the action without offering a way to run up a bill.
+ * A chapter the console has not recorded can still be listened to: the reader
+ * asks, and the server narrates. What comes back is theirs — nobody else is
+ * served it, and it is thrown away when their session ends. So the allowance is
+ * spent per person rather than once for everyone, and this hook offers the
+ * action only where the console has left a gap.
  *
  * `generating` covers the wait — the server queues the work and finishes it on
  * a background thread, so the only way to learn it landed is to keep asking.
@@ -56,8 +76,7 @@ export default function useChapterAudio(chapterId, { enabled = true } = {}) {
         if (cancelled) return;
         const ready = list.filter((track) => track.status === "READY");
         setTracks(ready);
-        // Prefer a human recording over a generated one when both exist.
-        setActiveTrack(ready.find((track) => track.source === "UPLOAD") ?? ready[0] ?? null);
+        setActiveTrack(preferredTrack(ready));
       })
       .catch(() => {
         // A locked chapter answers 403 here; the reader page already shows the

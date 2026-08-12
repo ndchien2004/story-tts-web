@@ -10,6 +10,7 @@ import com.storytts.backend.repository.UserRepository;
 import com.storytts.backend.security.GoogleIdTokenVerifier;
 import com.storytts.backend.security.GoogleIdTokenVerifier.GoogleAccount;
 import com.storytts.backend.security.JwtService;
+import com.storytts.backend.service.tts.ReaderNarrationCleanup;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -58,6 +59,8 @@ class AuthServiceGoogleTest {
     private GoogleIdTokenVerifier googleIdTokenVerifier;
     @Mock
     private PasswordResetService passwordResetService;
+    @Mock
+    private ReaderNarrationCleanup readerNarrationCleanup;
 
     private AuthService authService;
 
@@ -65,7 +68,7 @@ class AuthServiceGoogleTest {
     void setUp() {
         authService = new AuthService(userRepository, passwordEncoder, jwtService, currentUserService,
                 googleIdTokenVerifier, new GoogleProperties(CLIENT_ID, "https://certs"),
-                passwordResetService);
+                passwordResetService, readerNarrationCleanup);
 
         when(googleIdTokenVerifier.verify(anyString()))
                 .thenReturn(new GoogleAccount(SUBJECT, EMAIL, "Độc Giả", PICTURE));

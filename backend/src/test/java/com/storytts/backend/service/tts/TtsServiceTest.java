@@ -75,7 +75,7 @@ class TtsServiceTest {
         when(ttsEngine.availableVoices()).thenReturn(List.of(
                 new VoiceOptionDto(VOICE, "Giọng một", "Nữ", "Đa ngôn ngữ", "elevenlabs", "ElevenLabs")));
         when(chapterService.findDetailEntity(CHAPTER_ID)).thenReturn(chapter(AccessLevel.PUBLIC));
-        when(audioFileRepository.findTtsCache(anyLong(), anyString(), any())).thenReturn(Optional.empty());
+        when(audioFileRepository.findTtsCache(anyLong(), anyString(), any(), any())).thenReturn(Optional.empty());
         when(audioFileRepository.save(any(AudioFile.class))).thenAnswer(invocation -> {
             AudioFile saved = invocation.getArgument(0);
             saved.setId(99L);
@@ -139,7 +139,7 @@ class TtsServiceTest {
 
         // Cache có sẵn cũng không được phép trở thành cửa sau: chương đã bị khóa
         // thì ngay cả bản audio tạo sẵn từ trước cũng không được trả về.
-        verify(audioFileRepository, never()).findTtsCache(anyLong(), anyString(), any());
+        verify(audioFileRepository, never()).findTtsCache(anyLong(), anyString(), any(), any());
     }
 
     // ==================== Cache ====================
@@ -148,7 +148,7 @@ class TtsServiceTest {
     @DisplayName("Đã có bản READY → trả lại luôn, không gọi API lần nữa")
     void cacheReadyThiDungLai() {
         AudioFile cached = audio(AudioStatus.READY, "da-co-san.mp3");
-        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0)).thenReturn(Optional.of(cached));
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0, null)).thenReturn(Optional.of(cached));
 
         AudioInfoDto result = ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0));
 
@@ -166,7 +166,7 @@ class TtsServiceTest {
     @DisplayName("Nội dung chương đã đổi → bỏ bản cũ và dựng lại, không dùng cache")
     void noiDungDoiThiKhongDungCache() {
         AudioFile stale = audio(AudioStatus.READY, "ban-cu.mp3", sha256Hex("Chữ của bản trước."));
-        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0)).thenReturn(Optional.of(stale));
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0, null)).thenReturn(Optional.of(stale));
 
         AudioInfoDto result = ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0));
 
@@ -190,7 +190,7 @@ class TtsServiceTest {
     @Test
     @DisplayName("Đang tạo dở → trả trạng thái PROCESSING, không xếp hàng lần hai")
     void dangTaoThiKhongXepHangLai() {
-        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0))
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0, null))
                 .thenReturn(Optional.of(audio(AudioStatus.PROCESSING, null)));
 
         AudioInfoDto result = ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0));
@@ -203,7 +203,7 @@ class TtsServiceTest {
     @DisplayName("Bản hỏng lần trước bị dọn đi rồi mới tạo lại")
     void banHongThiDonRoiTaoLai() {
         AudioFile failed = audio(AudioStatus.FAILED, "hong.mp3");
-        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0)).thenReturn(Optional.of(failed));
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0, null)).thenReturn(Optional.of(failed));
 
         ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0));
 
@@ -223,7 +223,7 @@ class TtsServiceTest {
 
         ttsService.requestForChapter(CHAPTER_ID, new TtsRequest("el:voice-hai", 0));
 
-        verify(audioFileRepository).findTtsCache(CHAPTER_ID, "el:voice-hai", 0);
+        verify(audioFileRepository).findTtsCache(CHAPTER_ID, "el:voice-hai", 0, null);
     }
 
     // ==================== Xếp hàng bất đồng bộ ====================
@@ -256,7 +256,7 @@ class TtsServiceTest {
     void tocDoBiKep() {
         ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 99));
 
-        verify(audioFileRepository).findTtsCache(CHAPTER_ID, VOICE, 3);
+        verify(audioFileRepository).findTtsCache(CHAPTER_ID, VOICE, 3, null);
     }
 
     @Test
@@ -264,7 +264,7 @@ class TtsServiceTest {
     void giongLaThiQuayVeMacDinh() {
         ttsService.requestForChapter(CHAPTER_ID, new TtsRequest("giong-khong-ton-tai", 0));
 
-        verify(audioFileRepository).findTtsCache(CHAPTER_ID, VOICE, 0);
+        verify(audioFileRepository).findTtsCache(CHAPTER_ID, VOICE, 0, null);
     }
 
     // ==================== Ngân sách của người đọc ====================
@@ -310,7 +310,7 @@ class TtsServiceTest {
 
         InOrder order = inOrder(accessControlService, audioFileRepository, eventPublisher);
         order.verify(accessControlService).requireAccess(any(Chapter.class));
-        order.verify(audioFileRepository).findTtsCache(CHAPTER_ID, VOICE, 0);
+        order.verify(audioFileRepository).findTtsCache(CHAPTER_ID, VOICE, 0, null);
         order.verify(audioFileRepository).save(any(AudioFile.class));
         order.verify(eventPublisher).publishEvent(any(TtsGenerationRequested.class));
 
@@ -320,7 +320,7 @@ class TtsServiceTest {
     @Test
     @DisplayName("Trúng cache READY → không hỏi ngân sách, tức nghe lại không tốn lượt nào")
     void cacheReadyThiKhongTonLuot() {
-        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0))
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0, null))
                 .thenReturn(Optional.of(audio(AudioStatus.READY, "da-co-san.mp3")));
         RecordingBudget budget = new RecordingBudget(null);
 
@@ -333,7 +333,7 @@ class TtsServiceTest {
     @Test
     @DisplayName("Bản đang dựng dở → không hỏi ngân sách; người thứ hai chờ cùng, không bị trừ")
     void dangDungDoThiKhongTonLuot() {
-        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0))
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0, null))
                 .thenReturn(Optional.of(audio(AudioStatus.PROCESSING, null)));
         RecordingBudget budget = new RecordingBudget(null);
 
@@ -345,14 +345,14 @@ class TtsServiceTest {
     @Test
     @DisplayName("Bản cũ đọc sai chữ hoặc hỏng → vẫn phải hỏi ngân sách, vì sẽ gọi API lần nữa")
     void dungLaiTuDauThiVanTonLuot() {
-        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0)).thenReturn(
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0, null)).thenReturn(
                 Optional.of(audio(AudioStatus.READY, "ban-cu.mp3", sha256Hex("Chữ của bản trước."))));
         RecordingBudget stale = new RecordingBudget(null);
         ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0), stale);
         assertThat(stale.asked).isEqualTo(1);
 
         reset(audioFileRepository);
-        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0))
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0, null))
                 .thenReturn(Optional.of(audio(AudioStatus.FAILED, "hong.mp3")));
         when(audioFileRepository.save(any(AudioFile.class))).thenAnswer(inv -> inv.getArgument(0));
         RecordingBudget failed = new RecordingBudget(null);

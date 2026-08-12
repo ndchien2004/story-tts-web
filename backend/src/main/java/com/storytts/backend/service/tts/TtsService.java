@@ -128,7 +128,25 @@ public class TtsService {
 
         String contentHash = hashContent(chapter.getContent());
 
-        AudioFile cached = audioFileRepository.findTtsCache(chapterId, voice, speed).orElse(null);
+        User requester = budget.requester();
+        Long requesterId = requester == null ? null : requester.getId();
+
+        // Khu quản trị đã lo chương này rồi thì người đọc không có gì để dựng.
+        // Trang đọc vốn đã ẩn nút trong trường hợp ấy; đây là chốt chặn cho
+        // đường gọi thẳng vào API, và nó trả về bản sẵn có thay vì báo lỗi —
+        // thứ người bấm muốn là được nghe, không phải một lời từ chối.
+        if (requesterId != null) {
+            AudioFile fromAdmin = audioFileRepository.findAdminOwnedForChapter(chapterId).stream()
+                    .filter(audio -> audio.getStatus() == AudioStatus.READY)
+                    .findFirst()
+                    .orElse(null);
+            if (fromAdmin != null) {
+                return AudioInfoDto.from(fromAdmin, chapterId);
+            }
+        }
+
+        AudioFile cached = audioFileRepository.findTtsCache(chapterId, voice, speed, requesterId)
+                .orElse(null);
         if (cached != null) {
             // Đang dựng dở: để nó chạy tiếp. Xóa hàng mà luồng nền đang ghi vào
             // chỉ tạo ra một lần gọi API nữa và một bản ghi mồ côi.

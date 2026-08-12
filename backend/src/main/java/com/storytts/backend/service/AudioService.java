@@ -4,6 +4,7 @@ import com.storytts.backend.domain.AudioFile;
 import com.storytts.backend.domain.AudioSource;
 import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
+import com.storytts.backend.domain.User;
 import com.storytts.backend.domain.ViewType;
 import com.storytts.backend.dto.audio.AudioInfoDto;
 import com.storytts.backend.exception.BadRequestException;
@@ -26,6 +27,11 @@ import java.util.Set;
  * Every read path calls {@link AccessControlService#requireAccess(Chapter)}
  * first, so a locked chapter cannot be listened to even if the caller knows the
  * audio id.
+ *
+ * <p>A second gate sits behind that one. Audio a reader made for themselves is
+ * theirs alone, and knowing an id is not permission to hear it — see
+ * {@link #requireOwnership(AudioFile)}, which every path resolving a single
+ * track goes through.
  */
 @Service
 @RequiredArgsConstructor
@@ -43,6 +49,27 @@ public class AudioService {
     private final AccessControlService accessControlService;
     private final StorageService storageService;
     private final ViewEventService viewEventService;
+    private final CurrentUserService currentUserService;
+
+    /**
+     * Bản do một người đọc tự dựng thì chỉ người ấy được chạm tới.
+     *
+     * <p>Bản của khu quản trị ({@code requestedBy} rỗng) thì ai cũng nghe được —
+     * đó là phần được dựng sẵn cho mọi người.
+     *
+     * <p>Trả về "không tìm thấy" chứ không phải "không được phép": người lạ dò
+     * số thứ tự thì không nên biết được số nào có thật, số nào không.
+     */
+    private void requireOwnership(AudioFile audio) {
+        User owner = audio.getRequestedBy();
+        if (owner == null) {
+            return;
+        }
+        Long viewer = currentUserService.currentUserId().orElse(null);
+        if (!owner.getId().equals(viewer)) {
+            throw ResourceNotFoundException.of("file audio", audio.getId());
+        }
+    }
 
     /** All usable tracks for a chapter, uploaded and generated alike. */
     @Transactional
@@ -55,7 +82,8 @@ public class AudioService {
         // khi mở chương — đúng một lượt cho một phiên nghe.
         viewEventService.record(chapter.getStory().getId(), chapterId, ViewType.LISTEN);
 
-        return audioFileRepository.findByChapterId(chapterId).stream()
+        Long viewer = currentUserService.currentUserId().orElse(null);
+        return audioFileRepository.findVisibleForChapter(chapterId, viewer).stream()
                 .filter(audio -> audio.getStatus() != AudioStatus.FAILED)
                 .map(audio -> AudioInfoDto.from(audio, chapterId))
                 .toList();
@@ -83,6 +111,7 @@ public class AudioService {
         if (!audio.getChapter().getId().equals(chapterId)) {
             throw new BadRequestException("File audio không thuộc chương này.");
         }
+        requireOwnership(audio);
         return AudioInfoDto.from(audio, chapterId);
     }
 
@@ -103,6 +132,7 @@ public class AudioService {
         if (!audio.getChapter().getId().equals(chapterId)) {
             throw new BadRequestException("File audio không thuộc chương này.");
         }
+        requireOwnership(audio);
         if (audio.getStatus() != AudioStatus.READY || audio.getFilePath() == null) {
             throw new BadRequestException("File audio chưa sẵn sàng để phát.");
         }

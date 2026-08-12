@@ -13,6 +13,7 @@ import com.storytts.backend.repository.UserRepository;
 import com.storytts.backend.security.GoogleIdTokenVerifier;
 import com.storytts.backend.security.GoogleIdTokenVerifier.GoogleAccount;
 import com.storytts.backend.security.JwtService;
+import com.storytts.backend.service.tts.ReaderNarrationCleanup;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -41,6 +42,7 @@ public class AuthService {
     private final GoogleIdTokenVerifier googleIdTokenVerifier;
     private final GoogleProperties googleProperties;
     private final PasswordResetService passwordResetService;
+    private final ReaderNarrationCleanup readerNarrationCleanup;
 
     private final SecureRandom random = new SecureRandom();
 
@@ -52,6 +54,12 @@ public class AuthService {
      * {@link RegistrationService}.
      */
     public AuthResponse issueSession(User user) {
+        // Bản audio người này tự dựng ở phiên trước không được sống sang phiên
+        // mới. Dọn ở đây chứ không chỉ ở lúc đăng xuất, vì đóng thẳng trình
+        // duyệt thì không có ai báo cho máy chủ cả — mở phiên là mốc duy nhất
+        // chắc chắn xảy ra.
+        readerNarrationCleanup.discardFor(user.getId());
+
         String token = jwtService.generateToken(user);
         return AuthResponse.of(token, jwtService.getExpirationMs(), UserDto.from(user));
     }
