@@ -5,6 +5,7 @@ import com.storytts.backend.domain.AudioFile;
 import com.storytts.backend.domain.AudioSource;
 import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
+import com.storytts.backend.domain.User;
 import com.storytts.backend.dto.audio.AudioInfoDto;
 import com.storytts.backend.dto.audio.TtsRequest;
 import com.storytts.backend.dto.audio.VoiceOptionDto;
@@ -32,9 +33,13 @@ import java.util.List;
  * the same combination returns the stored file instead of calling a provider
  * again, which keeps both latency and API usage down.
  *
- * Reached only from the admin console. Readers play what is already there; they
- * have no way in here, which is what stops one file per curious visitor from
- * piling up on disk.
+ * <h3>Hai cửa vào, một cơ chế</h3>
+ * Lớp này chỉ biết dựng audio và dùng lại bản cũ; nó không biết ai được phép
+ * tiêu tiền. Khu quản trị gọi thẳng vào đây và không bị hạn mức nào. Người đọc
+ * đi qua {@link ReaderTtsService}, lớp đó truyền vào một {@link ReaderBudget} —
+ * và chỗ hỏi ngân sách nằm ngay trước lệnh ghi bản ghi mới, tức chỉ khi một lần
+ * gọi API tính tiền là không thể tránh. Nhờ vậy nghe lại một bản đã có, hay bấm
+ * lúc bản đang dựng dở, đều không tốn lượt nào của ai.
  */
 @Service
 @RequiredArgsConstructor
@@ -49,6 +54,38 @@ public class TtsService {
     private final TtsEngine ttsEngine;
     private final ApplicationEventPublisher eventPublisher;
 
+    /**
+     * Ngân sách của bên gọi, chỉ được hỏi tới khi sắp phát sinh chi phí thật.
+     *
+     * <p>Ném ngoại lệ trong {@link #beforeNewGeneration(Chapter)} là từ chối.
+     * Những yêu cầu được trả về từ cache không bao giờ đi qua đây.
+     */
+    public interface ReaderBudget {
+
+        /** Khu quản trị: không hạn mức, không ghi tên ai vào bản ghi. */
+        ReaderBudget UNMETERED = new ReaderBudget() {
+            @Override
+            public void beforeNewGeneration(Chapter chapter) {
+                // Không chặn gì.
+            }
+
+            @Override
+            public User requester() {
+                return null;
+            }
+        };
+
+        /**
+         * Gọi ngay trước khi xếp hàng một bản dựng mới.
+         *
+         * @throws RuntimeException để từ chối yêu cầu
+         */
+        void beforeNewGeneration(Chapter chapter);
+
+        /** Người sẽ bị trừ lượt, hoặc null nếu bản này không tính cho ai. */
+        User requester();
+    }
+
     public List<VoiceOptionDto> availableVoices() {
         return ttsEngine.availableVoices();
     }
@@ -61,6 +98,16 @@ public class TtsService {
      */
     @Transactional
     public AudioInfoDto requestForChapter(Long chapterId, TtsRequest request) {
+        return requestForChapter(chapterId, request, ReaderBudget.UNMETERED);
+    }
+
+    /**
+     * Như trên, nhưng có một ngân sách được hỏi ý kiến trước khi dựng bản mới.
+     *
+     * @param budget bên gọi tự quyết định từ chối hay không; xem {@link ReaderBudget}
+     */
+    @Transactional
+    public AudioInfoDto requestForChapter(Long chapterId, TtsRequest request, ReaderBudget budget) {
         if (!properties.enabled()) {
             throw new TtsException("Chức năng tạo audio đang tạm tắt trên máy chủ.");
         }
@@ -103,6 +150,11 @@ public class TtsService {
             audioFileRepository.flush();
         }
 
+        // Tới đây mới chắc là sẽ có một lần gọi API tính tiền: không còn bản nào
+        // dùng lại được. Đây là chỗ duy nhất hỏi ngân sách, nên mọi đường trả về
+        // từ cache ở trên đều miễn phí.
+        budget.beforeNewGeneration(chapter);
+
         AudioFile pending = audioFileRepository.save(AudioFile.builder()
                 .chapter(chapter)
                 .source(AudioSource.TTS)
@@ -111,6 +163,7 @@ public class TtsService {
                 .speed(speed)
                 .contentHash(contentHash)
                 .contentType("audio/mpeg")
+                .requestedBy(budget.requester())
                 .build());
 
         log.info("Queued synthesis for chapter {} (voice={}, speed={})", chapterId, voice, speed);

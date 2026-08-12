@@ -25,6 +25,14 @@ public record ChapterDetailDto(
         /** Có audio do Admin upload sẵn hay không. */
         boolean hasUploadedAudio,
         /** Đã có bản TTS trong cache hay chưa. */
-        boolean hasTtsAudio
+        boolean hasTtsAudio,
+
+        /**
+         * Giây đang nghe dở của người dùng hiện tại (mục 4.4).
+         *
+         * <p>Null với Khách và với người chưa từng nghe chương này — để trình phát
+         * phân biệt được "chưa nghe" với "đã nghe và đang ở giây 0".
+         */
+        Integer audioPositionSeconds
 ) {
 }

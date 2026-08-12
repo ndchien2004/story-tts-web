@@ -3,6 +3,7 @@ package com.storytts.backend.exception;
 import com.storytts.backend.dto.common.ApiErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -13,7 +14,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,6 +28,9 @@ import java.util.Map;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    /** Hạn mức tạo audio tính theo ngày ở Việt Nam, không theo UTC. */
+    private static final ZoneId QUOTA_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     /** Chương bị khóa → 403 kèm mức quyền còn thiếu, tuyệt đối không kèm nội dung chương. */
     @ExceptionHandler(ChapterLockedException.class)
@@ -64,6 +71,27 @@ public class GlobalExceptionHandler {
                                                                HttpServletRequest request) {
         return build(HttpStatus.FORBIDDEN, "ACCESS_DENIED",
                 "Bạn không có quyền thực hiện thao tác này.", request);
+    }
+
+    /**
+     * Hết lượt tạo audio trong ngày → 429, kèm {@code Retry-After} tính tới nửa
+     * đêm giờ Việt Nam — đúng lúc hạn mức được cấp lại.
+     */
+    @ExceptionHandler(TtsQuotaExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleTtsQuota(TtsQuotaExceededException ex,
+                                                          HttpServletRequest request) {
+        log.info("Chặn tạo audio vì hết lượt ({}, hạn mức {}) tại {}",
+                ex.getScope(), ex.getLimit(), request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(secondsUntilQuotaReset()))
+                .body(ApiErrorResponse.of(HttpStatus.TOO_MANY_REQUESTS.value(),
+                        "TTS_QUOTA_EXCEEDED", ex.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(LoginRequiredException.class)
+    public ResponseEntity<ApiErrorResponse> handleLoginRequired(LoginRequiredException ex,
+                                                               HttpServletRequest request) {
+        return build(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", ex.getMessage(), request);
     }
 
     /** Lỗi gọi API TTS bên ngoài → 502, kèm thông báo dễ hiểu cho người dùng. */
@@ -109,5 +137,12 @@ public class GlobalExceptionHandler {
                                                    String message, HttpServletRequest request) {
         return ResponseEntity.status(status)
                 .body(ApiErrorResponse.of(status.value(), error, message, request.getRequestURI()));
+    }
+
+    /** Số giây còn lại tới nửa đêm giờ Việt Nam — mốc hạn mức mỗi ngày được cấp lại. */
+    private long secondsUntilQuotaReset() {
+        ZonedDateTime now = ZonedDateTime.now(QUOTA_ZONE);
+        return Duration.between(now, now.toLocalDate().plusDays(1).atStartOfDay(QUOTA_ZONE))
+                .getSeconds();
     }
 }

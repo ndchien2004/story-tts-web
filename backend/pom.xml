@@ -80,6 +80,18 @@
 			<artifactId>mysql-connector-j</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+
+		<!-- Migration: lược đồ do các tệp trong db/migration quyết định, không
+		     phải do ddl-auto tự sửa bảng sau lưng. flyway-mysql là phần phương
+		     ngữ riêng cho MySQL 8, thiếu nó Flyway không nhận ra cơ sở dữ liệu. -->
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-mysql</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>com.h2database</groupId>
 			<artifactId>h2</artifactId>

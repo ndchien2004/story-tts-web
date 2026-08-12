@@ -40,6 +40,16 @@ public class CurrentUserService {
         return currentPrincipal().isPresent();
     }
 
+    /**
+     * Tham chiếu lười tới người đang gọi, chỉ để ghi khóa ngoại.
+     *
+     * <p>Khác {@link #requireCurrentUser()}: không đọc gì từ bảng users, nên gán
+     * "ai đã yêu cầu" vào một bản ghi mới không tốn thêm câu SELECT nào.
+     */
+    public Optional<User> currentUserReference() {
+        return currentUserId().map(userRepository::getReferenceById);
+    }
+
     /** Bắt buộc phải đăng nhập, dùng cho các API cá nhân (yêu thích, tiến độ đọc...). */
     @Transactional(readOnly = true)
     public User requireCurrentUser() {

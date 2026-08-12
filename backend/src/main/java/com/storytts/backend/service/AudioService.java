@@ -62,6 +62,31 @@ public class AudioService {
     }
 
     /**
+     * Trạng thái một bản audio, không tính thêm lượt nghe.
+     *
+     * <p>Trang đọc phải hỏi liên tục trong lúc chờ dựng xong, nên không dùng
+     * {@link #listForChapter} cho việc đó được: đường ấy cố ý ghi một lượt nghe
+     * mỗi lần gọi, và thăm dò vài giây một lần sẽ tự thổi phồng biểu đồ của trang
+     * quản trị lên hàng chục lượt nghe không có thật.
+     *
+     * <p>Trả về cả bản FAILED, vì "dựng hỏng vì lý do này" cũng là một câu trả lời
+     * mà người đang chờ cần biết.
+     */
+    @Transactional(readOnly = true)
+    public AudioInfoDto trackStatus(Long chapterId, Long audioId) {
+        Chapter chapter = chapterService.findDetailEntity(chapterId);
+        accessControlService.requireAccess(chapter);
+
+        AudioFile audio = audioFileRepository.findById(audioId)
+                .orElseThrow(() -> ResourceNotFoundException.of("file audio", audioId));
+
+        if (!audio.getChapter().getId().equals(chapterId)) {
+            throw new BadRequestException("File audio không thuộc chương này.");
+        }
+        return AudioInfoDto.from(audio, chapterId);
+    }
+
+    /**
      * Resolves an audio file for streaming.
      *
      * @throws com.storytts.backend.exception.ChapterLockedException if the caller

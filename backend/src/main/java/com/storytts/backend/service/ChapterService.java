@@ -4,8 +4,8 @@ import com.storytts.backend.domain.AccessLevel;
 import com.storytts.backend.domain.AudioSource;
 import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
+import com.storytts.backend.domain.ReadingProgress;
 import com.storytts.backend.domain.Story;
-import com.storytts.backend.domain.ViewType;
 import com.storytts.backend.dto.chapter.ChapterDetailDto;
 import com.storytts.backend.dto.chapter.ChapterRequest;
 import com.storytts.backend.dto.chapter.ChapterSummaryDto;
@@ -13,6 +13,7 @@ import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.ResourceNotFoundException;
 import com.storytts.backend.repository.AudioFileRepository;
 import com.storytts.backend.repository.ChapterRepository;
+import com.storytts.backend.repository.ReadingProgressRepository;
 import com.storytts.backend.repository.StoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +37,11 @@ public class ChapterService {
     private final StoryRepository storyRepository;
     private final AudioFileRepository audioFileRepository;
     private final AccessControlService accessControlService;
-    private final ViewEventService viewEventService;
+
+    // Đọc thẳng repository chứ không qua ReadingProgressService: lớp đó đã phụ
+    // thuộc vào ChapterService, gọi ngược lại sẽ thành vòng phụ thuộc bean.
+    private final ReadingProgressRepository progressRepository;
+    private final CurrentUserService currentUserService;
 
     /**
      * Danh sách chương của một truyện.
@@ -71,12 +76,12 @@ public class ChapterService {
         // >>> Chốt chặn quyền truy cập <<<
         accessControlService.requireAccess(chapter);
 
-        chapterRepository.incrementViewCount(chapterId);
-
         Story story = chapter.getStory();
 
-        // Sau chốt chặn quyền, nên chương bị khóa không bao giờ được tính là một lượt đọc.
-        viewEventService.record(story.getId(), chapterId, ViewType.READ);
+        // Mở chương ra chưa phải là đã đọc nó. Lượt đọc được tính khi người đọc
+        // đọc hết chương và chuyển sang chương sau — xem
+        // ReadingProgressService.markCompleted. Nhờ vậy F5 không còn cộng lượt,
+        // và mỗi người chỉ được tính một lượt cho mỗi chương.
         Long previousId = chapterRepository
                 .findPrevious(story.getId(), chapter.getChapterNumber())
                 .map(Chapter::getId).orElse(null);
@@ -91,6 +96,12 @@ public class ChapterService {
                 .findFirstByChapterIdAndSourceAndStatus(chapterId, AudioSource.TTS, AudioStatus.READY)
                 .isPresent();
 
+        // Khách không sinh câu truy vấn nào — Optional rỗng là dừng ngay tại đây.
+        Integer audioPosition = currentUserService.currentUserId()
+                .flatMap(userId -> progressRepository.findByUserIdAndChapterId(userId, chapterId))
+                .map(ReadingProgress::getAudioPositionSeconds)
+                .orElse(null);
+
         return new ChapterDetailDto(
                 chapter.getId(),
                 story.getId(),
@@ -100,12 +111,13 @@ public class ChapterService {
                 chapter.getChapterNumber(),
                 chapter.getAccessLevel().name(),
                 chapter.getAccessLevel().getLabel(),
-                chapter.getViewCount() + 1,
+                chapter.getViewCount(),
                 chapter.getCreatedAt(),
                 previousId,
                 nextId,
                 hasUpload,
-                hasTts);
+                hasTts,
+                audioPosition);
     }
 
     // ==================== Phía Admin ====================

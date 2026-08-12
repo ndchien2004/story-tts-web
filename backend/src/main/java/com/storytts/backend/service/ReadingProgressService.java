@@ -3,11 +3,13 @@ package com.storytts.backend.service;
 import com.storytts.backend.domain.Chapter;
 import com.storytts.backend.domain.ReadingProgress;
 import com.storytts.backend.domain.User;
+import com.storytts.backend.domain.ViewType;
 import com.storytts.backend.dto.interaction.ProgressDto;
 import com.storytts.backend.dto.interaction.ProgressRequest;
 import com.storytts.backend.dto.interaction.ShelfEntryDto;
 import com.storytts.backend.repository.ChapterRepository;
 import com.storytts.backend.repository.ReadingProgressRepository;
+import com.storytts.backend.repository.StoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -39,9 +41,11 @@ public class ReadingProgressService {
 
     private final ReadingProgressRepository progressRepository;
     private final ChapterRepository chapterRepository;
+    private final StoryRepository storyRepository;
     private final ChapterService chapterService;
     private final AccessControlService accessControlService;
     private final CurrentUserService currentUserService;
+    private final ViewEventService viewEventService;
 
     /**
      * Ghi nhận vị trí đọc/nghe hiện tại, tạo bản ghi nếu chưa có.
@@ -70,10 +74,43 @@ public class ReadingProgressService {
         return toDto(progressRepository.save(progress));
     }
 
-    /** Đánh dấu chương đã đọc xong — gọi khi người dùng chuyển chương hoặc đọc/nghe hết. */
+    /**
+     * Đánh dấu chương đã đọc xong — gọi khi người dùng chuyển chương hoặc đọc/nghe hết.
+     *
+     * <p><b>Đây cũng là chỗ duy nhất tính lượt xem.</b> Trước đây lượt xem cộng
+     * ngay khi mở chương, nên bấm F5 mười lần là mười lượt, và "top truyện xem
+     * nhiều nhất" ở trang thống kê dựng trên một con số ai cũng bơm được. Tính ở
+     * đây thì mỗi lượt tương ứng với một người đã đọc hết một chương, và
+     * <b>mỗi người chỉ được tính một lần cho mỗi chương</b> — lần đọc lại không
+     * cộng thêm, vì tiến độ đã ở mức hoàn thành từ trước.
+     *
+     * <p>Đánh đổi phải biết: lượt đọc của Khách chưa đăng nhập không còn được
+     * tính, vì không có danh tính thì không có cách nào biết đây là lần đầu hay
+     * lần thứ mười. Con số nhỏ hơn trước, nhưng nói đúng.
+     */
     @Transactional
     public ProgressDto markCompleted(Long chapterId) {
-        return save(chapterId, new ProgressRequest(COMPLETE_POSITION, null));
+        User user = currentUserService.requireCurrentUser();
+        Chapter chapter = chapterService.findDetailEntity(chapterId);
+        accessControlService.requireAccess(chapter);
+
+        ReadingProgress progress = progressRepository
+                .findByUserIdAndChapterId(user.getId(), chapterId)
+                .orElseGet(() -> ReadingProgress.builder().user(user).chapter(chapter).build());
+
+        boolean firstTime = !isCompleted(progress);
+        progress.setLastPosition(COMPLETE_POSITION);
+        ProgressDto saved = toDto(progressRepository.save(progress));
+
+        if (firstTime) {
+            Long storyId = chapter.getStory().getId();
+            chapterRepository.incrementViewCount(chapterId);
+            storyRepository.incrementViewCount(storyId);
+            // Sau chốt chặn quyền, nên chương bị khóa không bao giờ thành một lượt đọc.
+            viewEventService.record(storyId, chapterId, ViewType.READ);
+        }
+
+        return saved;
     }
 
     /** Id các chương của một truyện mà người dùng hiện tại đã đọc xong. */

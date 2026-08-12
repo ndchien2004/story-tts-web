@@ -118,7 +118,12 @@ public class StoryService {
         Story story = storyRepository.findDetailById(storyId)
                 .orElseThrow(() -> ResourceNotFoundException.of("truyện", storyId));
 
-        storyRepository.incrementViewCount(storyId);
+        // Mở trang truyện không còn tính là một lượt xem. Bấm F5 mười lần từng
+        // cộng mười lượt, nên con số đó không nói được truyện nào thật sự có
+        // người đọc — mà "top truyện xem nhiều nhất" ở trang thống kê lại dựng
+        // trên đúng nó. Lượt xem giờ được tính ở chỗ có bằng chứng là người ta
+        // đã đọc: khi họ đọc xong một chương và chuyển sang chương tiếp theo.
+        // Xem ReadingProgressService.markCompleted.
 
         List<ChapterSummaryDto> chapters = chapterService.listByStory(storyId);
         long chapterCount = chapters.size();

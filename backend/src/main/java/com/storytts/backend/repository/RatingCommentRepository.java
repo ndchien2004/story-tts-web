@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
+import java.util.Optional;
 
 public interface RatingCommentRepository extends JpaRepository<RatingComment, Long> {
 
@@ -26,6 +27,16 @@ public interface RatingCommentRepository extends JpaRepository<RatingComment, Lo
     long countRatings(@Param("storyId") Long storyId);
 
     long countByStoryIdAndUserIdIn(Long storyId, Collection<Long> userIds);
+
+    /**
+     * Lượt chấm sao của một người cho một truyện — theo thiết kế thì nhiều nhất một dòng.
+     *
+     * <p>Bảng này giữ cả bình luận lẫn điểm trên cùng một dòng, nên "một người
+     * một điểm" không diễn tả được bằng một ràng buộc unique thông thường: người
+     * đọc vẫn được bình luận nhiều lần, chỉ điểm là một lần.
+     * {@code RatingCommentService.create} là chỗ giữ quy tắc đó.
+     */
+    Optional<RatingComment> findFirstByStoryIdAndUserIdAndRatingIsNotNull(Long storyId, Long userId);
 
     /**
      * Mọi bình luận của mọi truyện — màn hình kiểm duyệt bên quản trị.

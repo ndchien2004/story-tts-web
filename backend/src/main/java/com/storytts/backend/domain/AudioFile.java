@@ -13,7 +13,11 @@ import java.time.Instant;
 @Entity
 @Table(
         name = "audio_files",
-        indexes = @Index(name = "idx_audio_chapter", columnList = "chapter_id")
+        indexes = {
+                @Index(name = "idx_audio_chapter", columnList = "chapter_id"),
+                // Hạn mức mỗi ngày đếm theo (ai, lúc nào) nên hai cột đó đi cùng nhau.
+                @Index(name = "idx_audio_requested_by", columnList = "requested_by, created_at")
+        }
 )
 @Getter
 @Setter
@@ -84,6 +88,19 @@ public class AudioFile {
     /** Thông báo lỗi khi status = FAILED, để frontend hiển thị rõ ràng. */
     @Column(name = "error_message", length = 1000)
     private String errorMessage;
+
+    /**
+     * Người đọc đã bấm "Nghe bằng AI" để sinh ra bản này.
+     *
+     * <p>Null với bản tải lên, với các bản do khu quản trị dựng, và với những bản
+     * có trước khi có cột này. Hạn mức mỗi ngày đếm đúng những dòng có tên người
+     * — nhờ đó hai điều sau là hệ quả của cấu trúc chứ không phải một quy tắc
+     * phải nhớ: nghe lại bản đã có không tốn lượt nào (vì không sinh dòng nào),
+     * và một lô hàng trăm chương do Admin dựng không ăn vào ngân sách của người đọc.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "requested_by", foreignKey = @ForeignKey(name = "fk_audio_requested_by"))
+    private User requestedBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

@@ -7,6 +7,7 @@ import com.storytts.backend.dto.audio.TtsRequest;
 import com.storytts.backend.dto.audio.VoiceOptionDto;
 import com.storytts.backend.exception.ChapterLockedException;
 import com.storytts.backend.exception.TtsException;
+import com.storytts.backend.exception.TtsQuotaExceededException;
 import com.storytts.backend.repository.AudioFileRepository;
 import com.storytts.backend.service.AccessControlService;
 import com.storytts.backend.service.ChapterService;
@@ -16,7 +17,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -266,6 +267,146 @@ class TtsServiceTest {
         verify(audioFileRepository).findTtsCache(CHAPTER_ID, VOICE, 0);
     }
 
+    // ==================== Ngân sách của người đọc ====================
+    //
+    // Hạn mức mỗi ngày của mục 4.5 chỉ đúng nếu ReaderBudget được hỏi ý kiến đúng
+    // một chỗ: ngay trước khi ghi bản ghi mới. Sớm hơn thì nghe lại bản đã có cũng
+    // bị trừ lượt; muộn hơn thì đã gọi API rồi mới hỏi. Nhóm test này ghim chỗ đó.
+
+    @Test
+    @DisplayName("Không truyền ngân sách → không hạn mức, không ghi tên ai (đường khu quản trị)")
+    void duongAdminKhongCoHanMuc() {
+        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0));
+
+        ArgumentCaptor<AudioFile> saved = ArgumentCaptor.forClass(AudioFile.class);
+        verify(audioFileRepository).save(saved.capture());
+
+        // requestedBy để trống là điều kiện để phép đếm trần chung không tính lô
+        // của Admin vào ngân sách của người đọc.
+        assertThat(saved.getValue().getRequestedBy()).isNull();
+    }
+
+    @Test
+    @DisplayName("Dựng bản mới: hỏi ngân sách trước khi ghi, và ghi tên người yêu cầu")
+    void banMoiThiHoiNganSachRoiGhiTen() {
+        User reader = User.builder().id(42L).username("nguoi-doc").build();
+        RecordingBudget budget = new RecordingBudget(reader);
+
+        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0), budget);
+
+        assertThat(budget.asked).isEqualTo(1);
+
+        ArgumentCaptor<AudioFile> saved = ArgumentCaptor.forClass(AudioFile.class);
+        verify(audioFileRepository).save(saved.capture());
+        assertThat(saved.getValue().getRequestedBy()).isSameAs(reader);
+    }
+
+    @Test
+    @DisplayName("Ngân sách bị hỏi SAU khi kiểm quyền và tra cache, TRƯỚC khi ghi và phát sự kiện")
+    void thuTuHoiNganSach() {
+        RecordingBudget budget = new RecordingBudget(null);
+
+        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0), budget);
+
+        InOrder order = inOrder(accessControlService, audioFileRepository, eventPublisher);
+        order.verify(accessControlService).requireAccess(any(Chapter.class));
+        order.verify(audioFileRepository).findTtsCache(CHAPTER_ID, VOICE, 0);
+        order.verify(audioFileRepository).save(any(AudioFile.class));
+        order.verify(eventPublisher).publishEvent(any(TtsGenerationRequested.class));
+
+        assertThat(budget.askedBeforeSave).isTrue();
+    }
+
+    @Test
+    @DisplayName("Trúng cache READY → không hỏi ngân sách, tức nghe lại không tốn lượt nào")
+    void cacheReadyThiKhongTonLuot() {
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0))
+                .thenReturn(Optional.of(audio(AudioStatus.READY, "da-co-san.mp3")));
+        RecordingBudget budget = new RecordingBudget(null);
+
+        AudioInfoDto result = ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0), budget);
+
+        assertThat(result.status()).isEqualTo(AudioStatus.READY.name());
+        assertThat(budget.asked).isZero();
+    }
+
+    @Test
+    @DisplayName("Bản đang dựng dở → không hỏi ngân sách; người thứ hai chờ cùng, không bị trừ")
+    void dangDungDoThiKhongTonLuot() {
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0))
+                .thenReturn(Optional.of(audio(AudioStatus.PROCESSING, null)));
+        RecordingBudget budget = new RecordingBudget(null);
+
+        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0), budget);
+
+        assertThat(budget.asked).isZero();
+    }
+
+    @Test
+    @DisplayName("Bản cũ đọc sai chữ hoặc hỏng → vẫn phải hỏi ngân sách, vì sẽ gọi API lần nữa")
+    void dungLaiTuDauThiVanTonLuot() {
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0)).thenReturn(
+                Optional.of(audio(AudioStatus.READY, "ban-cu.mp3", sha256Hex("Chữ của bản trước."))));
+        RecordingBudget stale = new RecordingBudget(null);
+        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0), stale);
+        assertThat(stale.asked).isEqualTo(1);
+
+        reset(audioFileRepository);
+        when(audioFileRepository.findTtsCache(CHAPTER_ID, VOICE, 0))
+                .thenReturn(Optional.of(audio(AudioStatus.FAILED, "hong.mp3")));
+        when(audioFileRepository.save(any(AudioFile.class))).thenAnswer(inv -> inv.getArgument(0));
+        RecordingBudget failed = new RecordingBudget(null);
+        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0), failed);
+        assertThat(failed.asked).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Ngân sách từ chối → không ghi bản ghi nào, không phát sự kiện, không gọi API")
+    void nganSachTuChoiThiDungHan() {
+        TtsService.ReaderBudget refusing = new TtsService.ReaderBudget() {
+            @Override
+            public void beforeNewGeneration(Chapter chapter) {
+                throw new TtsQuotaExceededException(TtsQuotaExceededException.Scope.USER, 3);
+            }
+
+            @Override
+            public User requester() {
+                return null;
+            }
+        };
+
+        assertThatThrownBy(() -> ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0), refusing))
+                .isInstanceOf(TtsQuotaExceededException.class);
+
+        verify(audioFileRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any(TtsGenerationRequested.class));
+        verify(ttsEngine, never()).synthesize(anyString(), anyString(), anyInt());
+    }
+
+    /** Ngân sách chỉ đếm số lần bị hỏi và mốc thời điểm bị hỏi. */
+    private final class RecordingBudget implements TtsService.ReaderBudget {
+
+        private final User user;
+        private int asked;
+        private boolean askedBeforeSave;
+
+        private RecordingBudget(User user) {
+            this.user = user;
+        }
+
+        @Override
+        public void beforeNewGeneration(Chapter chapter) {
+            asked++;
+            askedBeforeSave = mockingDetails(audioFileRepository).getInvocations().stream()
+                    .noneMatch(invocation -> invocation.getMethod().getName().equals("save"));
+        }
+
+        @Override
+        public User requester() {
+            return user;
+        }
+    }
+
     // ==================== Dữ liệu dựng sẵn ====================
 
     private static Chapter chapter(AccessLevel level) {
@@ -308,15 +449,18 @@ class TtsServiceTest {
         }
     }
 
+    /** Khối {@code reader} để null: hàm khởi tạo của record tự điền bộ ngưỡng mặc định. */
     private static TtsProperties enabledProperties() {
         return new TtsProperties(true, List.of("elevenlabs"), 0,
                 new TtsProperties.ElevenLabs("https://api.elevenlabs.io/v1", "khoa-gia", VOICE,
-                        "eleven_multilingual_v2"));
+                        "eleven_multilingual_v2"),
+                null);
     }
 
     private static TtsProperties disabledProperties() {
         return new TtsProperties(false, List.of("elevenlabs"), 0,
                 new TtsProperties.ElevenLabs("https://api.elevenlabs.io/v1", "khoa-gia", VOICE,
-                        "eleven_multilingual_v2"));
+                        "eleven_multilingual_v2"),
+                null);
     }
 }

@@ -34,6 +34,10 @@ import java.util.List;
  * Lưu ý: các endpoint đọc chương/nghe audio để {@code permitAll} ở tầng URL, vì "Khách"
  * vẫn được đọc chương PUBLIC. Việc chặn chương MEMBER/VIP nằm ở
  * {@code AccessControlService} — một lớp kiểm tra quyền dùng chung.
+ * <p>
+ * Ngoại lệ đáng chú ý: <b>tạo</b> audio bằng AI thì bắt buộc đăng nhập ngay ở tầng
+ * URL này, vì mỗi lần tạo là một lần gọi API tính tiền và hạn mức mỗi ngày chỉ đếm
+ * được khi biết là của ai.
  */
 @Configuration
 @EnableWebSecurity
@@ -107,6 +111,14 @@ public class SecurityConfig {
                                 "/api/stories/**", "/api/chapters/**",
                                 "/api/genres/**", "/api/authors/**").permitAll()
 
+                        // --- Nghe bằng AI ---
+                        // Trạng thái xem được cả khi chưa đăng nhập, để trang đọc biết
+                        // nên hiện nút hay hiện lời mời đăng nhập. Còn việc tạo audio
+                        // (POST /api/chapters/{id}/tts) không nằm trong danh sách này,
+                        // nên nó rơi vào anyRequest().authenticated() bên dưới: tạo
+                        // audio là tiêu tiền, phải có danh tính mới tính hạn mức được.
+                        .requestMatchers(HttpMethod.GET, "/api/tts/status").permitAll()
+
                         .anyRequest().authenticated())
                 .authenticationProvider(authenticationProvider(passwordEncoder()))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -120,8 +132,10 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(corsProperties.allowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
-        // Trình phát audio cần đọc được các header này khi stream theo Range.
-        configuration.setExposedHeaders(List.of("Content-Disposition", "Content-Range", "Accept-Ranges", "Content-Length"));
+        // Trình phát audio cần đọc được các header này khi stream theo Range;
+        // Retry-After là để trang đọc nói được "hết lượt, mai quay lại".
+        configuration.setExposedHeaders(List.of("Content-Disposition", "Content-Range",
+                "Accept-Ranges", "Content-Length", "Retry-After"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 

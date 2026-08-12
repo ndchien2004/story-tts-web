@@ -80,8 +80,15 @@ public class RatingCommentService {
     /**
      * Gửi đánh giá và/hoặc bình luận.
      *
-     * <p>Mỗi lần gửi là một bản ghi riêng, giữ nguyên thứ tự thời gian của cuộc trò chuyện
-     * dưới truyện; điểm trung bình vì thế tính trên mọi lượt chấm chứ không chỉ lượt cuối.
+     * <p><b>Mỗi người một điểm cho mỗi truyện.</b> Trước đây mỗi lần gửi là một
+     * lượt chấm mới và tất cả đều vào điểm trung bình, nên một người gửi mười lần
+     * là dời được điểm của truyện — con số 4.8 sao khi đó không nói lên điều gì.
+     * Giờ lần chấm sau <b>sửa</b> điểm cũ chứ không cộng thêm một lượt: điểm trung
+     * bình luôn là bình quân trên số người, không phải trên số lần bấm.
+     *
+     * <p>Bình luận thì vẫn gửi bao nhiêu lần cũng được — đó là một cuộc trò chuyện,
+     * và thứ tự thời gian của nó phải được giữ. Nên khi một lần gửi vừa đổi điểm
+     * vừa có bình luận, điểm về dòng cũ và bình luận thành một dòng mới.
      */
     @Transactional
     public CommentDto create(Long storyId, CommentRequest request) {
@@ -91,15 +98,34 @@ public class RatingCommentService {
 
         String comment = request.comment() == null ? null : request.comment().trim();
         boolean hasComment = comment != null && !comment.isBlank();
+        Integer rating = request.rating();
 
-        if (request.rating() == null && !hasComment) {
+        if (rating == null && !hasComment) {
             throw new BadRequestException("Hãy chấm sao hoặc viết bình luận trước khi gửi.");
+        }
+
+        if (rating != null) {
+            RatingComment rated = ratingCommentRepository
+                    .findFirstByStoryIdAndUserIdAndRatingIsNotNull(storyId, user.getId())
+                    .orElse(null);
+
+            if (rated != null) {
+                rated.setRating(rating);
+                ratingCommentRepository.save(rated);
+                log.info("User id={} đổi điểm truyện id={} thành {}", user.getId(), storyId, rating);
+
+                if (!hasComment) {
+                    return CommentDto.from(rated, user.getId());
+                }
+                // Điểm đã nằm ở dòng cũ; dòng mới dưới đây chỉ là bình luận.
+                rating = null;
+            }
         }
 
         RatingComment saved = ratingCommentRepository.save(RatingComment.builder()
                 .user(user)
                 .story(story)
-                .rating(request.rating())
+                .rating(rating)
                 .comment(hasComment ? comment : null)
                 .build());
 
