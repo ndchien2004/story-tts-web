@@ -72,6 +72,25 @@ export const audioApi = {
   list: (chapterId) => client.get(`/api/chapters/${chapterId}/audio`).then((r) => r.data),
 
   /**
+   * Asks the server to narrate a chapter that has no audio yet.
+   *
+   * Comes back straight away: READY when a usable track already existed (which
+   * costs the reader nothing), otherwise PROCESSING to be polled. Voice and
+   * speed are the server's to choose — they are part of the cache key, so
+   * letting readers pick would mint a new file per preference per chapter.
+   */
+  requestTts: (chapterId) => client.post(`/api/chapters/${chapterId}/tts`).then((r) => r.data),
+
+  /**
+   * State of one track, for the wait after a generation is queued.
+   *
+   * Deliberately not `list` — that endpoint counts a listen every time it is
+   * called, and polling it would invent dozens of them per chapter.
+   */
+  ttsStatus: (chapterId, audioId) =>
+    client.get(`/api/chapters/${chapterId}/tts/${audioId}`).then((r) => r.data),
+
+  /**
    * Builds the URL for an `<audio>` element.
    *
    * The element cannot send an Authorization header, so the token travels as a
@@ -85,6 +104,17 @@ export const audioApi = {
     }
     return url.toString();
   },
+};
+
+export const ttsApi = {
+  /**
+   * Whether narration can be requested, and how many goes the caller has left.
+   *
+   * One call gives the reading page everything it needs to decide between a
+   * button, a sign-in prompt and showing nothing at all — rather than offering
+   * a button that is bound to fail.
+   */
+  status: () => client.get("/api/tts/status").then((r) => r.data),
 };
 
 /* ------------------------------------------------------------------ */

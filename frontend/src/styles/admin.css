@@ -800,6 +800,152 @@ a.admin-dash-todo:hover {
   grid-template-columns: minmax(0, 1fr) var(--admin-aside, 21rem);
 }
 
+/*
+ * VIP page: two full-width panels, stacked.
+ *
+ * No columns. Three panels sharing one width — form, price list, orders — left
+ * each of them too narrow to be read, so the price list moved to a page of its
+ * own. What remains gets the whole width: the form spreads its fields into a
+ * row, and the orders keep every column of their table.
+ *
+ * The form sizes to its content and the orders take what is left, because the
+ * orders are the only list here that grows without end and so the only one that
+ * should ever scroll.
+ */
+.admin-vip-stack {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-rows: auto minmax(14rem, 1fr);
+  gap: var(--space-4);
+  min-height: 0;
+}
+
+.admin-vip-orders {
+  min-height: 0;
+}
+
+/*
+ * The plan form.
+ *
+ * Its own base rather than reusing `.admin-catalog-form`: that one carries the
+ * padding and the bottom rule of the panel it was built for, and this form now
+ * sits inside an already-padded panel body on one screen and inside a dialog on
+ * the other. Both would have shown a stray rule and a double margin.
+ */
+.vip-plan-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Fields across the width rather than down a column. Auto-fit rather than a
+   fixed count, so the row reflows on a laptop instead of overflowing. */
+.vip-form-wide {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-3) var(--space-4);
+  align-items: start;
+}
+
+/* The description holds a sentence, so it takes the room two figures would. */
+.vip-form-wide > .vip-form-desc {
+  grid-column: span 2;
+}
+
+/* "Đang bán" and the submit button belong together on a line of their own,
+   under everything they apply to. */
+.vip-form-wide .vip-form-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding-top: var(--space-2);
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+/* Stacked form (in the edit dialog): the same row, minus the grid. */
+.vip-form-foot {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+/* Pushes a panel-head control to the far end, past the stat chips. */
+.admin-panel-head-end {
+  margin-left: auto;
+}
+
+/* Cards, because a plan is a price with a couple of facts under it — a table
+   row spreads that across columns that then have to be squeezed to fit. */
+.vip-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.vip-plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: var(--outline-width) solid var(--outline);
+  background: var(--bg);
+}
+
+/* A withdrawn plan stays in place and stays legible — it is still a thing an
+   admin edits — but it should not read as part of the live price list. */
+.vip-plan-card-off {
+  background: var(--bg-alt);
+}
+
+.vip-plan-card-off .vip-plan-price {
+  color: var(--ink-muted);
+  text-decoration: line-through;
+}
+
+/* Which card the form on the left is currently writing. */
+.vip-plan-card-editing {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.vip-plan-card-head {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.vip-plan-price {
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.vip-plan-meta {
+  font-size: 0.85rem;
+}
+
+.vip-plan-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.vip-plan-card-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+
 .admin-column {
   display: flex;
   flex-direction: column;
@@ -1117,6 +1263,21 @@ a.admin-dash-todo:hover {
   .admin-split,
   .admin-split-end {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The page scrolls instead of each panel scrolling inside itself. */
+  .admin-vip-stack {
+    grid-template-rows: auto auto;
+  }
+
+  /* One field per line: a 11rem minimum would still fit two on a phone, and
+     two half-width number fields side by side are harder to hit than one. */
+  .vip-form-wide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .vip-form-wide > .vip-form-desc {
+    grid-column: auto;
   }
 
   .admin-panel {

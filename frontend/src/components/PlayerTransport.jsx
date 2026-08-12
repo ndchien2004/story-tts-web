@@ -4,6 +4,9 @@ import { Button } from "./ui";
 const SKIP_SECONDS = 10;
 const RATE_OPTIONS = [0.75, 1, 1.25, 1.5, 2];
 
+/** A saved position this close to the end counts as finished, not as a place to resume. */
+const RESUME_END_MARGIN_S = 5;
+
 /** `m:ss`, or `h:mm:ss` once the track passes an hour. */
 function formatTime(value) {
   if (!Number.isFinite(value) || value < 0) return "--:--";
@@ -80,9 +83,25 @@ const VolumeIcon = ({ muted }) => (
  *
  * @param autoPlay start playing as soon as the track can play
  * @param onAutoPlayed called once the auto-start has been honoured
+ * @param initialPosition seconds to resume from, 0 to start at the beginning
+ * @param onPositionChange called as playback advances, for saving the position
+ * @param onPause called with the exact position when playback stops
  */
-export default function PlayerTransport({ src, autoPlay = false, onAutoPlayed, onEnded }) {
+export default function PlayerTransport({
+  src,
+  autoPlay = false,
+  onAutoPlayed,
+  onEnded,
+  initialPosition = 0,
+  onPositionChange,
+  onPause,
+}) {
   const audioRef = useRef(null);
+
+  // Resuming happens once per track. Without the latch, a `loadedmetadata` that
+  // fires again (some browsers do, after a seek) would drag the listener back to
+  // where they started.
+  const resumedRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -120,6 +139,23 @@ export default function PlayerTransport({ src, autoPlay = false, onAutoPlayed, o
     setCurrentTime(0);
     setDuration(0);
     setPlaying(false);
+    resumedRef.current = false;
+  }, [src]);
+
+  /**
+   * Keeps the position when the listener leaves mid-track.
+   *
+   * Navigating away tears the element down without a `pause` event, so without
+   * this the last stretch since the throttled save would be lost — which is
+   * exactly the stretch someone who just closed the tab cares about.
+   */
+  useEffect(() => {
+    const element = audioRef.current;
+    return () => {
+      const seconds = element?.currentTime ?? 0;
+      if (seconds > 0) onPause?.(seconds);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
   useEffect(() => {
@@ -177,8 +213,20 @@ export default function PlayerTransport({ src, autoPlay = false, onAutoPlayed, o
 
   function handleLoadedMetadata() {
     const element = audioRef.current;
-    setDuration(Number.isFinite(element.duration) ? element.duration : 0);
+    const length = Number.isFinite(element.duration) ? element.duration : 0;
+    setDuration(length);
     element.playbackRate = rate;
+
+    // Pick up where the listener left off. A position within a few seconds of
+    // the end means they finished it, and dropping them there again would be a
+    // track that ends the moment it starts.
+    if (!resumedRef.current && initialPosition > 0) {
+      resumedRef.current = true;
+      if (!length || initialPosition < length - RESUME_END_MARGIN_S) {
+        element.currentTime = initialPosition;
+        setCurrentTime(initialPosition);
+      }
+    }
 
     if (autoPlay) {
       element.play().catch(() => {});
@@ -198,9 +246,17 @@ export default function PlayerTransport({ src, autoPlay = false, onAutoPlayed, o
         onDurationChange={(event) =>
           setDuration(Number.isFinite(event.target.duration) ? event.target.duration : 0)
         }
-        onTimeUpdate={(event) => setCurrentTime(event.target.currentTime)}
+        onTimeUpdate={(event) => {
+          setCurrentTime(event.target.currentTime);
+          onPositionChange?.(event.target.currentTime);
+        }}
         onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
+        onPause={(event) => {
+          setPlaying(false);
+          // Stopping is the moment the position is worth keeping exactly, rather
+          // than at whatever the throttled interval last happened to catch.
+          onPause?.(event.target.currentTime);
+        }}
         onWaiting={() => setBuffering(true)}
         onPlaying={() => setBuffering(false)}
         onCanPlay={() => setBuffering(false)}

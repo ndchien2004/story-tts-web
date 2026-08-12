@@ -29,6 +29,7 @@ import AdminChapterFormPage from "./pages/admin/AdminChapterFormPage";
 import AdminCatalogPage from "./pages/admin/AdminCatalogPage";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
 import AdminVipPage from "./pages/admin/AdminVipPage";
+import AdminVipPlansPage from "./pages/admin/AdminVipPlansPage";
 
 export default function App() {
   return (
@@ -98,6 +99,8 @@ export default function App() {
                 <Route path="binh-luan" element={<AdminCommentsPage />} />
                 <Route path="thanh-vien" element={<AdminUsersPage />} />
                 <Route path="vip" element={<AdminVipPage />} />
+                {/* The price list on its own page — see AdminVipPlansPage. */}
+                <Route path="vip/goi" element={<AdminVipPlansPage />} />
                 <Route path="truyen/moi" element={<AdminStoryFormPage />} />
                 <Route path="truyen/:storyId" element={<AdminStoryFormPage />} />
                 <Route path="truyen/:storyId/chuong" element={<AdminChaptersPage />} />

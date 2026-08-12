@@ -38,9 +38,17 @@ export default function LockedGate({ requiredAccessLevel, message }) {
           </ButtonLink>
         </div>
       ) : (
-        <p style={{ fontWeight: 500 }}>
-          Tài khoản của bạn chưa được cấp quyền VIP. Vui lòng liên hệ quản trị viên để nâng cấp.
-        </p>
+        /* A signed-in member is one step from being able to read this, so the
+           screen has to offer that step. Telling them to contact an admin left
+           them at a dead end while the upgrade page was working all along. */
+        <div className="stack" style={{ gap: "0.75rem", alignItems: "center" }}>
+          <ButtonLink to="/nang-cap" variant="primary" size="lg">
+            Nâng cấp VIP
+          </ButtonLink>
+          <p className="muted" style={{ fontSize: "0.85rem" }}>
+            Hoặc liên hệ quản trị viên nếu bạn đã có quyền VIP mà vẫn thấy màn hình này.
+          </p>
+        </div>
       )}
     </div>
   );

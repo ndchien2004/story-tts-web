@@ -163,6 +163,87 @@
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Docked player: the reading screen on a narrow viewport               */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Below the reading screen's split breakpoint, the listening panel drops under
+ * the chapter — and a chapter is long, so a player at the end of it is a player
+ * you cannot reach while reading. Here it leaves the flow and pins itself to the
+ * bottom of the viewport, the way a music app does, so play/pause and the speed
+ * stay under the thumb no matter how far down the text you are.
+ *
+ * The markup does not change: fixed positioning ignores where an element sits in
+ * the document, so the transport is still declared inside its panel. The panel's
+ * other controls — which track, continuous play — stay in the flow below the
+ * text, because those are set once rather than reached for mid-chapter.
+ */
+@media (max-width: 900px) {
+  .reader-player {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    padding: var(--space-2) var(--space-4);
+    /* The phone's own home bar sits below this on iOS. */
+    padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+    background: var(--bg);
+    border-top: var(--outline-width) solid var(--outline);
+  }
+
+  /* One row: play, elapsed, scrubber, speed. */
+  .reader-player .nb-player {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  /* The controls lead, so the play button lands at the edge where a thumb
+     already is rather than in the middle of the bar. */
+  .reader-player .nb-player-controls {
+    order: -1;
+    flex: 0 0 auto;
+    gap: var(--space-2);
+  }
+
+  .reader-player .nb-player-seek {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /*
+   * Skip, mute and the volume slider go.
+   *
+   * The phone has its own volume keys, and a scrubber is easier to drag than a
+   * ±10s button is to hit twice. What is left is what a docked bar is for:
+   * play/pause and the reading speed.
+   */
+  .reader-player .nb-icon-btn,
+  .reader-player .nb-player-volume {
+    display: none;
+  }
+
+  .reader-player .nb-player-group-end {
+    margin-left: 0;
+  }
+
+  /* The speed menu opens upward: below the bar is off-screen. */
+  .reader-player .nb-menu {
+    top: auto;
+    bottom: calc(100% + 6px);
+  }
+}
+
+/* Narrowest phones give up the total length first — the scrubber already shows
+   how far along the track is. */
+@media (max-width: 400px) {
+  .reader-player .nb-player-time:last-of-type {
+    display: none;
+  }
+}
+
 /* Empty state shown before any track exists for the chapter. */
 .nb-player-empty {
   display: flex;

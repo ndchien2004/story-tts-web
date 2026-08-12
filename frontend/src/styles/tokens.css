@@ -118,6 +118,13 @@
   /* Height of the sticky header; the reader subtracts it from the viewport. */
   --navbar-height: 4rem;
 
+  /* Height the docked audio bar takes on a narrow reading screen. The reading
+     pane pads its bottom by this much, so the last lines of a chapter can still
+     be scrolled clear of the bar instead of sitting under it. Generous rather
+     than exact: an under-estimate hides text, an over-estimate only leaves a
+     little space. */
+  --reader-dock-height: 4.5rem;
+
   /* Reader preferences, driven by the reader settings controls.
      Kept in step with DEFAULT_FONT_SIZE in ThemeProvider: this is the value on
      screen for the moment before the provider writes the stored one, so a

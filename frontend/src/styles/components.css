@@ -267,6 +267,15 @@
   background: transparent;
 }
 
+/* An order still waiting on money is the one order state that wants attention,
+   so it takes the outline rather than the filled block — that one is reserved
+   for rank, and a loud amber tile here would shout louder than a VIP badge. */
+.nb-badge-warning {
+  color: var(--warning);
+  background: transparent;
+  border-color: var(--warning);
+}
+
 /* The one rank worth marking gets the filled block. */
 .nb-badge-vip {
   color: var(--on-tint);
@@ -1053,6 +1062,24 @@
   color: var(--ink-muted);
 }
 
+/* The lock and its requirement sit at the end of the row, in the same column as
+   the audio badge — a reader scanning the list reads one edge, not two. */
+.chapter-lock {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.chapter-lock svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
 /* The number is set as a figure in the margin, the way a numbered list is
    printed — no tile around it. */
 .chapter-number {
@@ -1399,6 +1426,67 @@
 
 /* Facts as label-over-value rows, each ruled off from the next; at this width
    a two-column list would break every email address across three lines. */
+/*
+ * VIP orders.
+ *
+ * Cards rather than a table: an order has one fact that matters (did it go
+ * through) and a handful of supporting numbers, and on a phone a six-column
+ * table of those would either scroll sideways or squeeze the money column into
+ * two characters. The facts inside wrap on their own, so the same markup reads
+ * as a row on a desktop and as a stack on a phone.
+ */
+.order-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.order-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: var(--outline-width) solid var(--outline);
+  background: var(--bg-alt);
+}
+
+.order-card-head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.order-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
+}
+
+.order-facts dt {
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.order-facts dd {
+  margin: 0;
+  font-weight: 500;
+}
+
+.order-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .account-facts {
   display: flex;
   flex-direction: column;
@@ -2044,7 +2132,10 @@
 @media (max-width: 900px) {
   .reader {
     height: auto;
-    padding-bottom: var(--space-6);
+    /* Room for the docked player, plus whatever the phone's own home bar takes.
+       Without it the last lines of the chapter sit underneath the bar and there
+       is no way to scroll them into view. */
+    padding-bottom: calc(var(--reader-dock-height) + env(safe-area-inset-bottom, 0px));
   }
 
   .reader-grid {
@@ -2069,6 +2160,8 @@
   .reader-content {
     max-width: none;
   }
+
+  /* The player itself pins to the bottom of the viewport — see player.css. */
 }
 
 /* Full-page gate rendered instead of chapter text when access is denied. */

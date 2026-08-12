@@ -6,12 +6,16 @@ import LockedGate from "../components/LockedGate";
 import ReaderSettings from "../components/ReaderSettings";
 import { useAuth } from "../context/auth-context";
 import useChapterAudio from "../hooks/useChapterAudio";
+import useTtsStatus from "../hooks/useTtsStatus";
 import { Alert, Button, ChevronIcon, Spinner } from "../components/ui";
 
 const AUTO_CONTINUE_KEY = "storytts.autoContinue";
 
 /** How close to the bottom of the text still counts as having reached the end. */
 const END_THRESHOLD_PX = 40;
+
+/** How often the listening position is written back while audio plays. */
+const POSITION_SAVE_INTERVAL_MS = 15_000;
 
 /**
  * Reading screen.
@@ -29,6 +33,7 @@ export default function ChapterPage() {
   // narration run out can all fire, and only the first needs to reach the server.
   const markedRead = useRef(false);
   const contentRef = useRef(null);
+  const lastPositionSaveRef = useRef(0);
 
   const [chapter, setChapter] = useState(null);
   const [lockError, setLockError] = useState(null);
@@ -45,6 +50,21 @@ export default function ChapterPage() {
   // Audio is only fetched once the chapter itself proved readable, so a locked
   // chapter never triggers a second request that is bound to be refused.
   const audio = useChapterAudio(chapterId, { enabled: Boolean(chapter) });
+
+  // Refreshed after each generation, since producing one spends a daily go.
+  const { status: ttsStatus, refresh: refreshTtsStatus } = useTtsStatus();
+
+  // One automatic narration per chapter. Without this the effect below would
+  // fire again on every state change and spend the reader's whole allowance on
+  // a single chapter.
+  const autoNarrationTried = useRef(false);
+
+  // Set on the way out of a finishing chapter and read on the way into the next
+  // one. `autoPlayNext` cannot answer "did I arrive by autoplay?" on its own,
+  // because pressing the narration button sets it too — and reading it that way
+  // would turn a failed press into an automatic retry that costs another go.
+  const arrivingByAutoContinue = useRef(false);
+  const arrivedByAutoContinue = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,6 +112,39 @@ export default function ChapterPage() {
     progressApi.save(chapterId, { lastPosition: 0 }).catch(() => {});
   }, [chapter, chapterId, isAuthenticated]);
 
+  /**
+   * Writes the listening position back so the track resumes next time (4.4).
+   *
+   * The database keeps one position per chapter, not per track, which is enough:
+   * a chapter has one narration worth following, and a reader who switches
+   * between a recording and a generated version wants the same place in the text
+   * either way.
+   */
+  const savePosition = useCallback(
+    (seconds) => {
+      if (!isAuthenticated) return;
+      progressApi
+        .save(chapterId, { audioPositionSeconds: Math.floor(seconds) })
+        .catch(() => {});
+    },
+    [chapterId, isAuthenticated],
+  );
+
+  /**
+   * Throttles the write. `timeupdate` fires several times a second, and the
+   * position only needs to be roughly right — losing the last few seconds of a
+   * session matters far less than a request per frame.
+   */
+  const handlePositionChange = useCallback(
+    (seconds) => {
+      const now = Date.now();
+      if (now - lastPositionSaveRef.current < POSITION_SAVE_INTERVAL_MS) return;
+      lastPositionSaveRef.current = now;
+      savePosition(seconds);
+    },
+    [savePosition],
+  );
+
   /** Records the chapter as finished; safe to call more than once. */
   const markRead = useCallback(() => {
     if (markedRead.current || !isAuthenticated) return;
@@ -135,15 +188,56 @@ export default function ChapterPage() {
    */
   const handleTrackEnded = useCallback(() => {
     markRead();
+    savePosition(0);
     if (autoContinue && chapter?.nextChapterId) {
       // The one case where audio may start by itself: the listener is already
       // listening, and asked for the next chapter to follow on.
+      arrivingByAutoContinue.current = true;
       setAutoPlayNext(true);
       navigate(`/chuong/${chapter.nextChapterId}`);
     }
-  }, [autoContinue, chapter, markRead, navigate]);
+  }, [autoContinue, chapter, markRead, navigate, savePosition]);
 
   const handleAutoPlayed = useCallback(() => setAutoPlayNext(false), []);
+
+  /**
+   * Continuous listening across a chapter nobody has narrated yet.
+   *
+   * Arriving here by autoplay means someone is listening with their hands full,
+   * so a chapter without a track would end the session in silence. Producing one
+   * is the only way to carry on — and it is bounded: the attempt is made once per
+   * chapter, only for a listener who arrived automatically, and only while goes
+   * remain. Opening a chapter by hand never triggers it, or browsing chapters
+   * would quietly drain the day's allowance.
+   */
+  useEffect(() => {
+    autoNarrationTried.current = false;
+    arrivedByAutoContinue.current = arrivingByAutoContinue.current;
+    arrivingByAutoContinue.current = false;
+  }, [chapterId]);
+
+  useEffect(() => {
+    if (!arrivedByAutoContinue.current || !autoContinue) return;
+    if (audio.loading || audio.hasAudio || audio.generating) return;
+    if (autoNarrationTried.current) return;
+    if (!isAuthenticated || !ttsStatus?.enabled) return;
+    // Out of goes, or the chapter is too long to narrate: the chain stops here
+    // rather than asking for something the server will refuse.
+    if (ttsStatus.remainingToday === 0) return;
+    if (ttsStatus.maxChars > 0 && (chapter?.content?.length ?? 0) > ttsStatus.maxChars) return;
+
+    autoNarrationTried.current = true;
+    audio.requestTts().then(() => refreshTtsStatus());
+  }, [audio, autoContinue, chapter, isAuthenticated, refreshTtsStatus, ttsStatus]);
+
+  /** A track the reader asked for may start on its own; that press was the consent. */
+  useEffect(() => {
+    if (audio.playWhenReady) {
+      setAutoPlayNext(true);
+      audio.clearPlayWhenReady();
+      refreshTtsStatus();
+    }
+  }, [audio, refreshTtsStatus]);
 
   if (loading) {
     return (
@@ -228,12 +322,18 @@ export default function ChapterPage() {
           <div className="reader-pane-body scroll-area">
             <AudioPlayer
               audio={audio}
+              ttsStatus={ttsStatus}
+              isAuthenticated={isAuthenticated}
+              chapterLength={chapter.content?.length ?? 0}
               autoContinue={autoContinue}
               onToggleAutoContinue={() => setAutoContinue((value) => !value)}
               onTrackEnded={handleTrackEnded}
               autoPlay={autoPlayNext}
               onAutoPlayed={handleAutoPlayed}
               hasNextChapter={Boolean(chapter.nextChapterId)}
+              initialPosition={chapter.audioPositionSeconds ?? 0}
+              onPositionChange={handlePositionChange}
+              onPause={savePosition}
             />
           </div>
         </aside>
