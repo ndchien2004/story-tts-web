@@ -264,6 +264,16 @@
   height: 1.5rem;
 }
 
+/*
+ * `.stack` xếp dọc và kéo giãn con của nó, nên trong cột nghe hẹp cái nút này
+ * chiếm trọn chiều ngang - trông như hành động chính của cả trang thay vì một
+ * lựa chọn trong khung. Để nó tự lấy chiều rộng theo nội dung, giống nút đăng
+ * nhập ở nhánh dành cho khách chưa đăng nhập ngay bên trên.
+ */
+.nb-narration-request {
+  align-self: flex-start;
+}
+
 /* ------------------------------------------------------------------ */
 /* Range input                                                         */
 /* ------------------------------------------------------------------ */

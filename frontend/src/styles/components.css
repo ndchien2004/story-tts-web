@@ -133,6 +133,23 @@
     color var(--transition);
 }
 
+/*
+ * An icon sitting next to a label needs a stated size. The reset in base.css
+ * gives `svg` a display and a maximum width but no dimensions, and an inline
+ * SVG carrying only a `viewBox` has no intrinsic size to fall back on — the
+ * browser then reaches for the default replaced-element box, which is 150px
+ * square once the square viewBox constrains it. One such icon is enough to
+ * stretch a button to the height of a paragraph.
+ *
+ * Kept above `.nb-icon-btn svg`, which is the same weight and therefore wins
+ * on order: a button holding nothing but a glyph sizes that glyph itself.
+ */
+.nb-btn svg {
+  flex: 0 0 auto;
+  width: 1.1em;
+  height: 1.1em;
+}
+
 /* No lift and no slide — the edge coming forward is the whole feedback. */
 .nb-btn:hover:not(:disabled) {
   background: var(--bg-alt);

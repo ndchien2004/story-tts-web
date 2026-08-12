@@ -109,7 +109,12 @@ function NarrationOffer({ status, isAuthenticated, chapterLength, generating, er
         <span>Chương này chưa có bản audio — nhờ hệ thống đọc giúp bạn nhé.</span>
       </div>
 
-      <Button variant="primary" onClick={onRequest} disabled={tooLong || outOfGoes}>
+      <Button
+        variant="primary"
+        className="nb-narration-request"
+        onClick={onRequest}
+        disabled={tooLong || outOfGoes}
+      >
         <SparkIcon />
         Nghe bằng AI
       </Button>
