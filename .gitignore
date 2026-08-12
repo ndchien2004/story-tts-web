@@ -6,6 +6,13 @@ backend/.env
 frontend/.env
 frontend/.env.local
 
+# ===== Ban sao co so du lieu =====
+# Ban ket xuat chua email, mat khau da bam va token dat lai mat khau cua nguoi
+# dung that - khong dua len kho ma nguon. Chan dich danh o thu muc goc de cac
+# tep di tru trong db/migration khong bi va lay.
+/backup.sql
+/*.dump.sql
+
 # ===== Java / Maven =====
 target/
 !.mvn/wrapper/maven-wrapper.jar
