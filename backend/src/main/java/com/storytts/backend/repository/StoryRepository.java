@@ -37,6 +37,23 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     @Query("SELECT s FROM Story s LEFT JOIN FETCH s.author LEFT JOIN FETCH s.genre WHERE s.id = :id")
     Optional<Story> findDetailById(@Param("id") Long id);
 
+    /**
+     * Nạp một lô truyện kèm sẵn tác giả và thể loại.
+     *
+     * <p>Dành cho những chỗ đã biết trước danh sách id — bảng xếp hạng chẳng hạn — mà vẫn
+     * cần tên tác giả và tên thể loại: {@code findAllById} thường sẽ để hai quan hệ đó ở
+     * dạng lazy và sinh thêm hai truy vấn cho mỗi dòng.
+     *
+     * <p>Thứ tự trả về là của cơ sở dữ liệu, không phải của {@code ids}; bên gọi tự xếp lại.
+     */
+    @Query("""
+            SELECT s FROM Story s
+            LEFT JOIN FETCH s.author
+            LEFT JOIN FETCH s.genre
+            WHERE s.id IN :ids
+            """)
+    List<Story> findAllWithRelationsByIds(@Param("ids") Collection<Long> ids);
+
     /** Tên truyện không phải khóa duy nhất, nên chỉ dùng để dò dữ liệu mẫu lúc khởi động. */
     Optional<Story> findFirstByTitle(String title);
 

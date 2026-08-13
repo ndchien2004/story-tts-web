@@ -4,6 +4,7 @@ import com.storytts.backend.domain.StoryStatus;
 import com.storytts.backend.dto.chapter.ChapterSummaryDto;
 import com.storytts.backend.dto.common.PageResponse;
 import com.storytts.backend.dto.story.StoryDetailDto;
+import com.storytts.backend.dto.story.StoryRankDto;
 import com.storytts.backend.dto.story.StorySummaryDto;
 import com.storytts.backend.service.ChapterService;
 import com.storytts.backend.service.StoryService;
@@ -34,6 +35,16 @@ public class StoryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size) {
         return storyService.search(keyword, genreId, status, sort, page, size);
+    }
+
+    @GetMapping("/top-listened")
+    @Operation(summary = "Xếp hạng truyện nghe nhiều nhất theo ngày/tuần/tháng",
+            description = "period nhận day (mặc định), week hoặc month. "
+                    + "Đếm trên lượt nghe thực tế trong khoảng đó, không phải tổng cộng dồn.")
+    public List<StoryRankDto> topListened(
+            @RequestParam(defaultValue = "day") String period,
+            @RequestParam(defaultValue = "10") int limit) {
+        return storyService.topListened(period, limit);
     }
 
     @GetMapping("/{id}")

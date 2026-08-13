@@ -2,9 +2,11 @@ package com.storytts.backend.service;
 
 import com.storytts.backend.domain.Story;
 import com.storytts.backend.domain.StoryStatus;
+import com.storytts.backend.domain.ViewType;
 import com.storytts.backend.dto.chapter.ChapterSummaryDto;
 import com.storytts.backend.dto.common.PageResponse;
 import com.storytts.backend.dto.story.StoryDetailDto;
+import com.storytts.backend.dto.story.StoryRankDto;
 import com.storytts.backend.dto.story.StoryRequest;
 import com.storytts.backend.dto.story.StorySummaryDto;
 import com.storytts.backend.exception.BadRequestException;
@@ -12,6 +14,7 @@ import com.storytts.backend.exception.ResourceNotFoundException;
 import com.storytts.backend.repository.ChapterRepository;
 import com.storytts.backend.repository.ReadingProgressRepository;
 import com.storytts.backend.repository.StoryRepository;
+import com.storytts.backend.repository.ViewEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -21,8 +24,12 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,8 +41,12 @@ public class StoryService {
 
     private static final int MAX_PAGE_SIZE = 50;
 
+    /** Trần cứng cho bảng xếp hạng: nó là một cột hẹp, không phải một trang danh sách. */
+    private static final int MAX_RANK_SIZE = 20;
+
     private final StoryRepository storyRepository;
     private final ChapterRepository chapterRepository;
+    private final ViewEventRepository viewEventRepository;
     // Repository chứ không phải ReadingProgressService: chỗ này chỉ cần hai truy vấn
     // đọc thuần, mà service kia lại gọi ngược sang đây khi dựng trang chi tiết truyện.
     private final ReadingProgressRepository progressRepository;
@@ -207,6 +218,66 @@ public class StoryService {
         if (story.getGenre() == null) {
             throw new BadRequestException("Vui lòng chọn hoặc nhập thể loại.");
         }
+    }
+
+    /**
+     * Bảng xếp hạng "nghe nhiều nhất" theo ngày / tuần / tháng, cho cột bên phải trang chủ.
+     *
+     * <p>Đếm trên {@code view_events} chứ không dùng {@code stories.view_count}: cột kia
+     * là tổng cộng dồn từ ngày truyện được đăng, nên ba khoảng thời gian sẽ cho ra đúng
+     * một thứ tự giống hệt nhau — mà cả điểm thú vị của bảng này nằm ở chỗ nó đổi.
+     *
+     * <p>Mốc bắt đầu cắt theo múi giờ máy chủ, giống biểu đồ ở trang quản trị: "hôm nay"
+     * là từ 0 giờ sáng nay, không phải 24 tiếng gần nhất, vì đó mới là điều người xem
+     * hiểu khi đọc chữ "ngày".
+     *
+     * @param period {@code day}, {@code week} hoặc {@code month}; giá trị lạ coi như {@code day}
+     */
+    @Transactional(readOnly = true)
+    public List<StoryRankDto> topListened(String period, int limit) {
+        ZoneId zone = ZoneId.systemDefault();
+        LocalDate today = LocalDate.now(zone);
+
+        LocalDate from = switch (period == null ? "" : period.trim().toLowerCase()) {
+            case "week" -> today.minusDays(6);
+            case "month" -> today.minusDays(29);
+            default -> today;
+        };
+
+        Instant since = from.atStartOfDay(zone).toInstant();
+        int size = Math.min(Math.max(limit, 1), MAX_RANK_SIZE);
+
+        // [storyId, số lượt] — thứ tự do truy vấn quyết định và phải giữ nguyên tới cuối.
+        List<Object[]> ranked = viewEventRepository.rankStoriesSince(
+                since, ViewType.LISTEN, PageRequest.of(0, size));
+        if (ranked.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, Long> listenCounts = new LinkedHashMap<>();
+        for (Object[] row : ranked) {
+            listenCounts.put((Long) row[0], (Long) row[1]);
+        }
+
+        // Một lượt truy vấn cho cả trang xếp hạng. findAllById trả về theo thứ tự của cơ sở
+        // dữ liệu, nên phải xếp lại theo listenCounts — nó mới là thứ tự đúng.
+        Map<Long, Story> stories = new HashMap<>();
+        for (Story story : storyRepository.findAllWithRelationsByIds(listenCounts.keySet())) {
+            stories.put(story.getId(), story);
+        }
+
+        Map<Long, Long> chapterCounts = countChapters(List.copyOf(stories.values()));
+
+        List<StoryRankDto> result = new ArrayList<>(listenCounts.size());
+        listenCounts.forEach((storyId, count) -> {
+            Story story = stories.get(storyId);
+            // Truyện đã bị xóa vẫn còn lượt nghe trong lịch sử: bỏ qua dòng đó thay vì
+            // để bảng xếp hạng vỡ.
+            if (story != null) {
+                result.add(StoryRankDto.from(story, chapterCounts.getOrDefault(storyId, 0L), count));
+            }
+        });
+        return result;
     }
 
     private Map<Long, Long> countChapters(List<Story> stories) {
