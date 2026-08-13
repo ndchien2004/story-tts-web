@@ -12,13 +12,18 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 
 /**
  * Tạo tài khoản Admin và dữ liệu mẫu ở lần chạy đầu tiên.
@@ -39,11 +44,20 @@ public class DataSeeder implements ApplicationRunner {
     private final ChapterRepository chapterRepository;
     private final RatingCommentRepository ratingCommentRepository;
     private final VipPlanRepository vipPlanRepository;
+    private final ViewEventRepository viewEventRepository;
     private final PasswordEncoder passwordEncoder;
     private final AdminProperties adminProperties;
 
     @Value("${app.seed.enabled:true}")
     private boolean seedEnabled;
+
+    /**
+     * {@code auto} (mặc định) — chỉ dựng lượt truy cập mẫu khi bảng còn rỗng;
+     * {@code append} — chèn thêm một đợt vào cơ sở dữ liệu đã có sẵn lịch sử;
+     * {@code never} — không dựng.
+     */
+    @Value("${app.seed.traffic:auto}")
+    private String trafficMode;
 
     @Override
     @Transactional
@@ -54,8 +68,10 @@ public class DataSeeder implements ApplicationRunner {
         }
         seedDemoUsers();
         seedCatalog();
-        seedDiscussion(seedReaders());
+        List<User> readers = seedReaders();
+        seedDiscussion(readers);
         seedVipPlans();
+        seedTraffic(readers);
     }
 
     /**
@@ -304,6 +320,238 @@ public class DataSeeder implements ApplicationRunner {
             log.info("Đã tạo {} tài khoản độc giả mẫu (mật khẩu chung: {}).", created, READER_PASSWORD);
         }
         return readers;
+    }
+
+    // ==================== Lượt đọc / lượt nghe ====================
+
+    /** Số ngày lịch sử được dựng, đủ phủ cả cửa sổ "tháng" của bảng xếp hạng. */
+    private static final int TRAFFIC_DAYS = 35;
+
+    /** Số lượt mỗi ngày của truyện đang ở mức trung bình, trước khi nhân trọng số. */
+    private static final int TRAFFIC_BASE_PER_DAY = 26;
+
+    /** Tỷ lệ lượt nghe trên tổng số lượt; phần còn lại là lượt đọc. */
+    private static final double LISTEN_SHARE = 0.42;
+
+    /** Tỷ lệ lượt do Khách chưa đăng nhập tạo ra. */
+    private static final double GUEST_SHARE = 0.3;
+
+    /**
+     * Hệ số độ phổ biến của từng truyện: {@code {nền, xu hướng}}.
+     *
+     * <p>Hai con số làm hai việc khác nhau. Số đầu quyết định truyện đó đông tới đâu
+     * nói chung; số sau quyết định nó đang lên hay đang xuống — nhân vào theo ngày,
+     * nên giá trị lớn hơn 1 nghĩa là gần đây mới đông, nhỏ hơn 1 nghĩa là hồi đó đông
+     * hơn bây giờ.
+     *
+     * <p>Đây mới là chỗ khiến bảng xếp hạng có ý nghĩa: nếu truyện nào cũng đều đều
+     * thì ba tab ngày/tuần/tháng sẽ cho ra cùng một thứ tự và cái tab ấy thành vô dụng.
+     * "Trạm Cuối Sao Hỏa" đang tăng mạnh nên thắng ở tab ngày; "Căn Phòng Số Bảy" đã
+     * hạ nhiệt nhưng nhờ nền cao nên vẫn dẫn ở tab tháng.
+     */
+    private static final Object[][] STORY_POPULARITY = {
+            {"Trạm Cuối Sao Hỏa", 1.0, 2.6},
+            {"Căn Phòng Số Bảy", 1.9, 0.35},
+            {"Người Gác Hải Đăng", 1.35, 1.15},
+            {"Gió Qua Đèo Vắng", 1.15, 0.8},
+            {"Chuyện Kể Bên Bếp Lửa", 0.8, 1.5},
+            {"Mùa Hạ Không Có Ve", 0.9, 1.0}
+    };
+
+    /**
+     * Dựng lịch sử truy cập giả cho {@link #TRAFFIC_DAYS} ngày gần nhất.
+     *
+     * <p>Bảng xếp hạng ở trang chủ đếm trên {@code view_events}, nên nếu bảng đó rỗng
+     * thì trang chủ trống một mảng lớn cho tới khi có người thật vào đọc — không dùng
+     * để demo được. Phần này lấp chỗ đó.
+     *
+     * <p>Mặc định chỉ chạy khi bảng còn rỗng: đây là dữ liệu bịa, và trộn nó vào số liệu
+     * thật sau mỗi lần khởi động lại thì trang thống kê của Admin sẽ nói dối. Đặt
+     * {@code app.seed.traffic=append} để chèn thêm một đợt nữa vào cơ sở dữ liệu đã có
+     * lịch sử — dùng đúng một lần khi cần dữ liệu demo, rồi trả về {@code auto}, vì để
+     * nguyên thì cứ mỗi lần khởi động lại là thêm một đợt.
+     *
+     * <p>Không bao giờ xóa gì cả: lượt truy cập thật đang nằm trong bảng vẫn được giữ và
+     * được cộng vào tổng.
+     *
+     * <p>Ngẫu nhiên có hạt cố định: cùng một bộ dữ liệu sau mỗi lần dựng lại cơ sở dữ
+     * liệu, nên ảnh chụp màn hình trong báo cáo vẫn khớp với những gì chấm được.
+     */
+    private void seedTraffic(List<User> readers) {
+        boolean append = "append".equalsIgnoreCase(trafficMode);
+        if ("never".equalsIgnoreCase(trafficMode)) {
+            return;
+        }
+        if (!append && viewEventRepository.count() > 0) {
+            return;
+        }
+
+        List<Story> stories = storyRepository.findAll();
+        if (stories.isEmpty()) {
+            return;
+        }
+
+        Map<String, double[]> weights = new HashMap<>();
+        for (Object[] row : STORY_POPULARITY) {
+            weights.put((String) row[0], new double[]{(Double) row[1], (Double) row[2]});
+        }
+
+        List<Long> readerIds = readers.stream().map(User::getId).toList();
+        Random random = new Random(20240813L);
+        ZoneId zone = ZoneId.systemDefault();
+        LocalDate today = LocalDate.now(zone);
+
+        List<ViewEvent> batch = new ArrayList<>();
+
+        for (Story story : stories) {
+            List<Chapter> chapters = chapterRepository.findByStoryIdOrderByChapterNumberAsc(story.getId());
+            if (chapters.isEmpty()) {
+                continue;
+            }
+
+            // Truyện do Admin thêm sau này không có trong bảng hệ số: cho nó mức trung
+            // bình, đều đặn, thay vì bỏ trắng.
+            double[] weight = weights.getOrDefault(story.getTitle(), new double[]{1.0, 1.0});
+
+            for (int dayOffset = TRAFFIC_DAYS - 1; dayOffset >= 0; dayOffset--) {
+                LocalDate day = today.minusDays(dayOffset);
+                int count = dailyCount(weight, dayOffset, day, random);
+
+                for (int i = 0; i < count; i++) {
+                    Chapter chapter = chapters.get(pickChapter(chapters.size(), random));
+                    ViewType type = random.nextDouble() < LISTEN_SHARE ? ViewType.LISTEN : ViewType.READ;
+
+                    batch.add(ViewEvent.builder()
+                            .storyId(story.getId())
+                            .chapterId(chapter.getId())
+                            .userId(guestOrReader(readerIds, random))
+                            .type(type)
+                            .createdAt(momentWithin(day, zone, random))
+                            .build());
+                }
+            }
+        }
+
+        // Chia lô: một lần saveAll với hàng chục nghìn thực thể giữ tất cả trong bộ nhớ
+        // của persistence context cùng lúc, mà hộp chạy thật chỉ có 512MB.
+        final int chunk = 500;
+        for (int i = 0; i < batch.size(); i += chunk) {
+            viewEventRepository.saveAll(batch.subList(i, Math.min(i + chunk, batch.size())));
+        }
+
+        syncViewCounts();
+        log.info("Đã tạo {} lượt đọc/nghe mẫu trải trên {} ngày.", batch.size(), TRAFFIC_DAYS);
+    }
+
+    /**
+     * Dựng lại {@code stories.view_count} và {@code chapters.view_count} từ bảng
+     * {@code view_events}.
+     *
+     * <p>Đếm lại cả bảng chứ không cộng thêm đúng lô vừa chèn: ở chế độ {@code append}
+     * trong bảng đã có sẵn lượt truy cập thật, và cộng dồn sẽ bỏ sót chúng. Đếm lại thì
+     * hai cột luôn đúng bằng lịch sử, dù chạy ở chế độ nào và chạy bao nhiêu lần.
+     *
+     * <p>Cần đúng: sắp xếp "phổ biến nhất" ở trang danh sách đọc hai cột này, còn bảng
+     * xếp hạng trang chủ đọc thẳng {@code view_events} — lệch nhau là hai màn hình cạnh
+     * nhau nói hai điều khác nhau về cùng một truyện.
+     */
+    private void syncViewCounts() {
+        Map<Long, Long> storyTotals = new HashMap<>();
+        for (Object[] row : viewEventRepository.countGroupedByStory()) {
+            storyTotals.put((Long) row[0], (Long) row[1]);
+        }
+
+        List<Story> stories = storyRepository.findAll();
+        for (Story story : stories) {
+            story.setViewCount(storyTotals.getOrDefault(story.getId(), 0L));
+        }
+        storyRepository.saveAll(stories);
+
+        Map<Long, Long> chapterTotals = new HashMap<>();
+        for (Object[] row : viewEventRepository.countGroupedByChapter()) {
+            chapterTotals.put((Long) row[0], (Long) row[1]);
+        }
+
+        List<Chapter> chapters = chapterRepository.findAllById(chapterTotals.keySet());
+        for (Chapter chapter : chapters) {
+            chapter.setViewCount(chapterTotals.getOrDefault(chapter.getId(), 0L));
+        }
+        chapterRepository.saveAll(chapters);
+    }
+
+    /**
+     * Số lượt của một truyện trong một ngày.
+     *
+     * <p>Ba thứ chồng lên nhau: hệ số nền của truyện, xu hướng tăng/giảm theo thời gian,
+     * và cuối tuần đông hơn ngày thường. Cộng thêm nhiễu ±25% để biểu đồ theo ngày trông
+     * như số liệu thật chứ không phải một đường thẳng.
+     */
+    private int dailyCount(double[] weight, int dayOffset, LocalDate day, Random random) {
+        double base = weight[0];
+        double trend = weight[1];
+
+        // dayOffset = 0 là hôm nay. progress chạy từ 0 (cũ nhất) tới 1 (hôm nay), nên
+        // hệ số xu hướng nội suy từ 1 ở đầu kỳ tới `trend` ở cuối kỳ.
+        double progress = (double) (TRAFFIC_DAYS - 1 - dayOffset) / (TRAFFIC_DAYS - 1);
+        double trendFactor = 1 + (trend - 1) * progress;
+
+        DayOfWeek dow = day.getDayOfWeek();
+        double weekend = (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) ? 1.35 : 1.0;
+
+        double noise = 0.75 + random.nextDouble() * 0.5;
+        double value = TRAFFIC_BASE_PER_DAY * base * trendFactor * weekend * noise;
+
+        // Hôm nay mới chạy được một phần: giả định đang ở giữa buổi chiều, nếu không thì
+        // tab "ngày" luôn trông èo uột so với trung bình của tab "tuần".
+        if (dayOffset == 0) {
+            value *= 0.65;
+        }
+        return (int) Math.max(1, Math.round(value));
+    }
+
+    /**
+     * Chọn chương để ghi lượt: chương đầu đông nhất rồi thưa dần về sau.
+     *
+     * <p>Người đọc rơi rụng dần qua từng chương, và chương 3-4 trong bộ mẫu còn bị khóa
+     * ở mức MEMBER/VIP nên càng ít người vào được. Chia đều bốn chương sẽ cho ra một
+     * dữ liệu không ai tin.
+     */
+    private int pickChapter(int chapterCount, Random random) {
+        // Mỗi chương giữ được khoảng 60% lượng người của chương trước.
+        double total = 0;
+        for (int i = 0; i < chapterCount; i++) {
+            total += Math.pow(0.6, i);
+        }
+
+        double target = random.nextDouble() * total;
+        double cumulative = 0;
+        for (int i = 0; i < chapterCount; i++) {
+            cumulative += Math.pow(0.6, i);
+            if (target <= cumulative) {
+                return i;
+            }
+        }
+        return chapterCount - 1;
+    }
+
+    /** Null nghĩa là Khách — bảng {@code view_events} cố ý cho phép, và thực tế cũng vậy. */
+    private Long guestOrReader(List<Long> readerIds, Random random) {
+        if (readerIds.isEmpty() || random.nextDouble() < GUEST_SHARE) {
+            return null;
+        }
+        return readerIds.get(random.nextInt(readerIds.size()));
+    }
+
+    /**
+     * Một thời điểm ngẫu nhiên trong ngày, lệch về buổi tối.
+     *
+     * <p>Bình phương một số ngẫu nhiên trong [0,1) rồi lấy phần bù sẽ dồn kết quả về
+     * phía cuối dải — đủ để biểu đồ theo giờ (nếu sau này có) không phẳng lì.
+     */
+    private Instant momentWithin(LocalDate day, ZoneId zone, Random random) {
+        double skewed = 1 - Math.pow(random.nextDouble(), 2);
+        long secondOfDay = (long) (skewed * 86_399);
+        return day.atStartOfDay(zone).plusSeconds(secondOfDay).toInstant();
     }
 
     /* Mỗi dòng là {số sao, nội dung}: bỏ trống số sao nghĩa là chỉ bình luận,
