@@ -46,21 +46,33 @@
 }
 
 /*
- * One control row that must not wrap: transport on the left, speed and volume
- * pushed to the right. Everything in it is fixed-width except the volume
- * slider, which absorbs the difference by shrinking.
+ * Transport on the left, speed and volume pushed to the right — on one line.
+ *
+ * The overlap this used to show in the reading sidebar was a near miss, not a
+ * shortage: the column gives the player 18rem and the row wanted 18.2rem, so it
+ * spilled by three pixels and the skip button landed on top of the speed
+ * control. A pane scrollbar took the rest of the margin.
+ *
+ * Six controls do fit in 18rem — at the size six controls in a sidebar should
+ * be. So the fix is the compact set further down, sized off the container, and
+ * not a second line: a transport that reflows into two rows stops reading as a
+ * transport. Wrapping survives only as a last resort, for a container too
+ * narrow to hold the compact set either.
  */
 .nb-player-controls {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
+/* A group never breaks up internally: skip/play/skip belong together, and so
+   do speed and volume. */
 .nb-player-group {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  flex-wrap: nowrap;
   min-width: 0;
 }
 
@@ -69,13 +81,13 @@
 }
 
 /* Primary play/pause control: the one filled shape in the column, so the eye
-   knows where to start. */
+   knows where to start. A circle, like every other control on the page. */
 .nb-player-play {
   flex: 0 0 auto;
   width: 2.6rem;
   height: 2.6rem;
   padding: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   box-shadow: none;
 }
 
@@ -152,12 +164,76 @@
   max-width: 6rem;
 }
 
-/* Only a genuinely cramped player gives up the single row. */
-@container (max-width: 17rem) {
+/*
+ * The compact set: the same six controls, sized for a sidebar.
+ *
+ * Driven by the player's own width rather than the viewport's, because the
+ * thing that decides this is the box the player was put in — the same component
+ * sits in the 21rem reading column and in a full-width admin panel, and only
+ * the first one needs to tighten up.
+ *
+ * The arithmetic it is built to satisfy, at 18rem of content width:
+ *
+ *   skip 2 + gap .4 + play 2.4 + gap .4 + skip 2   = 7.2rem
+ *   gap between the two groups                     = 0.5rem
+ *   rate 2.4 + gap .4 + mute 2 + gap .4 + vol 3    = 8.2rem
+ *   ------------------------------------------------------
+ *                                                    15.9rem
+ *
+ * That leaves better than 2rem of slack, which is what the row was missing:
+ * enough to absorb a scrollbar and still push the second group to the right
+ * edge instead of jamming it against the first.
+ */
+@container (max-width: 24rem) {
   .nb-player-controls {
-    flex-wrap: wrap;
+    gap: var(--space-2);
   }
 
+  .nb-player-group {
+    gap: 0.4rem;
+  }
+
+  .nb-player-controls .nb-icon-btn {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .nb-player-controls .nb-icon-btn svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+
+  .nb-player-play {
+    width: 2.4rem;
+    height: 2.4rem;
+  }
+
+  .nb-player-play svg {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  .nb-rate-btn {
+    min-width: 2.4rem;
+    height: 2rem;
+    padding: 0 0.35rem;
+    font-size: 0.78rem;
+  }
+
+  .nb-player-volume {
+    flex: 1 1 3rem;
+    min-width: 2rem;
+    max-width: 4.5rem;
+  }
+}
+
+/*
+ * Genuinely too narrow for six controls on a line — a player dropped into a
+ * column this thin has run out of arithmetic, so it is allowed the second row.
+ * With the group wrapped, `margin-left: auto` would only strand it against the
+ * right edge, so it starts from the left instead.
+ */
+@container (max-width: 15rem) {
   .nb-player-group-end {
     margin-left: 0;
   }
@@ -168,16 +244,46 @@
 /* ------------------------------------------------------------------ */
 
 /*
+ * On a wide screen the panel is just a panel: transport, then the track picker
+ * and continuous listening under it. Nothing is folded away, so the button that
+ * unfolds it is not drawn.
+ */
+.reader-player {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Ruled off from the transport, the way the listening column separates each of
+   its blocks. The panel used to inherit this from `.stack`; it carries its own
+   now that it is a box in its own right. */
+.reader-player-more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+.reader-player-expand {
+  display: none;
+}
+
+/*
  * Below the reading screen's split breakpoint, the listening panel drops under
  * the chapter — and a chapter is long, so a player at the end of it is a player
  * you cannot reach while reading. Here it leaves the flow and pins itself to the
- * bottom of the viewport, the way a music app does, so play/pause and the speed
- * stay under the thumb no matter how far down the text you are.
+ * bottom of the viewport, the way a music app does.
  *
- * The markup does not change: fixed positioning ignores where an element sits in
- * the document, so the transport is still declared inside its panel. The panel's
- * other controls — which track, continuous play — stay in the flow below the
- * text, because those are set once rather than reached for mid-chapter.
+ * A phone gets the same controls a desktop does, just not all at once. What a
+ * hand reaches for mid-chapter stays on the bar — the scrubber, play/pause, the
+ * two skips and the volume. What gets set once and left alone — reading speed,
+ * which recording, continuous listening — folds away behind the caret, because
+ * a bar tall enough to hold everything is a bar that eats the chapter it is
+ * meant to accompany.
+ *
+ * The markup does not change between the two: fixed positioning ignores where
+ * an element sits in the document, and the fold is one class on the wrapper.
  */
 @media (max-width: 900px) {
   .reader-player {
@@ -186,47 +292,83 @@
     bottom: 0;
     left: 0;
     z-index: 40;
+    gap: var(--space-3);
     padding: var(--space-2) var(--space-4);
     /* The phone's own home bar sits below this on iOS. */
     padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
     background: var(--bg);
     border-top: var(--outline-width) solid var(--outline);
+    /* An expanded bar on a short screen in landscape could otherwise grow past
+       the top of the viewport with no way back to the caret. */
+    max-height: 75vh;
+    overflow-y: auto;
   }
 
-  /* One row: play, elapsed, scrubber, speed. */
-  .reader-player .nb-player {
-    flex-direction: row;
+  /* The caret sits beside the transport rather than under it, so opening the
+     bar does not move the play button the thumb is already resting on. */
+  .reader-player-bar {
+    display: flex;
     align-items: center;
     gap: var(--space-3);
   }
 
-  /* The controls lead, so the play button lands at the edge where a thumb
-     already is rather than in the middle of the bar. */
-  .reader-player .nb-player-controls {
-    order: -1;
-    flex: 0 0 auto;
+  .reader-player-bar .nb-player {
+    flex: 1 1 auto;
+    min-width: 0;
     gap: var(--space-2);
   }
 
-  .reader-player .nb-player-seek {
-    flex: 1 1 auto;
-    min-width: 0;
+  .reader-player-expand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    color: var(--ink-muted);
+    background: transparent;
+    border: var(--outline-width) solid var(--line-strong);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition:
+      color var(--transition),
+      background var(--transition);
+  }
+
+  .reader-player-expand:hover {
+    color: var(--ink);
+    background: var(--bg-alt);
+  }
+
+  .reader-player-expand svg {
+    width: 1.1rem;
+    height: 1.1rem;
   }
 
   /*
-   * Skip, mute and the volume slider go.
-   *
-   * The phone has its own volume keys, and a scrubber is easier to drag than a
-   * ±10s button is to hit twice. What is left is what a docked bar is for:
-   * play/pause and the reading speed.
+   * Folded away by default: reading speed, the recording picker and continuous
+   * listening. The caret brings all three back.
    */
-  .reader-player .nb-icon-btn,
-  .reader-player .nb-player-volume {
+  .reader-player .nb-rate,
+  .reader-player-more {
     display: none;
   }
 
-  .reader-player .nb-player-group-end {
-    margin-left: 0;
+  .reader-player.is-expanded .nb-rate {
+    display: block;
+  }
+
+  .reader-player.is-expanded .reader-player-more {
+    display: flex;
+    padding-top: var(--space-3);
+  }
+
+  /* Volume keeps its place on the bar but gives up most of its width — the
+     slider only has to be draggable, not measured. */
+  .reader-player .nb-player-volume {
+    flex: 0 1 4.5rem;
+    min-width: 2.5rem;
   }
 
   /* The speed menu opens upward: below the bar is off-screen. */
@@ -241,6 +383,11 @@
 @media (max-width: 400px) {
   .reader-player .nb-player-time:last-of-type {
     display: none;
+  }
+
+  .reader-player .nb-player-volume {
+    flex: 0 1 3rem;
+    min-width: 2rem;
   }
 }
 

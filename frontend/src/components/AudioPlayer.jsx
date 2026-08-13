@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { audioApi } from "../api/endpoints";
 import PlayerTransport from "./PlayerTransport";
 import { Alert, Badge, Button, ButtonLink, Select, Switch } from "./ui";
@@ -24,6 +25,22 @@ const HeadphonesIcon = () => (
     <path d="M4 14v-2a8 8 0 0 1 16 0v2" />
     <rect x="2.5" y="13.5" width="4.5" height="7" rx="1.6" />
     <rect x="17" y="13.5" width="4.5" height="7" rx="1.6" />
+  </svg>
+);
+
+/** Points the way the dock is about to move: up to open, down to close. */
+const CaretIcon = ({ down }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2.4}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    style={down ? { transform: "rotate(180deg)" } : undefined}
+  >
+    <path d="m5 15 7-7 7 7" />
   </svg>
 );
 
@@ -145,6 +162,26 @@ function NarrationOffer({ status, isAuthenticated, chapterLength, generating, er
 }
 
 /**
+ * Continuous listening.
+ *
+ * Declared once and placed twice — inside the dock when there is a track to
+ * dock, and in the plain flow when there is not. Both spots need it: someone
+ * looking at a chapter with no audio yet may well want the next one to follow
+ * on before they ask for this one to be narrated.
+ */
+function ContinuousSwitch({ checked, disabled, onChange }) {
+  return (
+    <Switch
+      label="Nghe liên tục"
+      hint={disabled ? "Đây là chương cuối của truyện." : "Hết chương sẽ tự chuyển sang chương sau."}
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+    />
+  );
+}
+
+/**
  * Chapter audio panel.
  *
  * A chapter with no recording can still be listened to: the reader asks for
@@ -175,57 +212,18 @@ export default function AudioPlayer({
 }) {
   const { tracks, activeTrack, setActiveTrack, generating, error, requestTts } = audio;
 
-  return (
-    <div className="stack" style={{ gap: "1rem" }}>
-      {activeTrack ? (
-        <div className="stack" style={{ gap: "0.5rem" }}>
-          <div className="row-between">
-            <Badge tone="info">{describeTrack(activeTrack)}</Badge>
-            {tracks.length > 1 && (
-              <Select
-                aria-label="Chọn bản audio"
-                style={{ width: "auto", padding: "0.25rem 0.4rem" }}
-                value={activeTrack.id}
-                onChange={(event) =>
-                  setActiveTrack(tracks.find((t) => String(t.id) === event.target.value) ?? null)
-                }
-              >
-                {tracks.map((track) => (
-                  <option key={track.id} value={track.id}>
-                    {describeTrack(track)}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </div>
+  /*
+   * Whether the docked bar is showing everything it has.
+   *
+   * Only ever consulted on a narrow screen. In the side column the panel has
+   * the room to show the lot at once, so the stylesheet ignores this and the
+   * button that flips it is not drawn at all.
+   */
+  const [expanded, setExpanded] = useState(false);
 
-          {/*
-            The transport is wrapped so it can be lifted out of the flow on a
-            narrow screen and pinned to the bottom of the viewport, the way a
-            music app does it. In the side column it reads as part of the panel;
-            once the panel drops below a long chapter, a player you have to
-            scroll to the end of the text to reach is a player you cannot use
-            while reading. Same markup either way — only CSS moves it.
-          */}
-          <div className="reader-player">
-            <PlayerTransport
-              // Remounts on a track change so the element starts from a clean
-              // state instead of inheriting the previous track's position.
-              key={activeTrack.id}
-              src={audioApi.streamUrl(activeTrack.streamUrl)}
-              // Only ever true when the previous chapter finished playing, or
-              // when the reader asked for this narration — opening a chapter
-              // directly never starts making noise on its own.
-              autoPlay={autoPlay}
-              onAutoPlayed={onAutoPlayed}
-              onEnded={onTrackEnded}
-              initialPosition={initialPosition}
-              onPositionChange={onPositionChange}
-              onPause={onPause}
-            />
-          </div>
-        </div>
-      ) : (
+  if (!activeTrack) {
+    return (
+      <div className="stack" style={{ gap: "1rem" }}>
         <NarrationOffer
           status={ttsStatus}
           isAuthenticated={isAuthenticated}
@@ -234,19 +232,86 @@ export default function AudioPlayer({
           error={error}
           onRequest={requestTts}
         />
-      )}
 
-      <Switch
-        label="Nghe liên tục"
-        hint={
-          hasNextChapter
-            ? "Hết chương sẽ tự chuyển sang chương sau."
-            : "Đây là chương cuối của truyện."
-        }
-        checked={autoContinue}
-        disabled={!hasNextChapter}
-        onChange={onToggleAutoContinue}
-      />
+        <ContinuousSwitch
+          checked={autoContinue}
+          disabled={!hasNextChapter}
+          onChange={onToggleAutoContinue}
+        />
+      </div>
+    );
+  }
+
+  return (
+    /*
+     * Everything about listening lives in one box.
+     *
+     * It has to: on a narrow screen this box leaves the flow and pins itself to
+     * the bottom of the viewport, and anything left outside would be stranded
+     * at the end of a long chapter where nobody can reach it mid-read. So the
+     * track picker and the continuous-listening switch moved in here beside the
+     * transport, and the bar decides how much of itself to show.
+     */
+    <div className={`reader-player ${expanded ? "is-expanded" : ""}`}>
+      <div className="reader-player-bar">
+        <PlayerTransport
+          // Remounts on a track change so the element starts from a clean
+          // state instead of inheriting the previous track's position.
+          key={activeTrack.id}
+          src={audioApi.streamUrl(activeTrack.streamUrl)}
+          // Only ever true when the previous chapter finished playing, or when
+          // the reader asked for this narration — opening a chapter directly
+          // never starts making noise on its own.
+          autoPlay={autoPlay}
+          onAutoPlayed={onAutoPlayed}
+          onEnded={onTrackEnded}
+          initialPosition={initialPosition}
+          onPositionChange={onPositionChange}
+          onPause={onPause}
+        />
+
+        {/* Hidden by the stylesheet on a wide screen, where there is nothing
+            left folded away for it to unfold. */}
+        <button
+          type="button"
+          className="reader-player-expand"
+          aria-expanded={expanded}
+          aria-label={expanded ? "Thu gọn trình phát" : "Mở rộng trình phát"}
+          title={expanded ? "Thu gọn" : "Tốc độ đọc, nghe liên tục"}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          <CaretIcon down={expanded} />
+        </button>
+      </div>
+
+      <div className="reader-player-more">
+        <div className="row-between">
+          <Badge tone="info">{describeTrack(activeTrack)}</Badge>
+
+          {tracks.length > 1 && (
+            <Select
+              aria-label="Chọn bản audio"
+              style={{ width: "auto", padding: "0.25rem 0.4rem" }}
+              value={activeTrack.id}
+              onChange={(event) =>
+                setActiveTrack(tracks.find((t) => String(t.id) === event.target.value) ?? null)
+              }
+            >
+              {tracks.map((track) => (
+                <option key={track.id} value={track.id}>
+                  {describeTrack(track)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </div>
+
+        <ContinuousSwitch
+          checked={autoContinue}
+          disabled={!hasNextChapter}
+          onChange={onToggleAutoContinue}
+        />
+      </div>
     </div>
   );
 }
