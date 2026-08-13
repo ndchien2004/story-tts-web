@@ -3952,6 +3952,75 @@
 }
 
 /*
+ * The cold-start note.
+ *
+ * Appears only after the wait has run long enough that silence starts to read
+ * as a fault. It fades in rather than appearing, so it arrives as an answer to
+ * a question the reader has just started asking rather than as an alarm.
+ */
+.veil-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 26rem;
+  padding-inline: var(--space-5);
+  text-align: center;
+  animation: veil-note 520ms ease-out both;
+}
+
+.veil-note p {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--ink-muted);
+  text-wrap: pretty;
+}
+
+/*
+ * An indeterminate bar: there is no progress to report, only the fact that
+ * something is still happening. A sliver travelling a fixed rail says that
+ * without pretending to know how far along it is.
+ */
+.veil-note-bar {
+  position: relative;
+  width: 9rem;
+  height: 2px;
+  overflow: hidden;
+  background: var(--bg-alt);
+  border-radius: var(--radius-pill);
+}
+
+.veil-note-bar::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  width: 40%;
+  background: var(--ink);
+  border-radius: inherit;
+  animation: veil-note-bar 1500ms ease-in-out infinite;
+}
+
+@keyframes veil-note {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes veil-note-bar {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/*
  * Reduced motion keeps the veil but stops the performance.
  *
  * The fade stays — a cross-fade between pages is not the kind of movement this
@@ -3963,12 +4032,21 @@
   .veil-band,
   .veil-cup,
   .veil-wave,
-  .veil-word {
+  .veil-word,
+  .veil-note,
+  .veil-note-bar::after {
     animation: none;
   }
 
   .veil-wave {
     opacity: 0.2;
+  }
+
+  /* The travelling sliver was the whole point of the bar, so with it stopped
+     the rail fills instead — a static dash would just look broken. The note
+     beside it already says what is happening. */
+  .veil-note-bar::after {
+    width: 100%;
   }
 }
 

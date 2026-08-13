@@ -23,14 +23,67 @@ const client = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-/** Attach the bearer token to every outgoing request. */
-client.interceptors.request.use((config) => {
-  const token = getStoredToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+/* ------------------------------------------------------------------ */
+/* In-flight requests                                                  */
+/* ------------------------------------------------------------------ */
+
+/*
+ * How many calls are outstanding right now, and who wants to know.
+ *
+ * The backend sleeps after a spell with no traffic and takes about a minute to
+ * come back, during which every request simply hangs. Without a signal for that
+ * the app looks broken: a click, then a blank page, then nothing. The loading
+ * screen subscribes here so it can stay up for as long as the server is
+ * actually being waited on rather than for a fixed beat.
+ *
+ * Deliberately a plain counter rather than a context: it is written from an
+ * axios interceptor, which sits outside React entirely.
+ */
+let inFlight = 0;
+const inFlightListeners = new Set();
+
+function publishInFlight() {
+  for (const listener of inFlightListeners) listener(inFlight);
+}
+
+/**
+ * Watch the number of outstanding requests.
+ *
+ * Calls back immediately with the current count, then on every change. Returns
+ * the unsubscribe function.
+ */
+export function onInFlightChange(listener) {
+  inFlightListeners.add(listener);
+  listener(inFlight);
+  return () => inFlightListeners.delete(listener);
+}
+
+/** Attach the bearer token to every outgoing request, and count it. */
+client.interceptors.request.use(
+  (config) => {
+    const token = getStoredToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // Marked on the config rather than counted blind, so the settle below only
+    // ever decrements a request this interceptor actually incremented — a
+    // request rejected before it got here must not push the count negative.
+    config.counted = true;
+    inFlight += 1;
+    publishInFlight();
+
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
+
+function settle(config) {
+  if (!config?.counted) return;
+  config.counted = false;
+  inFlight = Math.max(0, inFlight - 1);
+  publishInFlight();
+}
 
 /**
  * Fold response text to Unicode NFC, then normalise every failure into an
@@ -38,10 +91,17 @@ client.interceptors.request.use((config) => {
  */
 client.interceptors.response.use(
   (response) => {
+    settle(response.config);
     response.data = normalizeDeep(response.data);
     return response;
   },
-  (error) => Promise.reject(toApiError(error)),
+  (error) => {
+    // Settled on the way out of every failure too, including the timeout and
+    // the no-connection cases — a count that only came back down on success
+    // would strand the loading screen the moment the server refused.
+    settle(error.config);
+    return Promise.reject(toApiError(error));
+  },
 );
 
 export class ApiError extends Error {
