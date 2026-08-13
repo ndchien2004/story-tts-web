@@ -3,6 +3,7 @@ import AuthLayout from "./components/AuthLayout";
 import Layout from "./components/Layout";
 import ReaderLayout from "./components/ReaderLayout";
 import { RequireAdmin, RequireAuth, RequireGuest } from "./components/RouteGuards";
+import RouteVeil from "./components/RouteVeil";
 import AuthProvider from "./context/AuthProvider";
 import ThemeProvider from "./context/ThemeProvider";
 
@@ -36,6 +37,10 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
+          {/* Outside <Routes> on purpose: it has to survive the route swap it
+              is covering, and it spans all four layouts. */}
+          <RouteVeil />
+
           <Routes>
             <Route element={<Layout />}>
               {/* Public reader routes. Chapter access is decided by the API. */}
