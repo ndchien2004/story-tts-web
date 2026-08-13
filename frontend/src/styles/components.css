@@ -934,6 +934,18 @@
 }
 
 /*
+ * Four across, stated rather than fitted.
+ *
+ * The home page's middle column sits between two rails, and `auto-fill` there
+ * would give a different count at every viewport width — five narrow covers on
+ * one screen, three wide ones on the next. A row is a fixed unit on that page
+ * because the lists are cut to multiples of it.
+ */
+.story-grid-quad {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/*
  * The cover is the card.
  *
  * Nothing is framed and nothing lifts: the picture already has an edge of its
@@ -2357,47 +2369,947 @@
   text-align: center;
 }
 
+/* ------------------------------------------------------------------ */
+/* Home page                                                           */
+/* ------------------------------------------------------------------ */
+
 /*
- * The masthead of the home page: a block of type over a rule, the way a
- * publication opens. The filled panel it replaces made the first screen of
- * the site a single flat colour with the actual stories below the fold.
+ * Three columns across the whole window.
+ *
+ * The page body is a centred measure capped at 1400px, and the rails are not
+ * part of it — they belong to the two edges of the screen. So the home page
+ * breaks out of that measure entirely: `50% - 50vw` on each side is exactly the
+ * distance from the column's edge to the viewport's, which paired with the
+ * `overflow-x: clip` in base.css gives a true full-bleed grid with no
+ * horizontal scrollbar.
+ *
+ * The two tracks are deliberately unequal. An earlier version matched them so
+ * the middle column would land exactly on the centre of the screen, but that
+ * spent a full 16rem column on two contact links and left an obvious hole
+ * beside them. The rail is now only as wide as the strip it holds, and the
+ * 13rem that frees up goes to the covers — where it is visible — at the cost
+ * of the content sitting a little left of dead centre. A slim utility rail on
+ * one side and a wider sidebar on the other is an ordinary reading layout; an
+ * empty column is not.
  */
-.hero {
+.home {
+  --home-rail: 15rem;
+
   display: grid;
-  gap: var(--space-5);
-  padding: 0 0 var(--space-6);
-  background: transparent;
-  color: var(--ink);
-  border: 0;
-  border-bottom: var(--outline-width) solid var(--outline);
-  border-radius: 0;
-  box-shadow: none;
+  grid-template-columns: 3rem minmax(0, 1fr) var(--home-rail);
+  gap: var(--space-6);
+  align-items: start;
+
+  width: 100vw;
+  max-width: 100vw;
+  margin-inline: calc(50% - 50vw);
+  padding-inline: var(--space-5);
 }
 
 /*
- * The banner, full bleed.
+ * The middle column, and the only one that is a page.
  *
- * The page content sits in a centred column, so the image breaks out of it:
- * `50% - 50vw` on each side is exactly the distance from the column's edge to
- * the viewport's. Paired with `overflow-x: clip` on the body (see base.css) —
- * `100vw` counts the scrollbar's width and would otherwise put a horizontal
- * scrollbar on every page.
- *
- * No `object-fit` and no `aspect-ratio`: the intrinsic ratio governs, so the
- * whole artwork is shown and nothing is cropped at any width. The width and
- * height attributes on the element still reserve the right box, so the stories
- * below do not jump down the page when the image arrives.
+ * Capped and centred inside its own track so the covers keep a sane size on a
+ * very wide screen instead of stretching to fill whatever is left between the
+ * rails.
  */
-.hero-banner {
-  display: block;
-  width: 100vw;
-  max-width: 100vw;
-  height: auto;
-  margin-inline: calc(50% - 50vw);
-  /* Cancels the page's top padding so the banner meets the header. */
-  margin-block-start: calc(var(--space-6) * -1);
+.home-centre {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+  width: 100%;
+  max-width: 74rem;
+  margin-inline: auto;
+  /* A grid child defaults to min-content width, which a long story title would
+     then push past. This lets the column shrink and the text clamp instead. */
+  min-width: 0;
+}
+
+.home-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+  min-width: 0;
+}
+
+/*
+ * Both rails hold their place at the edge of the screen.
+ *
+ * Sticky rather than fixed: it pins them exactly the same way once the page
+ * moves, but they stay part of the layout, so they cannot end up sitting on top
+ * of the footer or of each other. `align-items: start` on the grid is what
+ * makes this work — a stretched grid item is already as tall as the row and has
+ * nothing to slide against.
+ */
+.home-rail {
+  position: sticky;
+  top: calc(var(--navbar-height) + var(--space-4));
+}
+
+.home-rail-left .social-rail {
+  width: 3rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Featured shelf                                                      */
+/* ------------------------------------------------------------------ */
+
+.shelf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  padding-bottom: var(--space-6);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.shelf:focus {
+  outline: none;
+}
+
+/*
+ * The viewport: the stage plus the two arrows that flank it.
+ *
+ * Capped at roughly the width the covers actually cover. The outermost one sits
+ * about 26.5rem out from the middle, so a 58rem box leaves a little over 2rem
+ * either side — exactly enough for an arrow to sit against the edge of that
+ * cover instead of drifting off to the edge of the page.
+ */
+.shelf-viewport {
+  position: relative;
+  width: min(100%, 58rem);
+  margin-inline: auto;
+}
+
+/*
+ * The stage.
+ *
+ * Every cover is absolutely positioned at the centre and then pushed out by
+ * its own distance from the middle, so the arithmetic that places them is the
+ * same for all five and the middle one always lands dead centre regardless of
+ * how many are on screen. The height is fixed because the children are out of
+ * flow and cannot give the box one.
+ */
+.shelf-stage {
+  position: relative;
+  width: 100%;
+  height: 22rem;
+  perspective: 1400px;
+}
+
+.shelf-slide {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 16rem;
+  height: 100%;
+
+  /*
+   * `--offset` is signed (negative to the left) and `--distance` is its
+   * magnitude. Sliding by whole card-widths and then scaling means neighbours
+   * tuck under the centre rather than lining up beside it.
+   */
+  transform: translateX(-50%) translateX(calc(var(--offset) * 10.5rem))
+    scale(calc(1 - var(--distance) * 0.16))
+    rotateY(calc(var(--offset) * -22deg));
+
+  filter: blur(calc(var(--distance) * 2.5px));
+  opacity: calc(1 - var(--distance) * 0.3);
+  transition:
+    transform 380ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    filter 380ms ease,
+    opacity 380ms ease;
+  transform-style: preserve-3d;
+}
+
+/* The one cover in focus: square to the viewer, sharp, and lifted off the
+   others. This is the app's one licensed use of elevation outside a modal —
+   depth is the entire mechanism here. */
+.shelf-slide.is-centre {
+  filter: none;
+  opacity: 1;
+}
+
+.shelf-cover {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  background: var(--bg-alt);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+
+.shelf-slide.is-centre .shelf-cover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-lg);
+}
+
+.shelf-slide.is-centre .shelf-cover:hover {
+  border-color: var(--ink);
+}
+
+.shelf-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shelf-initials {
+  font-size: 3rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+/*
+ * The caption reserves its space instead of taking what it needs.
+ *
+ * Stories have blurbs of wildly different lengths, and a caption that sizes to
+ * its text makes the whole shelf grow and shrink as you page through it — the
+ * covers bob up and down and the lists below jump with them. Every line box
+ * here is therefore reserved whether or not it is filled: two for the title,
+ * two for the blurb, one each for the label and the author.
+ *
+ * `min-height` in `em` rather than a fixed pixel figure on the container, so
+ * the reservation follows the font size down through the breakpoints on its
+ * own.
+ */
+.shelf-caption {
+  max-width: 44rem;
+  text-align: center;
+}
+
+.shelf-eyebrow {
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.shelf-title {
+  margin-top: var(--space-2);
+  font-size: 1.6rem;
+  line-height: 1.25;
+  /* Two lines, always: clamped so a long title cannot grow the box, and
+     reserved so a short one cannot shrink it. */
+  min-height: 2.5em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.shelf-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.shelf-title a:hover {
+  text-decoration: underline;
+}
+
+.shelf-author {
+  margin-top: var(--space-1);
+  color: var(--ink-muted);
+}
+
+.shelf-blurb {
+  margin-top: var(--space-3);
+  color: var(--ink-muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  /* Two lines: the shelf sells the cover, the story page sells the story.
+     Reserved even when a story has no description at all, which is the widest
+     swing of the lot. */
+  min-height: 3.2em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/*
+ * The page-turners.
+ *
+ * They were a pair of 2.25rem squares from the table-pagination set, sitting in
+ * a row under the shelf — the right control for stepping through search
+ * results, and far too small and too generic under a piece of artwork this
+ * size. They are now tall slim plates set against the outer covers, which is
+ * how a printed page turns: a full-height edge you push, not a chip you click.
+ *
+ * The look is the house style rather than a new one — a hairline plate on the
+ * working surface that fills with ink when you reach for it, the same move the
+ * primary button makes.
+ */
+.shelf-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 5.5rem;
+  padding: 0;
+
+  color: var(--ink-muted);
+  background: var(--surface);
+  border: var(--outline-width) solid var(--line-strong);
+  /* A stadium, matching the pill every other control now wears. */
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.shelf-arrow:hover {
+  color: var(--on-tint);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.shelf-arrow svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.shelf-arrow-prev {
+  left: 0;
+}
+
+.shelf-arrow-next {
+  right: 0;
+}
+
+.shelf-dots {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/*
+ * A dash rather than a dot: it can grow along one axis to mark the current
+ * position without the row of them jittering.
+ *
+ * Three pixels tall is a mark, not a target, so the tap area is extended well
+ * past the ink with a transparent pseudo-element. That keeps the row visually
+ * as fine as it should be while still clearing the ~44px finger target on a
+ * phone, where these are the main way to move the shelf.
+ */
+.shelf-dot {
+  position: relative;
+  width: 1.25rem;
+  height: 3px;
+  padding: 0;
+  background: var(--line-strong);
   border: 0;
-  border-radius: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    width var(--transition),
+    background var(--transition);
+}
+
+.shelf-dot::before {
+  content: "";
+  position: absolute;
+  inset: -0.85rem -0.2rem;
+}
+
+.shelf-dot:hover {
+  background: var(--ink-muted);
+}
+
+.shelf-dot.is-active {
+  width: 2.25rem;
+  background: var(--accent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Contact rail                                                        */
+/* ------------------------------------------------------------------ */
+
+.social-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.social-rail-heading {
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  /* Sideways, so the heading costs the rail no width. */
+  writing-mode: vertical-rl;
+  margin-inline: auto;
+}
+
+/*
+ * One strip, divided — not two tiles floating apart.
+ *
+ * Two separate bordered squares with a gap between them read as leftovers in a
+ * column that is mostly empty. Joined into a single object with a hairline
+ * between the segments, the same two links read as a deliberate piece of
+ * furniture, and they stop asking the eye to account for the space around
+ * them. It is also the house style: regions divided by rules, not boxed
+ * individually.
+ */
+.social-rail-list {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: var(--outline-width) solid var(--outline);
+  /* Two circles fused into a capsule — the pill radius on a 3rem-wide strip of
+     two 3rem squares resolves to exactly that. */
+  border-radius: var(--radius-pill);
+}
+
+/*
+ * A segment of the strip that grows a label to its right on hover.
+ *
+ * The label is absolutely positioned so it can overhang the narrow rail
+ * without widening it — a rail that reflowed the whole page on hover would be
+ * unusable.
+ */
+.social-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  color: var(--ink-muted);
+  text-decoration: none;
+  border: 0;
+  border-top: var(--outline-width) solid var(--outline);
+  transition:
+    color var(--transition),
+    background var(--transition);
+}
+
+.social-rail-list li:first-child .social-link {
+  border-top: 0;
+}
+
+.social-link-glyph {
+  display: flex;
+}
+
+.social-link-glyph svg {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.social-link-text {
+  position: absolute;
+  left: calc(100% + var(--space-2));
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: var(--space-2) var(--space-3);
+  white-space: nowrap;
+  background: var(--surface-raised);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-0.35rem);
+  transition:
+    opacity var(--transition),
+    transform var(--transition);
+  z-index: 5;
+}
+
+.social-link-text strong {
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.social-link-text small {
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+}
+
+.social-link:hover .social-link-text,
+.social-link:focus-visible .social-link-text {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* The two brand colours. Everything else on the page is ink on paper, which is
+   exactly why these two read as links to somewhere else. */
+.social-link-facebook:hover,
+.social-link-facebook:focus-visible {
+  color: #ffffff;
+  background: #1877f2;
+}
+
+.social-link-zalo:hover,
+.social-link-zalo:focus-visible {
+  color: #ffffff;
+  background: #0068ff;
+}
+
+/* ------------------------------------------------------------------ */
+/* Listen ranking rail                                                 */
+/* ------------------------------------------------------------------ */
+
+.rank-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--surface);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+}
+
+.rank-rail-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.rank-rail-header h2 {
+  font-size: 1rem;
+}
+
+/* Segmented control: one outlined group, the active segment filled. Rounded as
+   a whole so the group reads as one pill split in three. */
+.rank-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: var(--outline-width) solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.rank-tab {
+  padding: var(--space-2) 0;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-left: var(--outline-width) solid var(--line-strong);
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    background var(--transition);
+}
+
+.rank-tab:first-child {
+  border-left: 0;
+}
+
+.rank-tab:hover:not(.is-active) {
+  color: var(--ink);
+  background: var(--bg-alt);
+}
+
+.rank-tab.is-active {
+  color: var(--on-tint);
+  background: var(--accent);
+}
+
+.rank-list {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.rank-row {
+  display: grid;
+  grid-template-columns: 1.5rem 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  color: inherit;
+  text-decoration: none;
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+.rank-list li:first-child .rank-row {
+  border-top: 0;
+}
+
+.rank-row:hover .rank-title {
+  text-decoration: underline;
+}
+
+.rank-position {
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-position.is-podium {
+  color: var(--ink);
+}
+
+.rank-thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  background: var(--bg-alt);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius-sm);
+}
+
+.rank-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rank-thumb-initials {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.rank-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.rank-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rank-meta {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rank-empty {
+  padding-block: var(--space-4);
+  font-size: 0.88rem;
+}
+
+/*
+ * Laptops. The ranking drops under the lists and turns into two columns of
+ * its own, which is a better use of a full-width strip than one tall list.
+ */
+/*
+ * Narrow desktops.
+ *
+ * Below roughly 1300px the two rails plus four readable covers no longer fit
+ * across, and the first thing to give is the wider of the two: the ranking
+ * drops under the lists and spreads into two columns, which is a better use of
+ * a full-width strip than one tall list. The contact rail keeps its edge — it
+ * costs 3rem.
+ */
+@media (max-width: 1300px) {
+  .home {
+    grid-template-columns: 3rem minmax(0, 1fr);
+    padding-inline: var(--space-4);
+  }
+
+  .home-rail-right {
+    grid-column: 1 / -1;
+    position: static;
+  }
+
+  .rank-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--space-5);
+  }
+
+  /* Every row draws its own top rule again: in two columns, "first child" is
+     no longer the only row at the top of a column. */
+  .rank-list li:first-child .rank-row {
+    border-top: var(--outline-width) solid var(--outline);
+  }
+}
+
+/*
+ * Tablets. There are no longer two edges worth holding, so both rails give up
+ * their columns and the page becomes one stack.
+ *
+ * Order matters more than position here. The reader came for the stories, so
+ * they go first; the ranking is still browsing, so it follows; the contact
+ * links are the last thing anybody scrolls for and sit at the bottom, where
+ * they read as a footer rather than as a gate in front of the shelf.
+ */
+@media (max-width: 900px) {
+  .home {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    /* The grid rule sets this to `start`, which on a flex column is the
+       cross axis — every section would shrink to its own text width. */
+    align-items: stretch;
+    padding-inline: 0;
+    /* Back inside the page's own measure: with nothing pinned to the edges,
+       full bleed would only run the lists into the sides of the screen. */
+    width: auto;
+    max-width: none;
+    margin-inline: 0;
+  }
+
+  .home-centre {
+    order: 1;
+    max-width: none;
+  }
+
+  .home-rail-right {
+    order: 2;
+  }
+
+  .home-rail-left {
+    order: 3;
+    position: static;
+  }
+
+  /* Undoes the desktop pin: lying down, it is a row and takes the width it
+     needs. */
+  .home-rail-left .social-rail {
+    width: auto;
+  }
+
+  /* Ruled above rather than below: it now closes the page instead of opening
+     the lists. */
+  .social-rail {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: var(--outline-width) solid var(--outline);
+  }
+
+  .social-rail-heading {
+    writing-mode: horizontal-tb;
+    margin-inline: 0;
+  }
+
+  .social-rail-list {
+    flex-direction: row;
+  }
+
+  /*
+   * Lying down, the rail has the width to keep its labels on show, so they
+   * stop being a hover affordance — which a touch screen has no way to use.
+   *
+   * The rule between the strip's two halves turns with it: a border-top
+   * divider on a row draws nothing at all.
+   */
+  .social-link {
+    width: auto;
+    min-width: 0;
+    gap: var(--space-3);
+    padding-inline: var(--space-4);
+    border-top: 0;
+    border-left: var(--outline-width) solid var(--outline);
+  }
+
+  .social-rail-list li:first-child .social-link {
+    border-left: 0;
+  }
+
+  .social-link-text {
+    position: static;
+    opacity: 1;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    transform: none;
+    pointer-events: auto;
+    /* Overhanging a rail was fine; overflowing a tile is not. The chain of
+       min-width:0 is what lets a flex item shrink below its text width so the
+       ellipsis below can actually take effect. */
+    min-width: 0;
+    align-items: flex-start;
+  }
+
+  /* The Facebook address is the long one and truncates to "facebook.com/…";
+     the Zalo number is ten characters and always fits whole. */
+  .social-link-text strong,
+  .social-link-text small {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .social-link:hover .social-link-text strong,
+  .social-link:focus-visible .social-link-text strong,
+  .social-link:hover .social-link-text small,
+  .social-link:focus-visible .social-link-text small {
+    color: inherit;
+  }
+
+  .story-grid-quad {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* Covers shrink, so the box that holds them shrinks with them — otherwise the
+     arrows would drift away from the outer covers they are meant to sit on. */
+  .shelf-viewport {
+    width: min(100%, 46rem);
+  }
+
+  .shelf-stage {
+    height: 18rem;
+  }
+
+  .shelf-slide {
+    width: 13rem;
+    transform: translateX(-50%) translateX(calc(var(--offset) * 8.5rem))
+      scale(calc(1 - var(--distance) * 0.18))
+      rotateY(calc(var(--offset) * -20deg));
+  }
+
+  .shelf-arrow {
+    height: 4.5rem;
+  }
+
+  .shelf-title {
+    font-size: 1.35rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .story-grid-quad {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rank-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .social-rail-list {
+    /* Two contact tiles, each taking half the width — a thumb target rather
+       than a link. */
+    flex: 1;
+  }
+
+  .social-rail-list li {
+    flex: 1;
+  }
+
+  .social-link {
+    width: 100%;
+  }
+
+  .shelf-stage {
+    height: 15rem;
+  }
+
+  .shelf-slide {
+    width: 10rem;
+    transform: translateX(-50%) translateX(calc(var(--offset) * 6.5rem))
+      scale(calc(1 - var(--distance) * 0.2))
+      rotateY(calc(var(--offset) * -18deg));
+  }
+
+  /* No room left to stand beside the covers, so the plates sit on top of the
+     outer ones. They are opaque and those covers are blurred and half faded,
+     so nothing legible is being covered up. */
+  .shelf-arrow {
+    width: 2.15rem;
+    height: 3.75rem;
+  }
+
+  .shelf-initials {
+    font-size: 2rem;
+  }
+
+  .shelf-title {
+    font-size: 1.2rem;
+  }
+
+  .shelf-blurb {
+    display: none;
+  }
+}
+
+/*
+ * Small phones — 360 to 400px, which is most of them.
+ *
+ * At the size above, the outer covers sit 13rem out from the middle on a screen
+ * whose half-width is barely 11rem: they run clean off both edges and the
+ * arrows end up closer to the centre cover than to the covers they belong to.
+ * Everything tightens a step so the three covers and the two plates fit the
+ * screen they are actually on.
+ */
+@media (max-width: 400px) {
+  .shelf-stage {
+    height: 13rem;
+  }
+
+  .shelf-slide {
+    width: 8rem;
+    transform: translateX(-50%) translateX(calc(var(--offset) * 5rem))
+      scale(calc(1 - var(--distance) * 0.22))
+      rotateY(calc(var(--offset) * -16deg));
+  }
+
+  .shelf-arrow {
+    width: 1.9rem;
+    height: 3.25rem;
+  }
+
+  .shelf-initials {
+    font-size: 1.6rem;
+  }
+
+  .shelf-title {
+    font-size: 1.1rem;
+  }
+
+  /* The two contact tiles stop pretending they have room for an address and
+     keep the name alone. */
+  .social-link-text small {
+    display: none;
+  }
+}
+
+/*
+ * The shelf's whole idea is depth, so the covers keep their places — only the
+ * travel between them stops.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .shelf-slide {
+    transition: none;
+  }
 }
 
 /*
@@ -2655,10 +3567,6 @@
 
   .navbar-inner {
     gap: var(--space-2);
-  }
-
-  .hero {
-    padding-bottom: var(--space-5);
   }
 
   .story-chips {

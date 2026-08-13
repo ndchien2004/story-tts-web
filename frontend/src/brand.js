@@ -31,20 +31,3 @@ export const LOGO_FULL = `${CLOUDINARY}/${CUTOUT}/c_fit,w_640/f_auto,q_auto/stor
 
 /** Tab icon. PNG explicitly: `f_auto` could answer with a format no favicon accepts. */
 export const FAVICON = `${CLOUDINARY}/${CUTOUT}/c_fit,w_64,h_64/f_png/story-tts-web/brand/logo-mark.png`;
-
-/**
- * Home page banner, delivered whole.
- *
- * No cutout — the artwork is a finished composition on its own ground, not a
- * mark that has to sit on whatever colour is behind it.
- *
- * No crop and no resize either: the page shows the entire image edge to edge,
- * so any `c_fill` would cut off part of what the artwork is saying, and any
- * width cap would throw away pixels the layout can use. `q_auto:best` keeps
- * compression off the illustration's flat areas, where ordinary `q_auto`
- * leaves visible banding.
- *
- * The version prefix is kept: replacing the artwork under the same public id
- * would otherwise leave the old one sitting in every CDN and browser cache.
- */
-export const HERO_BANNER = `${CLOUDINARY}/f_auto,q_auto:best/v1786431511/hero_banner_iekpd5.png`;

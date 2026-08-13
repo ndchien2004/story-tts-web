@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
 import { progressApi, storyApi } from "../api/endpoints";
-import { HERO_BANNER } from "../brand";
+import FeaturedCarousel from "../components/FeaturedCarousel";
+import SocialRail from "../components/SocialRail";
 import StoryCard from "../components/StoryCard";
+import TopListenedRail from "../components/TopListenedRail";
 import { useAuth } from "../context/auth-context";
-import { Alert, ButtonLink, Spinner } from "../components/ui";
+import { Alert, Spinner } from "../components/ui";
+
+/**
+ * Rows are locked to four covers on the wide layout, so the lists are asked for
+ * multiples of four. A trailing half-empty row is the one thing a fixed grid
+ * cannot hide.
+ */
+const ROW = 4;
 
 export default function HomePage() {
-  const { user, isAuthenticated, initialising } = useAuth();
+  const { isAuthenticated, initialising } = useAuth();
 
   const [newest, setNewest] = useState([]);
   const [popular, setPopular] = useState([]);
@@ -18,8 +27,8 @@ export default function HomePage() {
     let cancelled = false;
 
     Promise.all([
-      storyApi.list({ sort: "newest", size: 6 }),
-      storyApi.list({ sort: "popular", size: 6 }),
+      storyApi.list({ sort: "newest", size: ROW * 2 }),
+      storyApi.list({ sort: "popular", size: ROW * 2 }),
     ])
       .then(([newestPage, popularPage]) => {
         if (cancelled) return;
@@ -54,7 +63,7 @@ export default function HomePage() {
 
     let cancelled = false;
     progressApi
-      .recommendations(6)
+      .recommendations(ROW)
       .then((data) => {
         if (!cancelled) setSuggested(data);
       })
@@ -67,78 +76,92 @@ export default function HomePage() {
     };
   }, [initialising, isAuthenticated]);
 
+  /**
+   * The shelf is drawn from whichever list arrived with something in it.
+   *
+   * "Được xem nhiều" first: the covers on display should be the ones worth
+   * displaying, and on a brand-new database that list is simply everything.
+   */
+  const featured = (popular.length > 0 ? popular : newest).slice(0, 6);
+
   return (
-    <div className="stack" style={{ gap: "2.5rem" }}>
-      {/* The pitch is aimed at visitors, so it gives way to a greeting once
-          someone is signed in — and the sign-up button disappears with it.
-          Nothing is decided while the stored token is still being checked,
-          which would otherwise flash "Tạo tài khoản" at a signed-in reader. */}
-      <section className="hero">
-        {/* The artwork already carries the wordmark and the tagline, so it
-            sits above the copy rather than behind it — text over the top would
-            be the same message twice, and unreadable over the illustration on
-            the right. */}
-        {/* The source's own dimensions: they set the box the browser reserves
-            before the image loads, so they have to match what arrives or the
-            page shifts when it does. */}
-        <img
-          className="hero-banner"
-          src={HERO_BANNER}
-          alt="Truyện Nghe — đọc và nghe truyện online"
-          width="1376"
-          height="768"
-          fetchPriority="high"
-        />
-      </section>
+    /*
+     * Three columns spanning the whole viewport, not three columns inside the
+     * page's centred measure.
+     *
+     * The rails belong to the window rather than to the article: they sit in
+     * tracks of their own at the two edges and stay there through the shelf as
+     * well as the lists. Both tracks are the same width even though the left
+     * one holds something far narrower — that symmetry is what keeps the middle
+     * column centred on the screen rather than nudged to one side.
+     *
+     * They are rendered outside the loading branch on purpose. The ranking
+     * fetches on its own and the contact links need nothing at all, so there is
+     * no reason for either to wait on the story lists.
+     */
+    <div className="home">
+      <div className="home-rail home-rail-left">
+        <SocialRail />
+      </div>
 
-      {error && <Alert tone="error">{error}</Alert>}
+      <div className="home-centre">
+        {error && <Alert tone="error">{error}</Alert>}
 
-      {loading ? (
-        <Spinner />
-      ) : (
-        <>
-          {/* Above the general lists: a suggestion built from this reader's own
-              history is worth more to them than "mới nhất". Hidden entirely
-              when there is no history to build one from. */}
-          {suggested.length > 0 && (
-            <section>
-              <div className="row-between nb-section-title">
-                <h2>Gợi ý cho bạn</h2>
-                <span className="muted" style={{ fontWeight: 500 }}>
-                  Cùng thể loại với truyện bạn đã đọc
-                </span>
-              </div>
-              <div className="story-grid">
-                {suggested.map((story) => (
-                  <StoryCard key={story.id} story={story} />
-                ))}
-              </div>
-            </section>
-          )}
+        {loading ? (
+          <Spinner />
+        ) : (
+          <>
+            <FeaturedCarousel stories={featured} />
 
-          <section>
-            <div className="row-between nb-section-title">
-              <h2>Mới cập nhật</h2>
-            </div>
-            <div className="story-grid">
-              {newest.map((story) => (
-                <StoryCard key={story.id} story={story} />
-              ))}
-            </div>
-          </section>
+            <main className="home-main">
+              {/* Above the general lists: a suggestion built from this reader's
+                  own history is worth more to them than "mới nhất". Hidden
+                  entirely when there is no history to build one from. */}
+              {suggested.length > 0 && (
+                <section>
+                  <div className="row-between nb-section-title">
+                    <h2>Gợi ý cho bạn</h2>
+                    <span className="muted" style={{ fontWeight: 500 }}>
+                      Cùng thể loại với truyện bạn đã đọc
+                    </span>
+                  </div>
+                  <div className="story-grid story-grid-quad">
+                    {suggested.map((story) => (
+                      <StoryCard key={story.id} story={story} />
+                    ))}
+                  </div>
+                </section>
+              )}
 
-          <section>
-            <div className="row-between nb-section-title">
-              <h2>Được xem nhiều</h2>
-            </div>
-            <div className="story-grid">
-              {popular.map((story) => (
-                <StoryCard key={story.id} story={story} />
-              ))}
-            </div>
-          </section>
-        </>
-      )}
+              <section>
+                <div className="row-between nb-section-title">
+                  <h2>Mới cập nhật</h2>
+                </div>
+                <div className="story-grid story-grid-quad">
+                  {newest.map((story) => (
+                    <StoryCard key={story.id} story={story} />
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <div className="row-between nb-section-title">
+                  <h2>Được xem nhiều</h2>
+                </div>
+                <div className="story-grid story-grid-quad">
+                  {popular.map((story) => (
+                    <StoryCard key={story.id} story={story} />
+                  ))}
+                </div>
+              </section>
+            </main>
+          </>
+        )}
+      </div>
+
+      <div className="home-rail home-rail-right">
+        <TopListenedRail />
+      </div>
     </div>
   );
 }

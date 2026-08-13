@@ -56,6 +56,16 @@ export const catalogApi = {
 export const storyApi = {
   /** `params` accepts keyword, genreId, status, sort, page and size. */
   list: (params) => client.get("/api/stories", { params }).then((r) => r.data),
+
+  /**
+   * Listen ranking for a window. `params` takes period (day/week/month) and limit.
+   *
+   * Counts the listens inside that window rather than the running total, so the
+   * three periods genuinely disagree with each other.
+   */
+  topListened: (params) =>
+    client.get("/api/stories/top-listened", { params }).then((r) => r.data),
+
   detail: (id) => client.get(`/api/stories/${id}`).then((r) => r.data),
   chapters: (id) => client.get(`/api/stories/${id}/chapters`).then((r) => r.data),
 };
