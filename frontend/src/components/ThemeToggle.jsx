@@ -1,5 +1,4 @@
 import { useTheme } from "../context/theme-context";
-import { Button } from "./ui";
 
 const icon = {
   viewBox: "0 0 24 24",
@@ -28,25 +27,28 @@ const MoonIcon = () => (
  * Light/dark switch.
  *
  * The glyph shows the theme the click leads to — a sun while dark, a moon
- * while light — so the button reads as the way out of the current mode. The
- * accessible name spells that out, since a lone icon cannot.
+ * while light — so it reads as the way out of the current mode. The accessible
+ * name spells that out, since a lone icon cannot.
+ *
+ * A bare glyph rather than a button: switching the theme is a preference you
+ * set once, and giving it the same outlined chrome as "Đăng nhập" or "Nghe
+ * chương này" put it at a weight it never earned. The hit area is still a full
+ * 2.25rem square — the chrome is gone, the target is not.
  */
-export default function ThemeToggle({ showLabel = false, block = false, size = "sm" }) {
+export default function ThemeToggle() {
   const { isDark, toggleTheme } = useTheme();
 
   const label = isDark ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối";
 
   return (
-    <Button
-      size={size}
-      block={block}
-      className={showLabel ? "" : "nb-icon-btn"}
+    <button
+      type="button"
+      className="theme-toggle"
       aria-label={label}
       title={label}
       onClick={toggleTheme}
     >
       {isDark ? <SunIcon /> : <MoonIcon />}
-      {showLabel && (isDark ? "Giao diện sáng" : "Giao diện tối")}
-    </Button>
+    </button>
   );
 }

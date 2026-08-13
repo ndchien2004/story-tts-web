@@ -127,7 +127,10 @@
   color: var(--ink);
   background: transparent;
   border: var(--outline-width) solid var(--line-strong);
-  border-radius: var(--radius-sm);
+  /* Fully round, not slightly softened. A pill reads as a thing you press in a
+     way a 4px corner never quite does, and it separates a control from the
+     panels and tables around it, which keep their square-ish corners. */
+  border-radius: var(--radius-pill);
   box-shadow: none;
   transition: background-color var(--transition), border-color var(--transition),
     color var(--transition);
@@ -238,7 +241,8 @@
   width: 100%;
 }
 
-/* Square button holding a single glyph, with no room for a label. */
+/* A single glyph with no room for a label — square box, so the pill radius it
+   inherits from `.nb-btn` resolves to a circle. */
 .nb-icon-btn {
   flex: 0 0 auto;
   width: 2.25rem;
@@ -249,6 +253,39 @@
 .nb-icon-btn svg {
   width: 1.05rem;
   height: 1.05rem;
+}
+
+/*
+ * The theme switch: a glyph, not a control.
+ *
+ * No border and no fill, so it sits in the navbar at the weight of a piece of
+ * punctuation rather than competing with the buttons beside it. Everything it
+ * gives up is decoration — the square hit area stays, and the icon darkens on
+ * hover so there is still an answer to "is this clickable".
+ */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.theme-toggle:hover {
+  color: var(--ink);
+}
+
+.theme-toggle svg {
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 /* ------------------------------------------------------------------ */
