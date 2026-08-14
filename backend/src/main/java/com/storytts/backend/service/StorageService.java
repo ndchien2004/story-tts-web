@@ -33,16 +33,24 @@ public class StorageService {
     private final StorageProperties properties;
 
     private Path audioRoot;
+    private Path bgmRoot;
     private Path coverRoot;
 
     @PostConstruct
     void init() {
         audioRoot = createDirectory(properties.audioDir());
+        bgmRoot = createDirectory(properties.bgmDir());
         coverRoot = createDirectory(properties.coverDir());
         log.info("Audio storage directory: {}", audioRoot);
     }
 
     private Path createDirectory(String configured) {
+        // A missing property used to surface as a NullPointerException from
+        // Paths.get, three frames deep in bean creation, naming nothing.
+        if (configured == null || configured.isBlank()) {
+            throw new IllegalStateException(
+                    "Thiếu cấu hình thư mục lưu trữ (app.storage.*). Xem application.properties.");
+        }
         try {
             Path path = Paths.get(configured).toAbsolutePath().normalize();
             Files.createDirectories(path);
@@ -66,12 +74,28 @@ public class StorageService {
 
     /** Copies an uploaded stream under a generated name and returns that name. */
     public String storeAudio(InputStream input, String extension) {
+        return store(audioRoot, input, extension);
+    }
+
+    /**
+     * Same, into the background-music directory.
+     *
+     * <p>A directory of its own rather than a prefix in the audio one: chapter
+     * narration is derived data that gets rebuilt, while these are files an admin
+     * uploaded once. Keeping them apart means a cleanup that empties the audio
+     * directory cannot take the music library with it.
+     */
+    public String storeBgm(InputStream input, String extension) {
+        return store(bgmRoot, input, extension);
+    }
+
+    private String store(Path root, InputStream input, String extension) {
         String fileName = UUID.randomUUID() + normaliseExtension(extension);
-        Path target = audioRoot.resolve(fileName);
+        Path target = root.resolve(fileName);
         try {
             Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException ex) {
-            throw new UncheckedIOException("Cannot write audio file " + fileName, ex);
+            throw new UncheckedIOException("Cannot write file " + fileName, ex);
         }
         return fileName;
     }
@@ -82,8 +106,16 @@ public class StorageService {
      * @throws BadRequestException if the name would escape the audio directory
      */
     public Resource resolveAudio(String fileName) {
-        Path path = audioRoot.resolve(fileName).normalize();
-        if (!path.startsWith(audioRoot)) {
+        return resolve(audioRoot, fileName);
+    }
+
+    public Resource resolveBgm(String fileName) {
+        return resolve(bgmRoot, fileName);
+    }
+
+    private Resource resolve(Path root, String fileName) {
+        Path path = root.resolve(fileName).normalize();
+        if (!path.startsWith(root)) {
             throw new BadRequestException("Đường dẫn file không hợp lệ.");
         }
         return new FileSystemResource(path);
@@ -91,16 +123,24 @@ public class StorageService {
 
     /** Best-effort delete; a missing file is not an error. */
     public void deleteAudio(String fileName) {
+        delete(audioRoot, fileName);
+    }
+
+    public void deleteBgm(String fileName) {
+        delete(bgmRoot, fileName);
+    }
+
+    private void delete(Path root, String fileName) {
         if (fileName == null || fileName.isBlank()) {
             return;
         }
         try {
-            Path path = audioRoot.resolve(fileName).normalize();
-            if (path.startsWith(audioRoot)) {
+            Path path = root.resolve(fileName).normalize();
+            if (path.startsWith(root)) {
                 Files.deleteIfExists(path);
             }
         } catch (IOException ex) {
-            log.warn("Could not delete audio file {}: {}", fileName, ex.getMessage());
+            log.warn("Could not delete file {}: {}", fileName, ex.getMessage());
         }
     }
 

@@ -111,6 +111,12 @@ public class SecurityConfig {
                                 "/api/stories/**", "/api/chapters/**",
                                 "/api/genres/**", "/api/authors/**").permitAll()
 
+                        // --- Nhạc nền ---
+                        // Không có gì riêng tư ở đây: đây là nhạc quản trị viên
+                        // chủ động mở cho mọi người nghe, và trang đọc hỏi danh
+                        // sách này ngay khi mở một chương công khai.
+                        .requestMatchers(HttpMethod.GET, "/api/bgm/**").permitAll()
+
                         // --- Nghe bằng AI ---
                         // Trạng thái xem được cả khi chưa đăng nhập, để trang đọc biết
                         // nên hiện nút hay hiện lời mời đăng nhập. Còn việc tạo audio

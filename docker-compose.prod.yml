@@ -42,6 +42,7 @@ services:
       DB_PORT: 3306
       SERVER_PORT: 8080
       AUDIO_DIR: /app/uploads/audio
+      BGM_DIR: /app/uploads/bgm
       COVER_DIR: /app/uploads/covers
     volumes:
       - uploads:/app/uploads
