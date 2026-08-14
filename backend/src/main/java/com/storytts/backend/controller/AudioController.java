@@ -1,6 +1,7 @@
 package com.storytts.backend.controller;
 
 import com.storytts.backend.dto.audio.AudioInfoDto;
+import com.storytts.backend.dto.audio.ChapterTranscriptDto;
 import com.storytts.backend.service.AudioService;
 import com.storytts.backend.service.tts.ReaderTtsService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -76,6 +77,25 @@ public class AudioController {
     @Operation(summary = "Trạng thái một bản audio (dùng để chờ dựng xong, không tính lượt nghe)")
     public AudioInfoDto ttsStatus(@PathVariable Long chapterId, @PathVariable Long audioId) {
         return audioService.trackStatus(chapterId, audioId);
+    }
+
+    /**
+     * Mốc thời gian từng chữ của một bản audio.
+     *
+     * <p>Trang đọc lấy một lần khi mở chương rồi tự dò tại chỗ trong lúc phát —
+     * không có lời gọi nào theo nhịp phát, vì một yêu cầu mỗi giây cho một việc
+     * hiển thị là cách chắc chắn nhất để phần tô sáng giật theo đường truyền.
+     *
+     * <p>Chỉ nên gọi khi {@code hasTranscript} của bản ấy là true; bản không có
+     * mốc trả về mảng rỗng chứ không báo lỗi.
+     */
+    @GetMapping("/audio/{audioId}/transcript")
+    @Operation(summary = "Mốc thời gian từng chữ của một bản audio",
+            description = "Dùng cho phần tô sáng chữ theo giọng đọc. Bản audio không có "
+                    + "mốc thời gian (admin tải lên, hoặc dựng trước khi có tính năng này) "
+                    + "trả về mảng rỗng. Chương bị khóa trả 403 y như đường phát.")
+    public ChapterTranscriptDto transcript(@PathVariable Long chapterId, @PathVariable Long audioId) {
+        return audioService.transcript(chapterId, audioId);
     }
 
     /**

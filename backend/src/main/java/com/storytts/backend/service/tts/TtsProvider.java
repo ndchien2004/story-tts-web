@@ -31,10 +31,14 @@ public interface TtsProvider {
     /**
      * Converts text to MP3 bytes.
      *
+     * <p>Kèm theo mốc thời gian từng chữ nếu nhà cung cấp nói được — xem
+     * {@link ProviderSpeech}. Nhà nào không nói được thì trả về danh sách rỗng
+     * chứ không ném lỗi: một bản audio không tô sáng được vẫn là một bản audio.
+     *
      * @param voiceCode a code from {@link #voices()}, or null for the default
      * @param speed     -3 (slowest) to 3 (fastest); providers without a speed
      *                  control ignore it
      * @throws com.storytts.backend.exception.TtsException on any vendor failure
      */
-    byte[] synthesize(String text, String voiceCode, int speed);
+    ProviderSpeech synthesize(String text, String voiceCode, int speed);
 }

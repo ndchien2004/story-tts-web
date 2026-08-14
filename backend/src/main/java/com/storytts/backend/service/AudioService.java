@@ -7,9 +7,13 @@ import com.storytts.backend.domain.Chapter;
 import com.storytts.backend.domain.User;
 import com.storytts.backend.domain.ViewType;
 import com.storytts.backend.dto.audio.AudioInfoDto;
+import com.storytts.backend.dto.audio.ChapterTranscriptDto;
+import com.storytts.backend.dto.audio.WordTimestampDto;
 import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.ResourceNotFoundException;
 import com.storytts.backend.repository.AudioFileRepository;
+import com.storytts.backend.repository.AudioTranscriptRepository;
+import com.storytts.backend.service.tts.TranscriptCodec;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
@@ -45,6 +49,8 @@ public class AudioService {
     private static final long MAX_UPLOAD_BYTES = 64L * 1024 * 1024;
 
     private final AudioFileRepository audioFileRepository;
+    private final AudioTranscriptRepository audioTranscriptRepository;
+    private final TranscriptCodec transcriptCodec;
     private final ChapterService chapterService;
     private final AccessControlService accessControlService;
     private final StorageService storageService;
@@ -113,6 +119,45 @@ public class AudioService {
         }
         requireOwnership(audio);
         return AudioInfoDto.from(audio, chapterId);
+    }
+
+    /**
+     * Mốc thời gian từng chữ của một bản audio, cho phần tô sáng theo giọng đọc.
+     *
+     * <p>Đi qua đúng hai lớp cửa như đường phát: chương bị khóa thì không đọc
+     * được lời của nó, và bản của người khác thì không phải của mình. Mốc thời
+     * gian chính là gần hết nội dung chương viết lại dưới dạng mảng — để hở chỗ
+     * này là mở một cửa sau vào chương trả phí.
+     *
+     * <p>Bản không có mốc (admin tải lên, hoặc dựng từ trước khi có tính năng
+     * này) trả về danh sách rỗng chứ không phải 404: "bản này không có chữ nào
+     * được đánh mốc" là một câu trả lời đúng, không phải một lỗi.
+     */
+    @Transactional(readOnly = true)
+    public ChapterTranscriptDto transcript(Long chapterId, Long audioId) {
+        Chapter chapter = chapterService.findDetailEntity(chapterId);
+        accessControlService.requireAccess(chapter);
+
+        AudioFile audio = audioFileRepository.findById(audioId)
+                .orElseThrow(() -> ResourceNotFoundException.of("file audio", audioId));
+
+        if (!audio.getChapter().getId().equals(chapterId)) {
+            throw new BadRequestException("File audio không thuộc chương này.");
+        }
+        requireOwnership(audio);
+
+        List<WordTimestampDto> words = audioTranscriptRepository.findById(audioId)
+                .map(transcript -> transcriptCodec.decode(transcript.getWordsJson()))
+                .orElseGet(List::of);
+
+        return new ChapterTranscriptDto(
+                chapter.getStory().getId(),
+                chapterId,
+                audioId,
+                AudioInfoDto.streamPath(chapterId, audioId),
+                audio.getContentHash(),
+                words.size(),
+                words);
     }
 
     /**

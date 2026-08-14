@@ -17,6 +17,10 @@ import com.storytts.backend.domain.AudioStatus;
  *                  is meant for everyone, the other belongs to one person and
  *                  goes when their session does. The reading page needs the
  *                  distinction to know which one to reach for first.
+ * @param hasTranscript có mốc thời gian từng chữ hay không. Trang đọc hỏi điều
+ *                  này trước khi đi lấy: bản admin tải lên và những bản dựng từ
+ *                  trước đều không có, và một lời mời "đọc theo giọng đọc" mà
+ *                  bấm vào thì không có gì sáng lên còn tệ hơn là không mời.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record AudioInfoDto(
@@ -31,7 +35,8 @@ public record AudioInfoDto(
         String provider,
         Integer durationSeconds,
         Long fileSize,
-        String errorMessage
+        String errorMessage,
+        boolean hasTranscript
 ) {
 
     /** Bản của khu quản trị: dựng sẵn cho mọi người, sống lâu dài. */
@@ -39,6 +44,11 @@ public record AudioInfoDto(
 
     /** Bản người đọc tự dựng: của riêng họ, mất khi phiên đăng nhập kết thúc. */
     public static final String OWNER_SESSION = "SESSION";
+
+    /** Đường dẫn phát của một bản audio — một chỗ định nghĩa, nhiều chỗ dùng. */
+    public static String streamPath(Long chapterId, Long audioId) {
+        return "/api/chapters/%d/audio/%d".formatted(chapterId, audioId);
+    }
 
     public static AudioInfoDto from(AudioFile audio, Long chapterId) {
         boolean ready = audio.getStatus() == AudioStatus.READY;
@@ -48,12 +58,13 @@ public record AudioInfoDto(
                 audio.getSource().name(),
                 audio.getRequestedBy() == null ? OWNER_LIBRARY : OWNER_SESSION,
                 audio.getStatus().name(),
-                ready ? "/api/chapters/%d/audio/%d".formatted(chapterId, audio.getId()) : null,
+                ready ? streamPath(chapterId, audio.getId()) : null,
                 audio.getVoice(),
                 audio.getSpeed(),
                 audio.getProvider(),
                 audio.getDurationSeconds(),
                 audio.getFileSize(),
-                audio.getErrorMessage());
+                audio.getErrorMessage(),
+                audio.getTranscriptWords() != null && audio.getTranscriptWords() > 0);
     }
 }

@@ -93,12 +93,13 @@ public class TtsEngine {
             String voiceForProvider = provider.supportsVoice(voiceCode) ? voiceCode : null;
 
             try {
-                byte[] audio = provider.synthesize(text, voiceForProvider, speed);
+                ProviderSpeech spoken = provider.synthesize(text, voiceForProvider, speed);
                 if (!failures.isEmpty()) {
                     log.info("TTS fell back to {} after {} failed attempt(s)",
                             provider.id(), failures.size());
                 }
-                return new SynthesisResult(audio, provider.id(), provider.displayName());
+                return new SynthesisResult(
+                        spoken.audio(), spoken.words(), provider.id(), provider.displayName());
             } catch (TtsException ex) {
                 log.warn("TTS provider {} failed: {}", provider.id(), ex.getMessage());
                 failures.add("%s: %s".formatted(provider.displayName(), ex.getMessage()));

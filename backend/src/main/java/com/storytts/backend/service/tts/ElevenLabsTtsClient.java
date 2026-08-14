@@ -20,7 +20,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -36,6 +38,17 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * The `speed` argument is ignored: this API has no speed control, and the
  * listener already has one on the player itself.
+ *
+ * <h3>Mốc thời gian</h3>
+ * Đường gọi mặc định ở đây là {@code /with-timestamps}: cùng một lần tổng hợp,
+ * cùng một khoản tiền, nhưng trả về thêm mốc thời gian của từng ký tự. Đó là thứ
+ * duy nhất khiến trang đọc tô sáng theo giọng đọc được — không có nó thì phía
+ * trình duyệt chỉ còn cách chia đều thời lượng cho số chữ, và một câu có dấu
+ * lặng ở giữa là đủ để phần tô sáng trôi khỏi chỗ đang đọc.
+ *
+ * <p>Nếu tài khoản hoặc phiên bản API không có đường ấy, lớp này tự lùi về đường
+ * cũ và ghi nhớ điều đó cho những lần sau. Một bản audio không có mốc thời gian
+ * vẫn là một bản audio nghe được; mất hẳn giọng đọc mới là hỏng.
  */
 @Component
 @RequiredArgsConstructor
@@ -63,6 +76,15 @@ public class ElevenLabsTtsClient implements TtsProvider {
 
     /** Cached voice listing; the account's voices rarely change. */
     private final AtomicReference<CachedVoices> voiceCache = new AtomicReference<>();
+
+    /**
+     * Còn hỏi mốc thời gian nữa hay thôi.
+     *
+     * <p>Hạ xuống một lần rồi thì thôi hẳn cho tới lần khởi động sau: một tài
+     * khoản không có đường ấy sẽ không tự có, và thử lại mỗi đoạn chỉ tổ thêm
+     * một vòng gọi hỏng cho mỗi lần tổng hợp.
+     */
+    private final AtomicBoolean timestampsAvailable = new AtomicBoolean(true);
 
     @Override
     public String id() {
@@ -112,7 +134,7 @@ public class ElevenLabsTtsClient implements TtsProvider {
     }
 
     @Override
-    public byte[] synthesize(String text, String voiceCode, int speed) {
+    public ProviderSpeech synthesize(String text, String voiceCode, int speed) {
         TtsProperties.ElevenLabs config = properties.elevenlabs();
         if (config == null || !config.isConfigured()) {
             throw new TtsException(
@@ -126,15 +148,47 @@ public class ElevenLabsTtsClient implements TtsProvider {
                 text.length(), chunks.size(), voiceId, config.modelId());
 
         ByteArrayOutputStream combined = new ByteArrayOutputStream();
+        List<WordAligner.Segment> segments = new ArrayList<>(chunks.size());
+
+        // Con trỏ chỉ tiến: {@link TextChunker} cắt gọn hai đầu mỗi đoạn, nên đoạn
+        // nhận về là một khúc con của chương chứ không phải bản sao nguyên vẹn —
+        // và đây là chỗ duy nhất còn biết khúc ấy vốn nằm ở đâu.
+        int cursor = 0;
+
         for (String chunk : chunks) {
-            combined.writeBytes(requestSpeech(chunk, voiceId, config));
+            int chunkStart = text.indexOf(chunk, cursor);
+            if (chunkStart < 0) {
+                chunkStart = cursor;
+            }
+            cursor = chunkStart + chunk.length();
+
+            ChunkSpeech spoken = requestSpeech(chunk, voiceId, config);
+            combined.writeBytes(spoken.audio());
+
+            WordAligner.Segment segment = toSegment(chunk, chunkStart, spoken.alignment());
+            if (segment != null) {
+                segments.add(segment);
+            }
         }
 
         byte[] audio = combined.toByteArray();
         if (audio.length == 0) {
             throw new TtsException("ElevenLabs trả về file rỗng. Vui lòng thử lại.");
         }
-        return audio;
+
+        // Hoặc đủ cả, hoặc bỏ hết. Thiếu mốc thời gian của một đoạn giữa chương
+        // thì mọi đoạn sau nó lệch đi đúng bằng độ dài đoạn thiếu, và một bản tô
+        // sáng lệch nửa phút còn tệ hơn hẳn một bản không tô sáng gì.
+        List<WordTimestamp> words = List.of();
+        if (segments.size() == chunks.size()) {
+            words = WordAligner.align(segments);
+        } else if (!segments.isEmpty()) {
+            log.warn("ElevenLabs: chỉ {}/{} đoạn có mốc thời gian, bỏ toàn bộ phần tô sáng",
+                    segments.size(), chunks.size());
+        }
+
+        log.info("ElevenLabs: {} bytes, {} chữ có mốc thời gian", audio.length, words.size());
+        return new ProviderSpeech(audio, words);
     }
 
     /** Strips the prefix from a code of ours; anything else uses the default. */
@@ -153,7 +207,90 @@ public class ElevenLabsTtsClient implements TtsProvider {
         return config.voiceId();
     }
 
-    private byte[] requestSpeech(String text, String voiceId, TtsProperties.ElevenLabs config) {
+    /**
+     * Một đoạn văn bản, đọc thành tiếng.
+     *
+     * <p>Thử đường có mốc thời gian trước; nếu tài khoản không có đường ấy thì
+     * lùi về đường thường và nhớ luôn, để cả những đoạn sau của chính chương này
+     * không phải thử lại.
+     */
+    private ChunkSpeech requestSpeech(String text, String voiceId, TtsProperties.ElevenLabs config) {
+        if (timestampsAvailable.get()) {
+            try {
+                return requestWithTimestamps(text, voiceId, config);
+            } catch (TimestampsUnavailableException ex) {
+                log.info("ElevenLabs: {} — từ đây chỉ lấy tiếng, không lấy mốc thời gian",
+                        ex.getMessage());
+                timestampsAvailable.set(false);
+            }
+        }
+        return new ChunkSpeech(requestPlainSpeech(text, voiceId, config), null);
+    }
+
+    /**
+     * Đường có mốc thời gian: trả về JSON, audio nằm trong đó dưới dạng base64.
+     *
+     * @throws TimestampsUnavailableException khi chính đường này không tồn tại,
+     *         tức là nên lùi về đường thường chứ không phải báo hỏng cho người dùng
+     */
+    private ChunkSpeech requestWithTimestamps(String text, String voiceId,
+                                              TtsProperties.ElevenLabs config) {
+        String url = "%s/text-to-speech/%s/with-timestamps?output_format=mp3_44100_128"
+                .formatted(trimTrailingSlash(config.endpoint()),
+                        URLEncoder.encode(voiceId, StandardCharsets.UTF_8));
+
+        HttpResponse<byte[]> response = send(url, requestBody(text, config), config, "application/json");
+        int status = response.statusCode();
+
+        // Chỉ hai mã này mới có nghĩa là "không có đường ấy". Mọi mã lỗi khác là
+        // hỏng thật (sai key, hết hạn mức), và lùi về đường thường chỉ để nhận
+        // đúng cái lỗi ấy một lần nữa.
+        if (status == 404 || status == 405) {
+            throw new TimestampsUnavailableException(
+                    "API không có /with-timestamps (HTTP %d)".formatted(status));
+        }
+        failOnError(response);
+
+        JsonNode json;
+        try {
+            json = objectMapper.readTree(response.body());
+        } catch (Exception ex) {
+            throw new TtsException("ElevenLabs trả về nội dung không đọc được.", ex);
+        }
+
+        String encoded = json.path("audio_base64").asText("");
+        if (encoded.isBlank()) {
+            throw new TtsException("ElevenLabs trả về nội dung rỗng.");
+        }
+
+        byte[] audio;
+        try {
+            audio = Base64.getMimeDecoder().decode(encoded);
+        } catch (IllegalArgumentException ex) {
+            throw new TtsException("ElevenLabs trả về audio không giải mã được.", ex);
+        }
+
+        JsonNode alignment = json.path("alignment");
+        return new ChunkSpeech(audio, alignment.isObject() ? alignment : null);
+    }
+
+    /** Đường cũ: thân phản hồi chính là file MP3. */
+    private byte[] requestPlainSpeech(String text, String voiceId, TtsProperties.ElevenLabs config) {
+        String url = "%s/text-to-speech/%s?output_format=mp3_44100_128"
+                .formatted(trimTrailingSlash(config.endpoint()),
+                        URLEncoder.encode(voiceId, StandardCharsets.UTF_8));
+
+        HttpResponse<byte[]> response = send(url, requestBody(text, config), config, "audio/mpeg");
+        failOnError(response);
+
+        byte[] audio = response.body();
+        if (audio == null || audio.length == 0) {
+            throw new TtsException("ElevenLabs trả về nội dung rỗng.");
+        }
+        return audio;
+    }
+
+    private ObjectNode requestBody(String text, TtsProperties.ElevenLabs config) {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("text", text);
         body.put("model_id", config.modelId());
@@ -162,29 +299,32 @@ public class ElevenLabsTtsClient implements TtsProvider {
         settings.put("stability", 0.5);
         settings.put("similarity_boost", 0.75);
 
-        String url = "%s/text-to-speech/%s?output_format=mp3_44100_128"
-                .formatted(trimTrailingSlash(config.endpoint()),
-                        URLEncoder.encode(voiceId, StandardCharsets.UTF_8));
+        return body;
+    }
 
+    private HttpResponse<byte[]> send(String url, ObjectNode body,
+                                      TtsProperties.ElevenLabs config, String accept) {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(REQUEST_TIMEOUT)
                 .header("xi-api-key", config.apiKey())
                 .header("Content-Type", "application/json")
-                .header("Accept", "audio/mpeg")
+                .header("Accept", accept)
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<byte[]> response;
         try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            return httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new TtsException("Quá trình tạo audio bị gián đoạn.", ex);
         } catch (Exception ex) {
             throw new TtsException("Không kết nối được tới ElevenLabs. Vui lòng kiểm tra kết nối mạng.", ex);
         }
+    }
 
+    /** Dịch mã lỗi HTTP thành câu người dùng đọc được, hoặc để yên nếu là 2xx. */
+    private void failOnError(HttpResponse<byte[]> response) {
         int status = response.statusCode();
         if (status == 401 || status == 403) {
             throw new TtsException("API key của ElevenLabs không hợp lệ hoặc không đủ quyền.");
@@ -198,12 +338,48 @@ public class ElevenLabsTtsClient implements TtsProvider {
             throw new TtsException("ElevenLabs trả về lỗi (HTTP %d)%s."
                     .formatted(status, describeError(response.body())));
         }
+    }
 
-        byte[] audio = response.body();
-        if (audio == null || audio.length == 0) {
-            throw new TtsException("ElevenLabs trả về nội dung rỗng.");
+    /**
+     * Đổi khối alignment của nhà cung cấp thành đầu vào của {@link WordAligner}.
+     *
+     * @return null khi đoạn này không có mốc thời gian dùng được
+     */
+    private WordAligner.Segment toSegment(String chunk, int chunkStart, JsonNode alignment) {
+        if (alignment == null) {
+            return null;
         }
-        return audio;
+
+        List<String> characters = readStrings(alignment.path("characters"));
+        List<Double> starts = readDoubles(alignment.path("character_start_times_seconds"));
+        List<Double> ends = readDoubles(alignment.path("character_end_times_seconds"));
+
+        if (characters.isEmpty() || starts.isEmpty() || ends.isEmpty()) {
+            return null;
+        }
+        return new WordAligner.Segment(chunk, chunkStart, characters, starts, ends);
+    }
+
+    private List<String> readStrings(JsonNode array) {
+        if (!array.isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>(array.size());
+        for (JsonNode node : array) {
+            values.add(node.asText(""));
+        }
+        return values;
+    }
+
+    private List<Double> readDoubles(JsonNode array) {
+        if (!array.isArray()) {
+            return List.of();
+        }
+        List<Double> values = new ArrayList<>(array.size());
+        for (JsonNode node : array) {
+            values.add(node.asDouble(0));
+        }
+        return values;
     }
 
     /** Error bodies arrive as JSON even though success is binary audio. */
@@ -269,6 +445,17 @@ public class ElevenLabsTtsClient implements TtsProvider {
         return value != null && value.endsWith("/")
                 ? value.substring(0, value.length() - 1)
                 : value;
+    }
+
+    /** Tiếng của một đoạn, kèm khối alignment nếu lần gọi ấy có trả về. */
+    private record ChunkSpeech(byte[] audio, JsonNode alignment) {
+    }
+
+    /** Không phải lỗi để báo lên trên: là dấu hiệu để lùi về đường gọi cũ. */
+    private static final class TimestampsUnavailableException extends RuntimeException {
+        TimestampsUnavailableException(String message) {
+            super(message);
+        }
     }
 
     private record CachedVoices(List<VoiceOptionDto> voices, Instant fetchedAt) {

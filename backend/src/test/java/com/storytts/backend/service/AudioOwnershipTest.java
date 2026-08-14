@@ -7,8 +7,11 @@ import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
 import com.storytts.backend.domain.Story;
 import com.storytts.backend.domain.User;
+import com.storytts.backend.dto.audio.ChapterTranscriptDto;
 import com.storytts.backend.exception.ResourceNotFoundException;
 import com.storytts.backend.repository.AudioFileRepository;
+import com.storytts.backend.repository.AudioTranscriptRepository;
+import com.storytts.backend.service.tts.TranscriptCodec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +23,7 @@ import org.mockito.quality.Strictness;
 
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -48,6 +52,10 @@ class AudioOwnershipTest {
     @Mock
     private AudioFileRepository audioFileRepository;
     @Mock
+    private AudioTranscriptRepository audioTranscriptRepository;
+    @Mock
+    private TranscriptCodec transcriptCodec;
+    @Mock
     private ChapterService chapterService;
     @Mock
     private AccessControlService accessControlService;
@@ -62,8 +70,9 @@ class AudioOwnershipTest {
 
     @BeforeEach
     void setUp() {
-        audioService = new AudioService(audioFileRepository, chapterService, accessControlService,
-                storageService, viewEventService, currentUserService);
+        audioService = new AudioService(audioFileRepository, audioTranscriptRepository,
+                transcriptCodec, chapterService, accessControlService, storageService,
+                viewEventService, currentUserService);
 
         when(chapterService.findDetailEntity(CHAPTER_ID)).thenReturn(chuong());
     }
@@ -106,6 +115,35 @@ class AudioOwnershipTest {
 
         assertThatCode(() -> audioService.trackStatus(CHAPTER_ID, AUDIO_ID))
                 .doesNotThrowAnyException();
+    }
+
+    /**
+     * Mốc thời gian gần như là nội dung chương chép lại thành mảng, nên nó phải
+     * đi qua đúng cánh cửa mà đường phát audio đi qua — nếu không thì có một
+     * đường vòng đọc được chữ của một chương trả phí mà không cần phát nó.
+     */
+    @Test
+    @DisplayName("Người khác không lấy được mốc thời gian của bản audio của tôi")
+    void nguoiKhacKhongLayDuocMocThoiGianCuaToi() {
+        dangCo(banCua(NGUOI_DUNG_MOT));
+        dangDangNhapLa(NGUOI_DUNG_HAI);
+
+        assertThatThrownBy(() -> audioService.transcript(CHAPTER_ID, AUDIO_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Bản không có mốc thời gian trả về mảng rỗng, không phải lỗi")
+    void banKhongCoMocThiTraVeMangRong() {
+        dangCo(banCua(null));
+        when(currentUserService.currentUserId()).thenReturn(Optional.empty());
+        when(audioTranscriptRepository.findById(AUDIO_ID)).thenReturn(Optional.empty());
+
+        ChapterTranscriptDto transcript = audioService.transcript(CHAPTER_ID, AUDIO_ID);
+
+        assertThat(transcript.timestamps()).isEmpty();
+        assertThat(transcript.wordCount()).isZero();
+        assertThat(transcript.audioUrl()).isEqualTo("/api/chapters/7/audio/99");
     }
 
     @Test

@@ -90,6 +90,20 @@ public class AudioFile {
     private String errorMessage;
 
     /**
+     * Số chữ có mốc thời gian, hay null khi bản này không có mốc nào.
+     *
+     * <p>Bản thân mốc thời gian nằm ở bảng {@link AudioTranscript} — ba trăm KB
+     * JSON để chung trên hàng này thì mỗi lần liệt kê bản audio của một chương
+     * là một lần kéo nó về rồi vứt đi. Còn danh sách track thì vẫn cần trả lời
+     * "bản này tô sáng được không", và câu ấy chỉ tốn một số nguyên.
+     *
+     * <p>Null với bản admin tải lên (không ai biết giọng ấy đọc tới đâu) và với
+     * những bản dựng trước khi có cột này — cả hai đều nghe bình thường.
+     */
+    @Column(name = "transcript_words")
+    private Integer transcriptWords;
+
+    /**
      * Người đọc đã bấm "Nghe bằng AI" để sinh ra bản này.
      *
      * <p>Null với bản tải lên, với các bản do khu quản trị dựng, và với những bản

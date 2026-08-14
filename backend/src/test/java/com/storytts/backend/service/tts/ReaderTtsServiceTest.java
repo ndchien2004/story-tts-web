@@ -333,11 +333,11 @@ class ReaderTtsServiceTest {
 
     private static AudioInfoDto processingDto() {
         return new AudioInfoDto(99L, CHAPTER_ID, "TTS", AudioInfoDto.OWNER_SESSION, "PROCESSING", null,
-                "el:mot", 0, null, null, null, null);
+                "el:mot", 0, null, null, null, null, false);
     }
 
     private static AudioInfoDto readyDto() {
         return new AudioInfoDto(99L, CHAPTER_ID, "TTS", AudioInfoDto.OWNER_SESSION, "READY",
-                "/api/chapters/7/audio/99", "el:mot", 0, "elevenlabs", null, 1024L, null);
+                "/api/chapters/7/audio/99", "el:mot", 0, "elevenlabs", null, 1024L, null, true);
     }
 }
