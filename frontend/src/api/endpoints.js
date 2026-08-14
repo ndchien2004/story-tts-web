@@ -129,6 +129,30 @@ export const audioApi = {
   },
 };
 
+/* ------------------------------------------------------------------ */
+/* Background music                                                    */
+/* ------------------------------------------------------------------ */
+
+export const bgmApi = {
+  /**
+   * The tracks an admin has opened for listeners to choose from.
+   *
+   * Public, and deliberately so: this is music the site offers on purpose, and
+   * the reading page asks for it as soon as a public chapter opens.
+   */
+  list: (signal) => client.get("/api/bgm", { signal }).then((r) => r.data),
+
+  /**
+   * Absolute URL of a track's audio.
+   *
+   * No token on it, unlike `audioApi.streamUrl`: the endpoint is open, and the
+   * mixer fetches this URL directly to decode it into a buffer. Keeping the
+   * token out also keeps the URL cacheable — the same music is fetched by
+   * every listener, and the server marks it `public, max-age=86400`.
+   */
+  streamUrl: (path) => new URL(path, API_BASE_URL).toString(),
+};
+
 export const ttsApi = {
   /**
    * Whether narration can be requested, and how many goes the caller has left.
@@ -258,6 +282,34 @@ export const adminApi = {
 
   setChapterAccessLevelBulk: (chapterIds, accessLevel) =>
     client.patch("/api/admin/chapters/access-level", { chapterIds, accessLevel }).then((r) => r.data),
+
+  /* ---------------- Nhạc nền ---------------- */
+
+  /** Every track, the switched-off ones included — the reader's list hides those. */
+  listBgm: () => client.get("/api/admin/bgm").then((r) => r.data),
+
+  /**
+   * Uploads a track. Title and credit ride along in the same multipart as the
+   * file: a track only means anything once it has a name, and splitting that
+   * into a second call leaves a nameless row behind every time the second half
+   * fails.
+   */
+  uploadBgm: ({ file, title, credit }) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (title) form.append("title", title);
+    if (credit) form.append("credit", credit);
+    return client
+      .post("/api/admin/bgm", form, { headers: { "Content-Type": "multipart/form-data" } })
+      .then((r) => r.data);
+  },
+
+  updateBgm: (id, payload) => client.put(`/api/admin/bgm/${id}`, payload).then((r) => r.data),
+
+  setBgmActive: (id, value) =>
+    client.patch(`/api/admin/bgm/${id}/active`, { value }).then((r) => r.data),
+
+  deleteBgm: (id) => client.delete(`/api/admin/bgm/${id}`),
 
   createGenre: (payload) => client.post("/api/admin/genres", payload).then((r) => r.data),
   updateGenre: (id, payload) => client.put(`/api/admin/genres/${id}`, payload).then((r) => r.data),

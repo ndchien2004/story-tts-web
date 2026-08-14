@@ -1,19 +1,25 @@
+import { bgmApi } from "../api/endpoints";
 import type { BgmTrack } from "./types";
 
 /**
- * Kho nhạc nền: bản đi kèm trang web, và bản người nghe tự mở từ máy họ.
+ * Kho nhạc nền: bản quản trị viên tải lên, bản đi kèm bản build, và bản người
+ * nghe tự mở từ máy họ.
  *
- * <h3>Vì sao danh sách nằm ở một tệp manifest chứ không nằm trong mã nguồn</h3>
- * Nhạc nền là tài sản, không phải mã. Người dựng trang cần thêm bớt được vài
- * bản nhạc mà không phải dịch lại cả trang web, và cần thay được cả danh sách
- * trên máy chủ đã chạy. Nên mã nguồn chỉ biết đường dẫn tới `bgm/manifest.json`;
- * còn trong đó có gì là việc của thư mục `public/bgm`.
+ * <h3>Ba nguồn, theo thứ tự ưu tiên</h3>
+ * — **Máy chủ.** Quản trị viên tải nhạc lên trong bảng quản trị và mọi người
+ *   nghe thấy ngay ở lần mở trang sau. Đây là nguồn chính: nó là nguồn duy nhất
+ *   thêm được nhạc mà không phải build lại frontend.
+ * — **`public/bgm/manifest.json`.** Cách cũ, giữ nguyên vì nó vẫn hợp lệ: ai đã
+ *   bỏ sẵn vài bản nhạc vào bản build thì chúng vẫn hiện, xếp sau nhạc trên máy
+ *   chủ. Không có tệp ấy — trường hợp thường gặp — thì bỏ qua trong im lặng.
+ * — **Máy người nghe.** Vì bản quyền: không phải bản nhạc nào cũng phát công
+ *   khai được. Bản mở từ máy thành một object URL sống trong tab đang mở, không
+ *   rời khỏi máy họ, và mất khi tải lại trang.
  *
- * <h3>Vì sao vẫn cho mở file từ máy</h3>
- * Vì bản quyền. Không phải bản nhạc nào cũng phát công khai được, nên trang này
- * không đi kèm sẵn bài nào cả — người dựng tự bỏ vào. Cho tới lúc ấy, và cả sau
- * đó, người nghe vẫn mở được bản nhạc của chính họ: nó thành một object URL
- * sống trong tab đang mở, không rời khỏi máy họ, và mất khi tải lại trang.
+ * <h3>Vì sao không nguồn nào được phép làm hỏng phần còn lại</h3>
+ * Nhạc nền là phần thêm vào. Máy chủ không trả lời, hay tệp manifest hỏng, đều
+ * cho ra danh sách rỗng chứ không ném lỗi — một trang đọc truyện không có nhạc
+ * nền vẫn là một trang đọc truyện hoàn chỉnh.
  */
 
 /** Nơi cất lựa chọn, để lần mở chương sau không phải chọn lại. */
@@ -41,14 +47,70 @@ interface ManifestEntry {
   credit?: unknown;
 }
 
+/** Một bản nhạc nền như máy chủ trả về (`BgmTrackDto`). */
+interface ServerTrack {
+  id?: unknown;
+  title?: unknown;
+  credit?: unknown;
+  streamUrl?: unknown;
+}
+
 /**
- * Đọc danh sách nhạc nền đi kèm trang.
+ * Toàn bộ kho nhạc người nghe được chọn: máy chủ trước, bản đi kèm build sau.
  *
- * Không có tệp manifest, hoặc tệp hỏng, đều trả về danh sách rỗng chứ không
- * báo lỗi: nhạc nền là phần thêm vào, và một trang đọc truyện không có nhạc nền
- * vẫn là một trang đọc truyện hoàn chỉnh.
+ * Hai nguồn được hỏi song song và hỏng độc lập nhau — máy chủ đang ngủ thì
+ * nhạc trong bản build vẫn hiện, và ngược lại.
  */
 export async function loadBgmCatalog(signal?: AbortSignal): Promise<BgmTrack[]> {
+  const [fromServer, fromBundle] = await Promise.all([
+    loadServerCatalog(signal),
+    loadBundledCatalog(signal),
+  ]);
+
+  // Cùng một bản nhạc không thể nằm ở cả hai nguồn (id máy chủ có tiền tố
+  // riêng), nên chỉ cần nối lại; máy chủ lên trước vì đó là danh sách được
+  // sửa gần đây nhất.
+  return [...fromServer, ...fromBundle];
+}
+
+/** Nhạc quản trị viên đã tải lên. */
+async function loadServerCatalog(signal?: AbortSignal): Promise<BgmTrack[]> {
+  try {
+    const payload: unknown = await bgmApi.list(signal);
+    if (!Array.isArray(payload)) return [];
+
+    const tracks: BgmTrack[] = [];
+    for (const raw of payload as ServerTrack[]) {
+      const id = typeof raw.id === "number" || typeof raw.id === "string" ? String(raw.id) : "";
+      const streamUrl = typeof raw.streamUrl === "string" ? raw.streamUrl : "";
+      if (!id || !streamUrl) continue;
+
+      const track: BgmTrack = {
+        // Tiền tố để không đụng id của bản trong manifest, và để lựa chọn đã
+        // ghi nhớ vẫn trỏ đúng chỗ sau khi hai nguồn được gộp lại.
+        id: `server:${id}`,
+        title: typeof raw.title === "string" && raw.title.trim() ? raw.title.trim() : `Bản nhạc ${id}`,
+        url: bgmApi.streamUrl(streamUrl),
+        origin: "catalog",
+      };
+      if (typeof raw.credit === "string" && raw.credit.trim()) {
+        track.credit = raw.credit.trim();
+      }
+      tracks.push(track);
+    }
+    return tracks;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Nhạc bỏ sẵn vào `public/bgm` từ trước khi có kho trên máy chủ.
+ *
+ * Không có tệp manifest — trường hợp thường gặp — thì trả về danh sách rỗng
+ * chứ không báo lỗi.
+ */
+async function loadBundledCatalog(signal?: AbortSignal): Promise<BgmTrack[]> {
   const base = import.meta.env.BASE_URL || "/";
   const manifestUrl = `${base}bgm/manifest.json`;
 

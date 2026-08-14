@@ -28,6 +28,7 @@ import AdminStoryFormPage from "./pages/admin/AdminStoryFormPage";
 import AdminChaptersPage from "./pages/admin/AdminChaptersPage";
 import AdminChapterFormPage from "./pages/admin/AdminChapterFormPage";
 import AdminCatalogPage from "./pages/admin/AdminCatalogPage";
+import AdminBgmPage from "./pages/admin/AdminBgmPage";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
 import AdminVipPage from "./pages/admin/AdminVipPage";
 import AdminVipPlansPage from "./pages/admin/AdminVipPlansPage";
@@ -101,6 +102,10 @@ export default function App() {
                 <Route index element={<AdminDashboardPage />} />
                 <Route path="truyen" element={<AdminStoriesPage />} />
                 <Route path="danh-muc" element={<AdminCatalogPage />} />
+                {/* The shared background-music library. Readers pick from it on
+                    the reading page; without it that box is empty for anyone
+                    who has no music of their own. */}
+                <Route path="nhac-nen" element={<AdminBgmPage />} />
                 <Route path="binh-luan" element={<AdminCommentsPage />} />
                 <Route path="thanh-vien" element={<AdminUsersPage />} />
                 <Route path="vip" element={<AdminVipPage />} />
