@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { chapterApi, progressApi } from "../api/endpoints";
+import { audioApi, chapterApi, progressApi } from "../api/endpoints";
+import useAudioMixer from "../audio/useAudioMixer";
+import useBgm from "../audio/useBgm";
 import AudioPlayer from "../components/AudioPlayer";
 import LockedGate from "../components/LockedGate";
 import ReaderSettings from "../components/ReaderSettings";
@@ -23,6 +25,12 @@ const POSITION_SAVE_INTERVAL_MS = 15_000;
  * The chapter text and the listening panel sit side by side and each scrolls on
  * its own, so the navigation stays pinned to the top corners no matter how long
  * the chapter is.
+ *
+ * <h3>Ai giữ tiếng</h3>
+ * Không phải khối này, và cũng không phải trình phát. Tiếng do bộ trộn giữ —
+ * một `AudioContext` duy nhất dựng ở đây và sống suốt buổi đọc, kể cả khi người
+ * đọc sang chương khác. Nhờ vậy nhạc nền không đứt quãng ở ranh giới hai chương:
+ * đổi chương là đổi nguồn tiếng, không phải dựng lại đường tiếng.
  */
 export default function ChapterPage() {
   const { chapterId } = useParams();
@@ -43,8 +51,8 @@ export default function ChapterPage() {
     () => localStorage.getItem(AUTO_CONTINUE_KEY) === "true",
   );
 
-  // Set only when the previous chapter finished playing; the player reads it to
-  // decide whether it may start on its own, then clears it.
+  // Set only when the previous chapter finished playing; the mixer reads it to
+  // decide whether it may start on its own, then it is cleared.
   const [autoPlayNext, setAutoPlayNext] = useState(false);
 
   // Audio is only fetched once the chapter itself proved readable, so a locked
@@ -131,8 +139,8 @@ export default function ChapterPage() {
   );
 
   /**
-   * Throttles the write. `timeupdate` fires several times a second, and the
-   * position only needs to be roughly right — losing the last few seconds of a
+   * Throttles the write. The mixer reports the position several times a second,
+   * and it only needs to be roughly right — losing the last few seconds of a
    * session matters far less than a request per frame.
    */
   const handlePositionChange = useCallback(
@@ -151,6 +159,88 @@ export default function ChapterPage() {
     markedRead.current = true;
     progressApi.markRead(chapterId).catch(() => {});
   }, [chapterId, isAuthenticated]);
+
+  /**
+   * Continuous listening: move to the next chapter when playback finishes.
+   *
+   * Only the navigation happens here. The next page loads its own audio and the
+   * access check runs again server-side either way.
+   */
+  const handleTrackEnded = useCallback(() => {
+    markRead();
+    savePosition(0);
+    if (autoContinue && chapter?.nextChapterId) {
+      // The one case where audio may start by itself: the listener is already
+      // listening, and asked for the next chapter to follow on.
+      arrivingByAutoContinue.current = true;
+      setAutoPlayNext(true);
+      navigate(`/chuong/${chapter.nextChapterId}`);
+    }
+  }, [autoContinue, chapter, markRead, navigate, savePosition]);
+
+  /*
+   * Một bộ trộn cho cả buổi đọc.
+   *
+   * Dựng ở đây chứ không trong trình phát, vì nó phải sống lâu hơn bất kỳ khối
+   * giao diện nào: đổi chương là đổi nguồn tiếng, không phải dựng lại đường
+   * tiếng — nhạc nền đang chạy thì cứ chạy tiếp qua ranh giới hai chương.
+   */
+  const { engine, state: mixerState } = useAudioMixer({
+    onEnded: handleTrackEnded,
+    onTimeUpdate: handlePositionChange,
+    onPause: savePosition,
+  });
+
+  const bgm = useBgm(engine);
+
+  const activeTrack = audio.activeTrack;
+  const streamUrl = useMemo(
+    () => (activeTrack?.streamUrl ? audioApi.streamUrl(activeTrack.streamUrl) : null),
+    [activeTrack],
+  );
+
+  /*
+   * Nạp bản audio đang chọn vào bộ trộn.
+   *
+   * `autoPlayNext` nằm trong danh sách phụ thuộc chứ không chỉ được đọc một lần:
+   * lời mời tự phát có thể tới sau lúc bản audio đã nạp xong — người đọc bấm
+   * "Nghe bằng AI" thì bản mới được nhận vào và cờ tự phát được bật gần như cùng
+   * lúc, và thứ tự giữa hai việc ấy không có gì bảo đảm.
+   */
+  // Nhớ cả bộ trộn chứ không chỉ đường dẫn: một bộ trộn khác là một đồ thị âm
+  // thanh khác, và bản audio phải được nạp lại vào nó dù đường dẫn không đổi.
+  const loaded = useRef({ engine: null, src: null });
+
+  useEffect(() => {
+    const alreadyLoaded = loaded.current.engine === engine && loaded.current.src === streamUrl;
+
+    if (alreadyLoaded) {
+      if (streamUrl && autoPlayNext) {
+        setAutoPlayNext(false);
+        void engine.play();
+      }
+      return;
+    }
+
+    loaded.current = { engine, src: streamUrl };
+    void engine.loadNarration(streamUrl, {
+      startAt: chapter?.audioPositionSeconds ?? 0,
+      autoPlay: autoPlayNext,
+    });
+    if (autoPlayNext) setAutoPlayNext(false);
+  }, [autoPlayNext, chapter, engine, streamUrl]);
+
+  /**
+   * Giữ lại chỗ nghe dở khi rời trang.
+   *
+   * Đóng thẳng tab hay bấm quay lại đều không sinh ra sự kiện tạm dừng nào, nên
+   * không có chỗ này thì đoạn từ lần ghi định kỳ gần nhất tới lúc rời đi bị mất
+   * — mà đó đúng là đoạn người vừa rời đi quan tâm.
+   */
+  useEffect(() => () => {
+    const seconds = engine.exactPosition();
+    if (seconds > 0) savePosition(seconds);
+  }, [engine, savePosition]);
 
   /**
    * Reaching the bottom of the text counts as having read the chapter — that
@@ -179,26 +269,6 @@ export default function ChapterPage() {
     markRead();
     navigate(`/chuong/${id}`);
   }
-
-  /**
-   * Continuous listening: move to the next chapter when playback finishes.
-   *
-   * Only the navigation happens here. The next page loads its own audio and the
-   * access check runs again server-side either way.
-   */
-  const handleTrackEnded = useCallback(() => {
-    markRead();
-    savePosition(0);
-    if (autoContinue && chapter?.nextChapterId) {
-      // The one case where audio may start by itself: the listener is already
-      // listening, and asked for the next chapter to follow on.
-      arrivingByAutoContinue.current = true;
-      setAutoPlayNext(true);
-      navigate(`/chuong/${chapter.nextChapterId}`);
-    }
-  }, [autoContinue, chapter, markRead, navigate, savePosition]);
-
-  const handleAutoPlayed = useCallback(() => setAutoPlayNext(false), []);
 
   /**
    * Continuous listening across a chapter nobody has narrated yet.
@@ -327,13 +397,10 @@ export default function ChapterPage() {
               chapterLength={chapter.content?.length ?? 0}
               autoContinue={autoContinue}
               onToggleAutoContinue={() => setAutoContinue((value) => !value)}
-              onTrackEnded={handleTrackEnded}
-              autoPlay={autoPlayNext}
-              onAutoPlayed={handleAutoPlayed}
               hasNextChapter={Boolean(chapter.nextChapterId)}
-              initialPosition={chapter.audioPositionSeconds ?? 0}
-              onPositionChange={handlePositionChange}
-              onPause={savePosition}
+              engine={engine}
+              mixerState={mixerState}
+              bgm={bgm}
             />
           </div>
         </aside>

@@ -391,6 +391,14 @@
   }
 }
 
+/* Chính sách tự phát của trình duyệt, nói bằng một dòng chữ nhỏ thay vì một hộp
+   báo lỗi: không có gì hỏng cả, chỉ là còn thiếu một cái bấm. */
+.nb-player-note {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+}
+
 /* Empty state shown before any track exists for the chapter. */
 .nb-player-empty {
   display: flex;

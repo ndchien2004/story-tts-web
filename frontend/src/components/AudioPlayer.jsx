@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { audioApi } from "../api/endpoints";
+import BgmMixerPanel from "./BgmMixerPanel";
 import PlayerTransport from "./PlayerTransport";
 import { Alert, Badge, Button, ButtonLink, Select, Switch } from "./ui";
 
@@ -202,13 +202,10 @@ export default function AudioPlayer({
   chapterLength = 0,
   autoContinue,
   onToggleAutoContinue,
-  onTrackEnded,
-  onAutoPlayed,
-  autoPlay = false,
   hasNextChapter,
-  initialPosition = 0,
-  onPositionChange,
-  onPause,
+  engine,
+  mixerState,
+  bgm,
 }) {
   const { tracks, activeTrack, setActiveTrack, generating, error, requestTts } = audio;
 
@@ -254,21 +251,10 @@ export default function AudioPlayer({
      */
     <div className={`reader-player ${expanded ? "is-expanded" : ""}`}>
       <div className="reader-player-bar">
-        <PlayerTransport
-          // Remounts on a track change so the element starts from a clean
-          // state instead of inheriting the previous track's position.
-          key={activeTrack.id}
-          src={audioApi.streamUrl(activeTrack.streamUrl)}
-          // Only ever true when the previous chapter finished playing, or when
-          // the reader asked for this narration — opening a chapter directly
-          // never starts making noise on its own.
-          autoPlay={autoPlay}
-          onAutoPlayed={onAutoPlayed}
-          onEnded={onTrackEnded}
-          initialPosition={initialPosition}
-          onPositionChange={onPositionChange}
-          onPause={onPause}
-        />
+        {/* Không còn `key` để dựng lại: bản audio nào đang phát là việc của bộ
+            trộn, và nó đổi bản bằng cách nạp nguồn mới vào cùng một đồ thị âm
+            thanh — dựng lại khối này chỉ làm mất luôn đồ thị ấy. */}
+        <PlayerTransport engine={engine} state={mixerState} />
 
         {/* Hidden by the stylesheet on a wide screen, where there is nothing
             left folded away for it to unfold. */}
@@ -311,6 +297,8 @@ export default function AudioPlayer({
           disabled={!hasNextChapter}
           onChange={onToggleAutoContinue}
         />
+
+        {bgm && <BgmMixerPanel bgm={bgm} state={mixerState} />}
       </div>
     </div>
   );

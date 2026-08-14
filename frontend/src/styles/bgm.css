@@ -1,0 +1,37 @@
+/**
+ * Bảng chọn nhạc nền, trong cột nghe của trang đọc.
+ *
+ * Không có hộp, không có viền: nó là một khối nữa trong cột ấy, và cột ấy đã tự
+ * kẻ vạch giữa các khối của mình rồi. Thứ duy nhất ở đây cần định kiểu là những
+ * mảnh không có sẵn trong bộ giao diện dùng chung.
+ */
+
+.bgm-panel .nb-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.bgm-panel .nb-label svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+/* "đang phát" — một nhãn nhỏ, không phải một huy hiệu; nó chỉ trả lời một câu
+   hỏi thoáng qua ("nhạc có đang chạy không") rồi thôi. */
+.bgm-live {
+  font-size: 0.72rem;
+  font-variant: small-caps;
+  letter-spacing: var(--label-tracking);
+  color: var(--ink-muted);
+}
+
+.bgm-volume {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.bgm-volume .nb-range {
+  width: 100%;
+}
