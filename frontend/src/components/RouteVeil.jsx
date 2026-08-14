@@ -38,6 +38,19 @@ const EXPLAIN_AFTER_MS = 4000;
 const GIVE_UP_MS = 90_000;
 
 /**
+ * Whether a path belongs to the admin console.
+ *
+ * The veil is for readers. In the console every navigation is a step in a job —
+ * open a story, fix a chapter, come back to the list — and a branded second in
+ * front of each one is a second spent watching a logo instead of working. The
+ * screens there say what they are doing on their own: each loads behind its own
+ * spinner, and a cold start shows up as that spinner staying put.
+ */
+function isConsole(pathname) {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
+/**
  * The screen between pages.
  *
  * A pair of headphones with the brand mark inside them and sound rippling out —
@@ -69,13 +82,23 @@ export default function RouteVeil() {
   const { pathname } = useLocation();
 
   // `hold` on the very first render too, so the first paint of the site gets
-  // the same treatment — it doubles as the loading screen.
-  const [phase, setPhase] = useState("hold");
+  // the same treatment — it doubles as the loading screen. Decided from the
+  // landing path rather than fixed, so opening the console straight from a
+  // bookmark does not flash a veil for the one frame before the effect runs.
+  const [phase, setPhase] = useState(() => (isConsole(pathname) ? "idle" : "hold"));
 
   // Whether the wait has gone on long enough to be worth explaining.
   const [explaining, setExplaining] = useState(false);
 
   useEffect(() => {
+    // Only where the navigation lands matters: the step back out of the console
+    // arrives on a reader's page, and that one still gets the veil.
+    if (isConsole(pathname)) {
+      setPhase("idle");
+      setExplaining(false);
+      return undefined;
+    }
+
     setPhase("hold");
     setExplaining(false);
 

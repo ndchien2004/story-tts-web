@@ -6,7 +6,27 @@
  * here scrolls the page itself — toolbars and action bars stay pinned and only
  * the panel bodies scroll, so a long table never pushes "Lưu" or "Thêm" out of
  * reach.
+ *
+ * The work area is one sheet, not a tray of cards. Panels used to be framed
+ * boxes inset from the edges by a gutter, which drew a second border a
+ * centimetre inside the sidebar's and made every screen look like a page
+ * floating in a page. Now a panel is only a region: it runs to all four edges
+ * and is told apart from its neighbours by a hairline where they meet. The
+ * gutter is gone with it, so the width the tables get is the width there is.
  */
+
+/*
+ * The height of the chrome bar, stated rather than left to its contents.
+ *
+ * The bar floats over the work area, so the work area has to know how much of
+ * itself is underneath it — and so does the toast stack, which is fixed to the
+ * viewport outside the shell entirely. That second reader is why this sits on
+ * the root and not on `.admin-shell`. Roomy enough for a button (about 2.3rem)
+ * with air on both sides.
+ */
+:root {
+  --admin-topbar-h: 3.5rem;
+}
 
 .admin-shell {
   --admin-sidebar-width: 16.5rem;
@@ -27,53 +47,38 @@
 .admin-sidebar {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
   min-height: 0;
-  padding: var(--space-4);
+  padding: var(--space-3);
   background: var(--surface);
   border-right: var(--outline-width) solid var(--outline);
   overflow-y: auto;
 }
 
-/* Brand on the left, the collapse control pushed to the edge beside it. */
-.admin-sidebar-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
+/*
+ * The brand block.
+ *
+ * A mark with the product's name beside it, and nothing around either. It was
+ * boxed and lit up on hover, which made the masthead look like the first item
+ * in the menu below it — it is not a destination you pick, it is the answer to
+ * "where am I". It stays a link to the console root; that is all the behaviour
+ * it needs, and it needs no announcing.
+ */
 .admin-brand {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-width: 0;
-  flex: 1 1 auto;
+  padding: var(--space-2);
   text-decoration: none;
-}
-
-.admin-collapse-btn {
-  flex: 0 0 auto;
-  color: var(--ink-muted);
-}
-
-.admin-collapse-btn:hover:not(:disabled) {
-  color: var(--ink);
-}
-
-/* Hidden on narrow screens: there the sidebar is already a drawer, and a rail
-   inside a drawer would be a second answer to the same problem. */
-@media (max-width: 1100px) {
-  .admin-collapse-btn {
-    display: none;
-  }
 }
 
 /* The site's own mark. No frame and no fill behind it — the backdrop is cut
    out of the asset itself (see src/brand.js), as in the reader's header. */
 .admin-brand-mark {
   flex: 0 0 auto;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 2.1rem;
+  height: 2.1rem;
   object-fit: contain;
 }
 
@@ -102,25 +107,37 @@
 .admin-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-4);
+}
+
+/*
+ * Destinations under a heading, three or four at a time.
+ *
+ * Flat, the list had grown to the length where the eye reads all of it every
+ * time, because nothing in it says which part to look at. Grouped, finding
+ * "Nhạc nền" means reading one heading and then three items.
+ */
+.admin-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
 }
 
 .admin-nav-label {
-  padding-inline: 0.2rem;
-  padding-bottom: var(--space-1);
-  font-size: var(--label-size);
+  padding: 0 0.7rem var(--space-2);
+  font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--ink-muted);
-  border-bottom: var(--outline-width) solid var(--outline);
 }
 
 .admin-nav-link {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 0.5rem 0.7rem;
+  padding: 0.42rem 0.7rem;
+  font-size: 0.88rem;
   font-weight: 500;
   text-decoration: none;
   color: var(--ink-muted);
@@ -132,19 +149,34 @@
 
 .admin-nav-link:hover {
   color: var(--ink);
-  background: var(--bg-alt);
+  background: var(--surface-sunken);
 }
 
-/* The page you are on is the one filled block in the sidebar. */
+/*
+ * The page you are on.
+ *
+ * A quiet fill and full-strength ink, not a black block: the sidebar is on
+ * screen the whole time an admin works, and a solid slab of accent in the
+ * corner of the eye competes with the table that is the actual work. Weight
+ * and colour carry it; the fill only marks the row's extent.
+ */
 .admin-nav-link.active {
-  color: var(--on-tint);
-  background: var(--accent);
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--bg-alt);
 }
 
 .admin-nav-icon {
   flex: 0 0 auto;
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.admin-nav-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Pushes everything after it to the bottom of the sidebar. */
@@ -156,31 +188,50 @@
 .admin-sidebar-foot {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding-top: var(--space-3);
+  gap: var(--space-1);
+  padding-top: var(--space-2);
   border-top: var(--outline-width) solid var(--outline);
+}
+
+/* The way back out to the reader's view. It is a destination like any other,
+   so it borrows the nav link's shape rather than inventing a button. */
+.admin-sidebar-exit {
+  font-size: 0.85rem;
 }
 
 .admin-whoami {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) 0;
+  gap: var(--space-2);
+  padding: var(--space-2) 0.4rem;
   background: transparent;
   border: 0;
+}
+
+/* Pushed to the far edge, away from the name it sits beside: signing out is
+   one click and there is no undo. */
+.admin-logout {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--ink-muted);
+}
+
+.admin-logout:hover:not(:disabled) {
+  color: var(--danger);
 }
 
 .admin-whoami-avatar {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 2.1rem;
-  height: 2.1rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--on-tint);
   background: var(--accent);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
 }
 
 .admin-whoami-text {
@@ -190,25 +241,17 @@
   line-height: 1.2;
 }
 
-.admin-whoami-name {
+/* The only line in the block, so it carries itself rather than sitting under
+   something as a caption. */
+.admin-whoami-role {
+  font-size: 0.78rem;
   font-weight: 600;
-  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.admin-whoami-role {
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-}
-
-/* The short form of the logout label, shown only in the rail. */
-.admin-logout-short {
-  display: none;
 }
 
 /* ------------------------------------------------------------------ */
@@ -221,7 +264,7 @@
  * width. The tooltips added in the markup carry the labels.
  */
 .admin-shell-collapsed {
-  --admin-sidebar-width: 4.5rem;
+  --admin-sidebar-width: 4.25rem;
 }
 
 .admin-shell-collapsed .admin-sidebar {
@@ -236,33 +279,35 @@
   display: none;
 }
 
-.admin-shell-collapsed .admin-logout-short {
-  display: inline;
-  font-size: 1.05rem;
-  line-height: 1;
-}
-
-/* The mark alone, centred in the rail. */
-.admin-shell-collapsed .admin-sidebar-head {
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.admin-shell-collapsed .admin-brand {
-  justify-content: center;
-}
-
+.admin-shell-collapsed .admin-brand,
 .admin-shell-collapsed .admin-nav-link,
-.admin-shell-collapsed .admin-whoami,
-.admin-shell-collapsed .admin-logout {
+.admin-shell-collapsed .admin-whoami {
   justify-content: center;
   padding-inline: 0;
 }
 
-/* A rule where the section label used to be, so the groups still read apart. */
+/*
+ * Groups keep their spacing but lose their headings, so a hairline stands in
+ * for each one — without it the rail is a single undifferentiated column of
+ * icons.
+ */
 .admin-shell-collapsed .admin-nav {
+  gap: var(--space-3);
+}
+
+.admin-shell-collapsed .admin-nav-group + .admin-nav-group {
   padding-top: var(--space-3);
   border-top: var(--outline-width) solid var(--outline);
+}
+
+/* Avatar over the sign-out button: side by side they do not fit the rail. */
+.admin-shell-collapsed .admin-whoami {
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.admin-shell-collapsed .admin-logout {
+  margin-left: 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -270,6 +315,8 @@
 /* ------------------------------------------------------------------ */
 
 .admin-main {
+  /* The anchor for the floating top bar. */
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -277,44 +324,93 @@
   overflow: hidden;
 }
 
+/*
+ * The chrome bar.
+ *
+ * Where am I, how wide is the sidebar, which theme — and, at the far end, the
+ * one action that starts work on this screen. Slim on purpose: it is the only
+ * band above the work now that the page head is gone, and the tables are what
+ * the height belongs to.
+ *
+ * Frosted, and lifted out of the flow so the work area runs underneath it
+ * rather than stopping at it. On a screen that scrolls as a whole — the
+ * overview, and every screen once the sidebar becomes a drawer — the content
+ * passes under the bar and is read through it, blurred: the bar stays legible
+ * and the page underneath stays visibly continuous instead of being clipped by
+ * an opaque strip.
+ */
 .admin-topbar {
-  flex: 0 0 auto;
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 30;
+  height: var(--admin-topbar-h);
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-5);
-  background: var(--surface);
+  gap: var(--space-2);
+  padding-inline: var(--space-4);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  backdrop-filter: saturate(180%) blur(14px);
   border-bottom: var(--outline-width) solid var(--outline);
 }
 
-.admin-topbar-heading {
-  min-width: 0;
+/* Without the blur, a translucent bar is just text over a moving table. Engines
+   that cannot frost it get an opaque one instead. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .admin-topbar {
+    background: var(--surface);
+  }
 }
 
-.admin-topbar h1 {
-  font-size: clamp(1.15rem, 1.6vw, 1.5rem);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.admin-rail-toggle,
+.admin-menu-toggle {
+  flex: 0 0 auto;
+  color: var(--ink-muted);
 }
 
+.admin-rail-toggle:hover:not(:disabled),
+.admin-menu-toggle:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+/*
+ * The trail, in sentence case.
+ *
+ * It used to be set as a small-caps label, which gave a line of navigation the
+ * typographic weight of a section heading. A trail is chrome: it should be
+ * legible and otherwise unremarkable.
+ */
 .admin-crumbs {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: var(--label-size);
-  font-weight: 600;
-  letter-spacing: var(--label-tracking);
-  text-transform: uppercase;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.82rem;
   color: var(--ink-muted);
+  white-space: nowrap;
 }
 
 .admin-crumbs a {
   text-decoration: none;
+  color: var(--ink-muted);
 }
 
 .admin-crumbs a:hover {
+  color: var(--ink);
   text-decoration: underline;
+}
+
+/* Where you actually are, told apart from the way you got here. */
+.admin-crumbs > [aria-current="page"] {
+  color: var(--ink);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-crumb-sep {
+  color: var(--line-strong);
 }
 
 .admin-topbar-actions {
@@ -322,28 +418,84 @@
   align-items: center;
   gap: var(--space-2);
   margin-left: auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  flex: 0 0 auto;
 }
 
-/* The theme switch sits at the far corner, one step clear of the page's own
-   actions so the two groups do not read as a single row of buttons. */
-.admin-topbar-actions > .nb-icon-btn:last-child:not(:only-child) {
-  margin-left: var(--space-2);
+/* ------------------------------------------------------------------ */
+/* Tabs                                                                */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Sibling screens of one subject, at the top of the work area.
+ *
+ * The rule runs the full width and the active tab sits on it, so the tabs read
+ * as the top edge of the work below rather than as a second row of buttons.
+ */
+.admin-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-5);
+  /* Lines up with the panel titles and the first table column below. */
+  padding-inline: var(--space-4);
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: var(--outline-width) solid var(--outline);
 }
 
-/* Only visible once the sidebar collapses into a drawer. */
+.admin-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-tab {
+  flex: 0 0 auto;
+  padding: var(--space-2) 0.15rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--ink-muted);
+  border-bottom: 2px solid transparent;
+  /* The rule below is a hairline and this one is 2px, so the tab has to sit
+     over it rather than beside it. */
+  margin-bottom: calc(var(--outline-width) * -1);
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.admin-tab:hover {
+  color: var(--ink);
+}
+
+.admin-tab.active {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--ink);
+}
+
+/* Only visible once the sidebar collapses into a drawer; the rail control is
+   the one that makes sense while the sidebar is still a column. */
 .admin-menu-toggle {
   display: none;
 }
 
+/*
+ * The work area, edge to edge.
+ *
+ * No gutter and no gap: the regions inside it butt up against each other and
+ * against the sides, and a hairline is what separates them. The only padding
+ * is the strip the floating bar occupies, so nothing starts underneath it by
+ * accident — the regions that are meant to scroll under it take that strip
+ * back for themselves.
+ */
 .admin-body {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
   min-height: 0;
-  padding: var(--space-4) var(--space-5) var(--space-5);
+  padding-top: var(--admin-topbar-h);
+  /* The sheet itself, so the strip under the frosted bar is the same paper as
+     the panel below it and the two meet at nothing but their hairline. */
+  background: var(--surface);
   overflow: hidden;
 }
 
@@ -351,10 +503,13 @@
 /* Panels                                                              */
 /* ------------------------------------------------------------------ */
 
-/* A work area divided by rules, not a card floating in the console. */
 /*
- * The work surface. It sits one step above the console background, which is
- * what separates a table from the page — no shadow and no heavy frame needed.
+ * A region of the sheet, not a card on it.
+ *
+ * It keeps the paper colour, which is what lifts a table off the console
+ * background, and nothing else: no frame, no rounded corners, no shadow. Where
+ * two panels meet, the layout that put them there draws the hairline between
+ * them — see the two-pane layouts below.
  */
 .admin-panel {
   display: flex;
@@ -362,8 +517,8 @@
   flex: 1 1 auto;
   min-height: 0;
   background: var(--surface);
-  border: var(--outline-width) solid var(--outline);
-  border-radius: var(--radius);
+  border: 0;
+  border-radius: 0;
   box-shadow: none;
   overflow: hidden;
 }
@@ -430,9 +585,14 @@
 .admin-catalog {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: 0;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/* The two lists share an edge; the hairline is where one ends. */
+.admin-catalog > * + * {
+  border-inline-start: var(--outline-width) solid var(--outline);
 }
 
 .admin-catalog-form {
@@ -457,6 +617,12 @@
     min-height: auto;
   }
 
+  /* One under the other, so the seam turns with them. */
+  .admin-catalog > * + * {
+    border-inline-start: 0;
+    border-block-start: var(--outline-width) solid var(--outline);
+  }
+
   .admin-catalog .admin-panel {
     min-height: 24rem;
   }
@@ -466,13 +632,31 @@
 /* Dashboard                                                           */
 /* ------------------------------------------------------------------ */
 
+/*
+ * The one screen that scrolls as a whole rather than inside a panel.
+ *
+ * Which makes it the screen the frosted bar was built for: it claims back the
+ * strip {@link .admin-body} reserved, so its own top edge starts under the bar
+ * and the figures pass beneath it on the way up instead of vanishing at a hard
+ * line.
+ */
 .admin-dash {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 0;
   flex: 1 1 auto;
   min-height: 0;
+  margin-top: calc(var(--admin-topbar-h) * -1);
+  padding-top: var(--admin-topbar-h);
+  /* Paper of its own: its sections are not all panels, and the ones that are
+     not would otherwise show the console's ground through the sheet. */
+  background: var(--surface);
   overflow-y: auto;
+}
+
+/* Sections of one long sheet, divided where they meet. */
+.admin-dash > * + * {
+  border-block-start: var(--outline-width) solid var(--outline);
 }
 
 /* Groups size to their tiles rather than stretching to fill the column. */
@@ -536,6 +720,8 @@
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: var(--space-3);
   flex: 0 0 auto;
+  /* Its own gutter: the work area no longer supplies one. */
+  padding: var(--space-4);
 }
 
 /* Something that needs doing is marked by a heavy rule down its left edge —
@@ -588,7 +774,7 @@ a.admin-dash-todo:hover {
 .admin-charts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: 0;
   flex: 0 0 auto;
 }
 
@@ -596,6 +782,16 @@ a.admin-dash-todo:hover {
    full width so the dates stay readable without tilting them. */
 .admin-charts > .admin-chart-card:first-child {
   grid-column: 1 / -1;
+}
+
+/* Three cards in two rows: a rule under the wide one, and a rule between the
+   pair that shares the row below it. */
+.admin-charts > .admin-chart-card + .admin-chart-card {
+  border-block-start: var(--outline-width) solid var(--outline);
+}
+
+.admin-charts > .admin-chart-card:nth-child(3) {
+  border-inline-start: var(--outline-width) solid var(--outline);
 }
 
 .admin-chart-card {
@@ -624,6 +820,11 @@ a.admin-dash-todo:hover {
 @media (max-width: 1100px) {
   .admin-charts {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Stacked, the third card is under the second rather than beside it. */
+  .admin-charts > .admin-chart-card:nth-child(3) {
+    border-inline-start: 0;
   }
 }
 
@@ -751,36 +952,60 @@ a.admin-dash-todo:hover {
   margin-top: 0;
 }
 
-/* Alerts sit above the panels and must keep their natural height. */
+/* Alerts sit above the panels and must keep their natural height. They carry
+   their own gutter now that the work area has none — a message running into
+   the edges of the window reads as part of the furniture. */
 .admin-body > .nb-alert {
   flex: 0 0 auto;
+  margin: var(--space-4) var(--space-4) 0;
 }
 
 /* Search box in a panel header: grows into the free space, never past it. */
 .admin-search {
-  flex: 1 1 12rem;
-  max-width: 24rem;
+  flex: 1 1 14rem;
+  max-width: 26rem;
   margin-left: auto;
 }
 
 /*
- * A row of narrowing controls under the panel head.
+ * Search across the top, chips underneath.
  *
- * Once there is more than one, they stop fitting beside the panel title, and
- * a wrapped title reads as two separate headings. On their own row they line
- * up and share the width evenly.
+ * The two narrow a list in different ways — one by typing, one by picking — so
+ * they sit on lines of their own rather than competing for one row. The search
+ * takes the full width because that is the control someone reaches for first.
  */
-.admin-filterbar {
+.admin-toolbar {
   flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-bottom: var(--outline-width) solid var(--outline);
 }
 
+.admin-toolbar .admin-search {
+  flex: 1 1 auto;
+  max-width: none;
+  margin-left: 0;
+}
+
+/* A chip row and a select can share the line: the select is the long list
+   (every story), the chips are the short one. */
+.admin-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.admin-toolbar-row .nb-select {
+  width: auto;
+  min-width: 11rem;
+  max-width: 18rem;
+}
+
 .admin-search .nb-input {
-  padding-block: 0.35rem;
+  padding-block: 0.4rem;
 }
 
 /* ------------------------------------------------------------------ */
@@ -791,8 +1016,13 @@ a.admin-dash-todo:hover {
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: var(--admin-aside, 21rem) minmax(0, 1fr);
-  gap: var(--space-4);
+  gap: 0;
   min-height: 0;
+}
+
+/* The seam between the two panes, whichever side the narrow one is on. */
+.admin-split > * + * {
+  border-inline-start: var(--outline-width) solid var(--outline);
 }
 
 /* Same split with the narrow column on the right. */
@@ -816,8 +1046,12 @@ a.admin-dash-todo:hover {
   flex: 1 1 auto;
   display: grid;
   grid-template-rows: auto minmax(14rem, 1fr);
-  gap: var(--space-4);
+  gap: 0;
   min-height: 0;
+}
+
+.admin-vip-stack > * + * {
+  border-block-start: var(--outline-width) solid var(--outline);
 }
 
 .admin-vip-orders {
@@ -1205,6 +1439,158 @@ a.admin-dash-todo:hover {
 }
 
 /* ------------------------------------------------------------------ */
+/* Confirmations                                                       */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The corner the console reports into.
+ *
+ * Fixed to the viewport rather than placed in the page: a confirmation that
+ * pushed the work down a line moved the row an admin was about to click, and
+ * moved it back again when the message went. Above everything, including the
+ * drawer and its scrim (z-index 70/60) — a message about what just happened
+ * outranks whatever is open over the page.
+ *
+ * Top right, clearing the chrome bar rather than lying across it. The bar's
+ * far end holds this screen's own action, and half the messages here are the
+ * answer to pressing it — landing on top of the button just pressed would hide
+ * the thing being talked about.
+ *
+ * The stack never takes the pointer either way: a confirmation must not be
+ * able to swallow the next click.
+ */
+.admin-toaster {
+  position: fixed;
+  top: calc(var(--admin-topbar-h) + var(--space-3));
+  right: var(--space-4);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  width: min(26rem, calc(100vw - var(--space-4) * 2));
+  pointer-events: none;
+}
+
+/*
+ * The bar itself.
+ *
+ * The one coloured thing in the console. Everything else here is ink on paper
+ * with grey for anything quieter, which is what makes a single warm block read
+ * instantly as "something just happened" without a word being read — and what
+ * would make a second colour anywhere else start competing with it.
+ */
+.admin-toast {
+  /* Claude's orange, stated here rather than in the palette: nothing else in
+     the product is this colour, and a token invites a second use. */
+  --admin-toast-ink: #d97757;
+
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 0.7rem var(--space-4);
+  overflow: hidden;
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #fff;
+  background: var(--admin-toast-ink);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 30px -12px rgba(120, 45, 20, 0.65);
+  animation: admin-toast-in 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/*
+ * One direction of travel, right to left.
+ *
+ * It arrives from beyond the right edge and, when its time is up, keeps going
+ * the same way as it fades. Backing out to the right would have read as the
+ * message being taken back rather than being finished with.
+ */
+@keyframes admin-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(100% + var(--space-4)));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.admin-toast.is-leaving {
+  animation: admin-toast-out 260ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes admin-toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-2.5rem);
+  }
+}
+
+.admin-toast-icon {
+  flex: 0 0 auto;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.admin-toast-text {
+  min-width: 0;
+}
+
+/*
+ * The three seconds, drawn.
+ *
+ * Its duration comes from the component that owns the timer, so the line and
+ * the disappearance cannot drift apart. Without it the bar simply goes at some
+ * point, and a message that vanishes unannounced is one people learn to read
+ * in a hurry.
+ */
+.admin-toast-timer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.55);
+  transform-origin: left center;
+  animation: admin-toast-timer var(--admin-toast-life, 3000ms) linear both;
+}
+
+@keyframes admin-toast-timer {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* Deeper, because a light-mode orange on a dark console glows rather than
+   sits. The white text keeps its contrast either way. */
+[data-theme="dark"] .admin-toast {
+  --admin-toast-ink: #c25f3f;
+
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.75);
+}
+
+/* Asked not to move things: it appears and it goes, and the line still says
+   how long it has. */
+@media (prefers-reduced-motion: reduce) {
+  .admin-toast,
+  .admin-toast.is-leaving {
+    animation-duration: 1ms;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Responsive: below this width the split shell stops paying off        */
 /* ------------------------------------------------------------------ */
 
@@ -1240,29 +1626,51 @@ a.admin-dash-todo:hover {
     background: rgba(10, 10, 10, 0.5);
   }
 
+  /* The drawer control replaces the rail control: there is no rail to make,
+     the sidebar is either over the page or off it. */
   .admin-menu-toggle {
     display: inline-flex;
+  }
+
+  .admin-rail-toggle {
+    display: none;
   }
 
   .admin-main {
     overflow: visible;
   }
 
+  /* Here the whole page scrolls, so the bar can ride along with it instead of
+     floating: sticky keeps it in the flow, which means the work area no longer
+     has to reserve a strip for it. It stays frosted — this is the width where
+     content really does run under it. */
   .admin-topbar {
     position: sticky;
+    inset: auto;
     top: 0;
     z-index: 40;
-    flex-wrap: wrap;
+    flex: 0 0 auto;
   }
 
   .admin-body {
     overflow: visible;
-    padding-inline: var(--space-4);
+    padding-top: 0;
+  }
+
+  .admin-dash {
+    margin-top: 0;
+    padding-top: 0;
   }
 
   .admin-split,
   .admin-split-end {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Stacked, the seam between the panes runs across rather than down. */
+  .admin-split > * + * {
+    border-inline-start: 0;
+    border-block-start: var(--outline-width) solid var(--outline);
   }
 
   /* The page scrolls instead of each panel scrolling inside itself. */

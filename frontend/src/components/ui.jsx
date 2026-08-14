@@ -252,6 +252,70 @@ export function PasswordInput({ error, ...rest }) {
   );
 }
 
+const SearchGlyph = () => (
+  <svg
+    className="nb-search-icon"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="10.8" cy="10.8" r="6.3" />
+    <path d="m15.5 15.5 4 4" />
+  </svg>
+);
+
+/**
+ * A search box that looks like one.
+ *
+ * The magnifier is the difference between a field someone types into and a
+ * field they read past: on a screen that is mostly table, an unmarked input in
+ * a toolbar reads as one more column header. `className` lands on the wrapper,
+ * because what varies between uses is how wide the box may grow.
+ */
+export function SearchInput({ className = "", ...rest }) {
+  return (
+    <div className={`nb-search ${className}`.trim()}>
+      <SearchGlyph />
+      <input className="nb-input" type="search" {...rest} />
+    </div>
+  );
+}
+
+/**
+ * A short, fixed set of choices, shown all at once.
+ *
+ * A `<select>` hides every option but the chosen one, which is the right trade
+ * for a list of two hundred stories and the wrong one for four states of an
+ * order: there, the options *are* the explanation of what the screen can show,
+ * and hiding them costs a click to learn nothing.
+ *
+ * @param options `{ value, label }[]`; the empty value is the "everything" chip
+ */
+export function FilterChips({ options, value, onChange, label }) {
+  return (
+    <div className="nb-chips" role="group" aria-label={label}>
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={`nb-chip ${active ? "active" : ""}`}
+            aria-pressed={active}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function TextArea({ error, ...rest }) {
   return <textarea className="nb-textarea" aria-invalid={Boolean(error)} {...rest} />;
 }

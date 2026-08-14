@@ -406,6 +406,88 @@
   color: var(--ink);
 }
 
+/*
+ * Search box.
+ *
+ * The glyph is drawn inside the field rather than beside it, and the text is
+ * indented past it, so the whole thing still reads as one control. It is
+ * `pointer-events: none` because a click on the icon must land in the field it
+ * marks — an icon that swallows the click is worse than no icon at all.
+ */
+.nb-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.nb-search-icon {
+  position: absolute;
+  left: 0.65rem;
+  width: 1.05rem;
+  height: 1.05rem;
+  pointer-events: none;
+  color: var(--ink-muted);
+}
+
+.nb-search .nb-input {
+  padding-left: 2.25rem;
+  border-radius: var(--radius);
+}
+
+/* The browser's own clear button, which only some engines draw, would sit on
+   top of the rounded edge. */
+.nb-search .nb-input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
+/*
+ * A row of chips: a short set of choices, all visible.
+ *
+ * Scrolls sideways rather than wrapping on a narrow screen — a filter row that
+ * grows to three lines pushes the table it filters below the fold.
+ */
+.nb-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nb-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.nb-chip {
+  flex: 0 0 auto;
+  padding: 0.34rem 0.8rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--ink-muted);
+  background: transparent;
+  border: var(--outline-width) solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: color var(--transition), background-color var(--transition),
+    border-color var(--transition);
+}
+
+.nb-chip:hover {
+  color: var(--ink);
+  background: var(--bg-alt);
+}
+
+/* The chosen one is the filled block, the same device the sidebar and the
+   primary button use. */
+.nb-chip.active {
+  color: var(--on-tint);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 .nb-error {
   font-size: 0.85rem;
   font-weight: 500;

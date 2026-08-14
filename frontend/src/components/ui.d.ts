@@ -71,6 +71,21 @@ export function PasswordInput(
   props: { error?: ReactNode } & InputHTMLAttributes<HTMLInputElement>,
 ): JSX.Element;
 
+/** Ô tìm kiếm kèm biểu tượng kính lúp; `className` rơi vào lớp bọc ngoài. */
+export function SearchInput(
+  props: { className?: string } & InputHTMLAttributes<HTMLInputElement>,
+): JSX.Element;
+
+/** Một nhóm lựa chọn ngắn, hiện hết ra thay vì giấu sau một ô chọn. */
+export function FilterChips(
+  props: {
+    options: { value: string; label: ReactNode }[];
+    value: string;
+    onChange: (value: string) => void;
+    label?: string;
+  },
+): JSX.Element;
+
 export function TextArea(
   props: { error?: ReactNode } & TextareaHTMLAttributes<HTMLTextAreaElement>,
 ): JSX.Element;
