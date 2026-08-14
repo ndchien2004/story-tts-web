@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { adminApi, catalogApi, commentApi, storyApi } from "../../api/endpoints";
 import AdminPage from "./AdminPage";
+import { useAdminToast } from "../../context/admin-toast-context";
 import Avatar from "../../components/Avatar";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import Modal from "../../components/Modal";
 import Pagination from "../../components/Pagination";
 import StarRating from "../../components/StarRating";
 import useDebouncedValue from "../../hooks/useDebouncedValue";
-import { Alert, Button, EmptyState, Select, Spinner, TextInput } from "../../components/ui";
+import { Alert, Button, EmptyState, SearchInput, Select, Spinner } from "../../components/ui";
 
 const PAGE_SIZE = 20;
 
@@ -56,7 +57,7 @@ export default function AdminCommentsPage() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
+  const notify = useAdminToast();
 
   const [viewing, setViewing] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -124,7 +125,7 @@ export default function AdminCommentsPage() {
     setDeleting(true);
     try {
       await commentApi.remove(pendingDelete.id);
-      setNotice(`Đã xóa bình luận của ${pendingDelete.displayName}.`);
+      notify(`Đã xóa bình luận của ${pendingDelete.displayName}.`);
       setPendingDelete(null);
       setViewing(null);
       load();
@@ -140,9 +141,10 @@ export default function AdminCommentsPage() {
   const filtered = Boolean(keyword || storyId);
 
   return (
-    <AdminPage title="Kiểm duyệt bình luận">
+    <AdminPage
+      title="Kiểm duyệt bình luận"
+    >
       {error && <Alert tone="error">{error}</Alert>}
-      {notice && <Alert tone="success">{notice}</Alert>}
 
       <section className="admin-panel">
         <div className="admin-panel-head">
@@ -155,42 +157,46 @@ export default function AdminCommentsPage() {
           )}
         </div>
 
-        {/* Narrowing happens on its own row: three controls would have pushed
-            the panel title off the head bar on anything but a wide screen. */}
-        <div className="admin-filterbar">
-          <Select
-            aria-label="Lọc theo thể loại"
-            value={genreId}
-            onChange={(event) => handleGenreChange(event.target.value)}
-          >
-            <option value="">Mọi thể loại</option>
-            {genres.map((genre) => (
-              <option key={genre.id} value={genre.id}>
-                {genre.name}
-              </option>
-            ))}
-          </Select>
-
-          <Select
-            aria-label="Lọc theo truyện"
-            value={storyId}
-            onChange={(event) => setStoryId(event.target.value)}
-          >
-            <option value="">Mọi truyện{genreId ? " trong thể loại này" : ""}</option>
-            {stories.map((story) => (
-              <option key={story.id} value={story.id}>
-                {story.title}
-              </option>
-            ))}
-          </Select>
-
-          <TextInput
-            type="search"
+        {/* Narrowing happens under the panel head: three controls would have
+            pushed the title off that bar on anything but a wide screen. The
+            search takes the first line on its own — it is the control reached
+            for first, and the two lists only ever narrow what it found. */}
+        <div className="admin-toolbar">
+          <SearchInput
+            className="admin-search"
             aria-label="Tìm bình luận"
             placeholder="Tìm theo nội dung hoặc tên người viết…"
             value={keywordInput}
             onChange={(event) => setKeywordInput(event.target.value)}
           />
+
+          <div className="admin-toolbar-row">
+            <Select
+              aria-label="Lọc theo thể loại"
+              value={genreId}
+              onChange={(event) => handleGenreChange(event.target.value)}
+            >
+              <option value="">Mọi thể loại</option>
+              {genres.map((genre) => (
+                <option key={genre.id} value={genre.id}>
+                  {genre.name}
+                </option>
+              ))}
+            </Select>
+
+            <Select
+              aria-label="Lọc theo truyện"
+              value={storyId}
+              onChange={(event) => setStoryId(event.target.value)}
+            >
+              <option value="">Mọi truyện{genreId ? " trong thể loại này" : ""}</option>
+              {stories.map((story) => (
+                <option key={story.id} value={story.id}>
+                  {story.title}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
 
         <div className="admin-panel-body scroll-area">

@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { adminApi, storyApi } from "../../api/endpoints";
 import { pollUntilSettled } from "../../utils/poll";
 import AdminPage from "./AdminPage";
+import { useAdminToast } from "../../context/admin-toast-context";
 import AudioPreview from "../../components/admin/AudioPreview";
 import AudioUploadButton from "../../components/AudioUploadButton";
 import ConfirmDialog from "../../components/ConfirmDialog";
@@ -12,9 +13,10 @@ import {
   Button,
   ButtonLink,
   EmptyState,
+  FilterChips,
+  SearchInput,
   Select,
   Spinner,
-  TextInput,
 } from "../../components/ui";
 
 const ACCESS_LEVELS = [
@@ -83,7 +85,7 @@ export default function AdminChaptersPage() {
   const [audioStatus, setAudioStatus] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
+  const notify = useAdminToast();
   const [savingId, setSavingId] = useState(null);
 
   const [filter, setFilter] = useState("");
@@ -154,7 +156,7 @@ export default function AdminChaptersPage() {
       setChapters((current) =>
         current.map((row) => (row.id === chapter.id ? { ...row, ...updated } : row)),
       );
-      setNotice(`Đã đổi mức khóa của “${chapter.title}”.`);
+      notify(`Đã đổi mức khóa của “${chapter.title}”.`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -183,7 +185,7 @@ export default function AdminChaptersPage() {
     try {
       const { updated } = await adminApi.setChapterAccessLevelBulk(selected, bulkLevel);
       const label = ACCESS_LEVELS.find((level) => level.value === bulkLevel)?.label ?? bulkLevel;
-      setNotice(`Đã đổi mức khóa của ${updated} chương thành “${label}”.`);
+      notify(`Đã đổi mức khóa của ${updated} chương thành “${label}”.`);
       setSelected([]);
       load();
     } catch (err) {
@@ -234,7 +236,7 @@ export default function AdminChaptersPage() {
       if (outcome === "timeout") {
         setError("Quá thời gian chờ tạo audio. Việc tạo vẫn chạy ở máy chủ, hãy tải lại trang sau.");
       } else {
-        setNotice(`Đã tạo xong audio cho ${accepted.length} chương. Bấm “Nghe thử” để kiểm tra.`);
+        notify(`Đã tạo xong audio cho ${accepted.length} chương. Bấm “Nghe thử” để kiểm tra.`);
       }
     } catch (err) {
       setError(err.message);
@@ -247,7 +249,7 @@ export default function AdminChaptersPage() {
     setDeleting(true);
     try {
       await adminApi.deleteChapter(pendingDelete.id);
-      setNotice(`Đã xóa chương “${pendingDelete.title}”.`);
+      notify(`Đã xóa chương “${pendingDelete.title}”.`);
       setPendingDelete(null);
       load();
     } catch (err) {
@@ -302,7 +304,9 @@ export default function AdminChaptersPage() {
 
   return (
     <AdminPage
-      crumbs={[{ to: "/admin/truyen", label: "Truyện" }, { label: "Chương" }]}
+      /* No "Chương" crumb of its own: the trail ends on the story's name, and
+         with the page head gone that trail is the only place it is written. */
+      crumbs={[{ to: "/admin/truyen", label: "Truyện" }]}
       title={story?.title ?? "Quản lý chương"}
       actions={
         <ButtonLink to={`/admin/truyen/${storyId}/chuong/moi`} variant="primary">
@@ -311,7 +315,6 @@ export default function AdminChaptersPage() {
       }
     >
       {error && <Alert tone="error">{error}</Alert>}
-      {notice && <Alert tone="success">{notice}</Alert>}
 
       {batchResults && (
         <Alert tone={queued === batchResults.length ? "success" : "warning"}>
@@ -399,28 +402,31 @@ export default function AdminChaptersPage() {
         <section className="admin-panel">
           <div className="admin-panel-head">
             <span className="admin-panel-title">Danh sách chương</span>
+            <span className="admin-stat">
+              <b>{chapters.length}</b>
+              <span>chương</span>
+            </span>
+          </div>
 
-            <Select
-              aria-label="Lọc theo tình trạng audio"
+          {/* Three states of audio, shown as three chips rather than hidden in
+              a select: they are the answer to "what can this screen show me",
+              and finding the chapters without audio is the reason most visits
+              to this screen happen at all. */}
+          <div className="admin-toolbar">
+            <SearchInput
+              className="admin-search"
+              aria-label="Lọc chương"
+              placeholder="Lọc theo tiêu đề hoặc số chương…"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+            />
+
+            <FilterChips
+              label="Lọc theo tình trạng audio"
+              options={AUDIO_FILTERS}
               value={audioFilter}
-              onChange={(event) => setAudioFilter(event.target.value)}
-            >
-              {AUDIO_FILTERS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-
-            <div className="admin-search">
-              <TextInput
-                type="search"
-                aria-label="Lọc chương"
-                placeholder="Lọc theo tiêu đề hoặc số chương…"
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-              />
-            </div>
+              onChange={setAudioFilter}
+            />
           </div>
 
           {/* Only appears once rows are ticked; an empty toolbar above every
@@ -588,7 +594,7 @@ export default function AdminChaptersPage() {
                               chapterId={chapter.id}
                               hasAudio={hasAudio}
                               onUploaded={() => {
-                                setNotice(`Đã tải lên audio cho “${chapter.title}”.`);
+                                notify(`Đã tải lên audio cho “${chapter.title}”.`);
                                 load();
                               }}
                               onError={setError}

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { adminApi } from "../../api/endpoints";
 import AdminPage from "./AdminPage";
+import { useAdminToast } from "../../context/admin-toast-context";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import Pagination from "../../components/Pagination";
 import useDebouncedValue from "../../hooks/useDebouncedValue";
 import { useAuth } from "../../context/auth-context";
 import { formatDate } from "../../utils/format";
-import { Alert, Badge, Button, EmptyState, Spinner, TextInput } from "../../components/ui";
+import { Alert, Badge, Button, EmptyState, SearchInput, Spinner } from "../../components/ui";
 
 const PAGE_SIZE = 15;
 
@@ -20,7 +21,7 @@ export default function AdminUsersPage() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
+  const notify = useAdminToast();
   const [savingId, setSavingId] = useState(null);
 
   // Locking someone out is the only irreversible-feeling action here, so it is
@@ -63,7 +64,7 @@ export default function AdminUsersPage() {
     try {
       const updated = await adminApi.setVip(user.id, !user.vipGranted);
       replaceRow(updated);
-      setNotice(
+      notify(
         updated.vipGranted
           ? `Đã cấp quyền VIP vĩnh viễn cho “${updated.username}”.`
           : updated.vip
@@ -83,7 +84,7 @@ export default function AdminUsersPage() {
     try {
       const updated = await adminApi.setEnabled(user.id, value);
       replaceRow(updated);
-      setNotice(
+      notify(
         updated.enabled
           ? `Đã mở khóa tài khoản “${updated.username}”.`
           : `Đã khóa tài khoản “${updated.username}”.`,
@@ -109,7 +110,7 @@ export default function AdminUsersPage() {
     try {
       const updated = await adminApi.setRole(user.id, role);
       replaceRow(updated);
-      setNotice(
+      notify(
         role === "ADMIN"
           ? `Đã cấp quyền quản trị cho “${updated.username}”.`
           : `Đã hạ “${updated.username}” về thành viên thường.`,
@@ -125,9 +126,10 @@ export default function AdminUsersPage() {
   const users = result?.content ?? [];
 
   return (
-    <AdminPage title="Thành viên">
+    <AdminPage
+      title="Thành viên"
+    >
       {error && <Alert tone="error">{error}</Alert>}
-      {notice && <Alert tone="success">{notice}</Alert>}
 
       <section className="admin-panel">
         <div className="admin-panel-head">
@@ -139,15 +141,13 @@ export default function AdminUsersPage() {
             </span>
           )}
 
-          <div className="admin-search">
-            <TextInput
-              type="search"
-              aria-label="Tìm thành viên"
-              placeholder="Tìm theo username hoặc email…"
-              value={keywordInput}
-              onChange={(event) => setKeywordInput(event.target.value)}
-            />
-          </div>
+          <SearchInput
+            className="admin-search"
+            aria-label="Tìm thành viên"
+            placeholder="Tìm theo username hoặc email…"
+            value={keywordInput}
+            onChange={(event) => setKeywordInput(event.target.value)}
+          />
         </div>
 
         <div className="admin-panel-body scroll-area">

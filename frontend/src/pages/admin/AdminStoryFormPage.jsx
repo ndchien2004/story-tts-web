@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { adminApi, catalogApi, storyApi } from "../../api/endpoints";
 import AdminPage from "./AdminPage";
+import { useAdminToast } from "../../context/admin-toast-context";
 import { Alert, Button, Field, Select, Spinner, TextArea, TextInput } from "../../components/ui";
 
 const EMPTY_FORM = {
@@ -19,6 +20,7 @@ const EMPTY_FORM = {
 export default function AdminStoryFormPage() {
   const { storyId } = useParams();
   const navigate = useNavigate();
+  const notify = useAdminToast();
   const isEdit = Boolean(storyId);
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -89,6 +91,12 @@ export default function AdminStoryFormPage() {
       const saved = isEdit
         ? await adminApi.updateStory(storyId, payload)
         : await adminApi.createStory(payload);
+
+      // Said after the navigation is queued, not before: the toaster lives in
+      // the layout above these routes, so the message outlives the page that
+      // sent it and lands on the chapter list the save arrives at. Until there
+      // was somewhere for it to live, saving a story said nothing at all.
+      notify(isEdit ? `Đã lưu “${saved.title}”.` : `Đã thêm truyện “${saved.title}”.`);
       navigate(`/admin/truyen/${saved.id}/chuong`);
     } catch (err) {
       setError(err.message);

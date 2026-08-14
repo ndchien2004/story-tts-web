@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { adminApi, catalogApi } from "../../api/endpoints";
 import AdminPage from "./AdminPage";
+import { useAdminToast } from "../../context/admin-toast-context";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import {
   Alert,
@@ -32,7 +33,7 @@ export default function AdminCatalogPage() {
   const [genres, setGenres] = useState(null);
   const [authors, setAuthors] = useState(null);
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
+  const notify = useAdminToast();
 
   const load = useCallback(() => {
     Promise.all([catalogApi.genres(), catalogApi.authors()])
@@ -46,9 +47,10 @@ export default function AdminCatalogPage() {
   useEffect(load, [load]);
 
   return (
-    <AdminPage title="Thể loại & tác giả">
+    <AdminPage
+      title="Thể loại & tác giả"
+    >
       {error && <Alert tone="error">{error}</Alert>}
-      {notice && <Alert tone="success">{notice}</Alert>}
 
       <div className="admin-catalog">
         <CatalogColumn
@@ -66,7 +68,7 @@ export default function AdminCatalogPage() {
             remove: adminApi.deleteGenre,
           }}
           onChanged={(message) => {
-            setNotice(message);
+            notify(message);
             setError(null);
             load();
           }}
@@ -87,7 +89,7 @@ export default function AdminCatalogPage() {
             remove: adminApi.deleteAuthor,
           }}
           onChanged={(message) => {
-            setNotice(message);
+            notify(message);
             setError(null);
             load();
           }}

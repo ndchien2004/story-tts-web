@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { adminApi, storyApi } from "../../api/endpoints";
 import AdminPage from "./AdminPage";
+import { useAdminToast } from "../../context/admin-toast-context";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import Pagination from "../../components/Pagination";
 import useDebouncedValue from "../../hooks/useDebouncedValue";
-import { Alert, Badge, Button, ButtonLink, EmptyState, Spinner, TextInput } from "../../components/ui";
+import { Alert, Badge, Button, ButtonLink, EmptyState, SearchInput, Spinner } from "../../components/ui";
 
 /** Fills the panel on a typical desktop screen without needing a scroll. */
 const PAGE_SIZE = 12;
@@ -18,7 +19,7 @@ export default function AdminStoriesPage() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
+  const notify = useAdminToast();
 
   // The story queued for deletion; also drives the confirmation dialog.
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -45,7 +46,7 @@ export default function AdminStoriesPage() {
     setDeleting(true);
     try {
       await adminApi.deleteStory(pendingDelete.id);
-      setNotice(`Đã xóa truyện “${pendingDelete.title}”.`);
+      notify(`Đã xóa truyện “${pendingDelete.title}”.`);
       setPendingDelete(null);
       load();
     } catch (err) {
@@ -68,7 +69,6 @@ export default function AdminStoriesPage() {
       }
     >
       {error && <Alert tone="error">{error}</Alert>}
-      {notice && <Alert tone="success">{notice}</Alert>}
 
       <section className="admin-panel">
         <div className="admin-panel-head">
@@ -80,15 +80,13 @@ export default function AdminStoriesPage() {
             </span>
           )}
 
-          <div className="admin-search">
-            <TextInput
-              type="search"
-              aria-label="Tìm truyện"
-              placeholder="Tìm theo tên truyện hoặc tác giả…"
-              value={keywordInput}
-              onChange={(event) => setKeywordInput(event.target.value)}
-            />
-          </div>
+          <SearchInput
+            className="admin-search"
+            aria-label="Tìm truyện"
+            placeholder="Tìm theo tên truyện hoặc tác giả…"
+            value={keywordInput}
+            onChange={(event) => setKeywordInput(event.target.value)}
+          />
         </div>
 
         <div className="admin-panel-body scroll-area">

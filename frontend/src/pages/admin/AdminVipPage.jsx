@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { adminApi } from "../../api/endpoints";
 import AdminPage from "./AdminPage";
+import { useAdminToast } from "../../context/admin-toast-context";
 import Pagination from "../../components/Pagination";
 import VipPlanForm from "../../components/admin/VipPlanForm";
 import { formatDateTime, formatVnd } from "../../utils/format";
@@ -10,7 +11,7 @@ import {
   Button,
   ButtonLink,
   EmptyState,
-  Select,
+  FilterChips,
   Spinner,
 } from "../../components/ui";
 
@@ -23,6 +24,16 @@ const ORDER_FILTERS = [
 ];
 
 const PAGE_SIZE = 20;
+
+/**
+ * Selling and what was sold are one subject on two screens, so they are tabs
+ * rather than two sidebar entries — the sidebar would have claimed they are
+ * two separate parts of the console.
+ */
+export const VIP_TABS = [
+  { to: "/admin/vip", label: "Đơn nâng cấp" },
+  { to: "/admin/vip/goi", label: "Gói đang bán" },
+];
 
 const ORDER_TONE = {
   PAID: "public",
@@ -50,7 +61,7 @@ export default function AdminVipPage() {
   const [refreshing, setRefreshing] = useState(null);
 
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
+  const notify = useAdminToast();
 
   /** Only the count is needed here; the plans themselves live on their own page. */
   const loadPlanCount = useCallback(() => {
@@ -72,7 +83,7 @@ export default function AdminVipPage() {
   useEffect(() => setPage(0), [status]);
 
   function handlePlanCreated(message) {
-    setNotice(message);
+    notify(message);
     setError(null);
     loadPlanCount();
   }
@@ -83,7 +94,7 @@ export default function AdminVipPage() {
     setError(null);
     try {
       const updated = await adminApi.refreshVipOrder(order.orderCode);
-      setNotice(`Đơn ${updated.orderCode}: ${updated.statusLabel}.`);
+      notify(`Đơn ${updated.orderCode}: ${updated.statusLabel}.`);
       loadOrders();
     } catch (err) {
       setError(err.message);
@@ -95,9 +106,11 @@ export default function AdminVipPage() {
   const rows = orders?.content ?? [];
 
   return (
-    <AdminPage title="Gói VIP & thanh toán">
+    <AdminPage
+      title="Gói VIP & thanh toán"
+      tabs={VIP_TABS}
+    >
       {error && <Alert tone="error">{error}</Alert>}
-      {notice && <Alert tone="success">{notice}</Alert>}
 
       <div className="admin-vip-stack">
         {/* Full width, so the fields sit in a row instead of a column. */}
@@ -132,18 +145,15 @@ export default function AdminVipPage() {
               </span>
             )}
 
-            <div className="admin-search">
-              <Select
-                aria-label="Lọc theo trạng thái đơn"
+            {/* Five states, all of them short words: as chips they double as
+                the legend for the status column below. */}
+            <div className="admin-panel-head-end">
+              <FilterChips
+                label="Lọc theo trạng thái đơn"
+                options={ORDER_FILTERS}
                 value={status}
-                onChange={(event) => setStatus(event.target.value)}
-              >
-                {ORDER_FILTERS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
+                onChange={setStatus}
+              />
             </div>
           </div>
 

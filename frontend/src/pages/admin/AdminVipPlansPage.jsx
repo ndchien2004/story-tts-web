@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { adminApi } from "../../api/endpoints";
 import AdminPage from "./AdminPage";
+import { useAdminToast } from "../../context/admin-toast-context";
 import Modal from "../../components/Modal";
 import VipPlanForm from "../../components/admin/VipPlanForm";
+import { VIP_TABS } from "./AdminVipPage";
 import { formatVnd } from "../../utils/format";
 import { Alert, Badge, Button, EmptyState, Spinner } from "../../components/ui";
 
@@ -29,7 +31,7 @@ export default function AdminVipPlansPage() {
   const [busyId, setBusyId] = useState(null);
 
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
+  const notify = useAdminToast();
 
   const load = useCallback(() => {
     adminApi
@@ -49,7 +51,7 @@ export default function AdminVipPlansPage() {
   }
 
   function handleDone(message) {
-    setNotice(message);
+    notify(message);
     setError(null);
     closeDialog();
     load();
@@ -60,7 +62,7 @@ export default function AdminVipPlansPage() {
     setError(null);
     try {
       await adminApi.setVipPlanActive(plan.id, !plan.active);
-      setNotice(
+      notify(
         plan.active ? `Đã ngừng bán gói “${plan.name}”.` : `Đã bán lại gói “${plan.name}”.`,
       );
       load();
@@ -76,7 +78,8 @@ export default function AdminVipPlansPage() {
   return (
     <AdminPage
       crumbs={[{ to: "/admin/vip", label: "Gói VIP & thanh toán" }, { label: "Tất cả các gói" }]}
-      title="Tất cả các gói VIP"
+      title="Gói VIP"
+      tabs={VIP_TABS}
       actions={
         <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
           Thêm gói
@@ -84,7 +87,6 @@ export default function AdminVipPlansPage() {
       }
     >
       {error && <Alert tone="error">{error}</Alert>}
-      {notice && <Alert tone="success">{notice}</Alert>}
 
       <section className="admin-panel">
         <div className="admin-panel-head">

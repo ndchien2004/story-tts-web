@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { adminApi } from "../../api/endpoints";
 import AdminPage from "./AdminPage";
+import { useAdminToast } from "../../context/admin-toast-context";
 import ChapterAudioPanel from "../../components/admin/ChapterAudioPanel";
 import { Alert, Button, Field, Select, Spinner, TextArea, TextInput } from "../../components/ui";
 
@@ -30,6 +31,7 @@ const EMPTY_FORM = {
 export default function AdminChapterFormPage() {
   const { storyId, chapterId } = useParams();
   const navigate = useNavigate();
+  const notify = useAdminToast();
   const isEdit = Boolean(chapterId);
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -115,6 +117,10 @@ export default function AdminChapterFormPage() {
 
     try {
       await saveChapter();
+
+      // The toaster sits in the layout above this route, so the message
+      // survives the jump back to the chapter list and is read there.
+      notify(isEdit ? `Đã lưu “${form.title}”.` : `Đã thêm chương “${form.title}”.`);
       navigate(backTo);
     } catch (err) {
       setError(err.message);
