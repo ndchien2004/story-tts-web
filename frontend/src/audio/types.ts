@@ -129,9 +129,30 @@ export interface NarrationState {
   error: string | null;
 }
 
+/**
+ * Người nghe muốn nhạc nền chạy hay không — và có tự quyết hay không.
+ *
+ * Ba trạng thái chứ không phải hai, vì "đang im" có hai nghĩa khác hẳn nhau:
+ * im vì câu chuyện đang dừng, và im vì người nghe đã tắt nó đi. Gộp chung thì
+ * bấm dừng giọng đọc rồi bấm phát lại sẽ bật lại bản nhạc mà người ta vừa cố ý
+ * tắt.
+ *
+ * — `follow`: chạy cùng giọng đọc, dừng cùng giọng đọc. Mặc định, và là chỗ mọi
+ *   bản nhạc vừa chọn quay về.
+ * — `play`: chạy, kể cả khi câu chuyện đang dừng.
+ * — `pause`: im, kể cả khi câu chuyện đang chạy.
+ */
+export type BgmIntent = "follow" | "play" | "pause";
+
 export interface BgmState {
   track: BgmTrack | null;
   status: "idle" | "loading" | "playing" | "paused" | "error";
+  /** Ý muốn của người nghe, tách khỏi {@link status} là cái đang thật sự xảy ra. */
+  intent: BgmIntent;
+  /** Giây, tính từ đầu bản nhạc; quay về 0 sau mỗi vòng lặp. */
+  currentTime: number;
+  /** Giây. 0 khi chưa biết — chưa chọn bản nào, hoặc bản đang tải dở. */
+  duration: number;
   volume: number;
   /** Hết bài thì quay lại từ đầu. Mặc định bật — nhạc nền mà dừng giữa chương
    *  thì phần còn lại của chương đột nhiên trống trải. */

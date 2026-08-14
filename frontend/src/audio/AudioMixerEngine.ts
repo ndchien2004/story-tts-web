@@ -1,4 +1,5 @@
 import type {
+  BgmIntent,
   BgmState,
   BgmTrack,
   MixerMode,
@@ -117,11 +118,39 @@ const INITIAL_NARRATION: NarrationState = {
 const INITIAL_BGM: BgmState = {
   track: null,
   status: "idle",
+  intent: "follow",
+  currentTime: 0,
+  duration: 0,
   volume: 0.35,
   loop: true,
   duck: true,
   error: null,
 };
+
+/**
+ * Nhịp báo lại vị trí của nhạc nền, tính bằng mili giây.
+ *
+ * Nhạc nền chạy bằng `AudioBufferSourceNode`, và một nút nguồn thì không bắn sự
+ * kiện nào về chỗ nó đang phát — chỗ ấy phải tự tính từ đồng hồ của
+ * `AudioContext`. Bốn lần một giây là đủ để thanh tua trông như đang chạy, và
+ * đúng bằng nhịp `timeupdate` mà thẻ audio của giọng đọc vẫn bắn ra, nên trang
+ * đọc không phải vẽ lại dày hơn nó vốn đã vẽ.
+ */
+const BGM_TICK_MS = 250;
+
+/** Tua là một thao tác dứt khoát: quãng chuyển ở đây ngắn hơn hẳn lúc dừng. */
+const BGM_SEEK_FADE_S = 0.05;
+
+/**
+ * Chờ ngần này mili giây sau lần tua cuối rồi mới cho nhạc chạy lại.
+ *
+ * Một thanh kéo bắn ra một sự kiện cho mỗi pixel ngón tay đi qua, mà mỗi lần
+ * đổi chỗ trong Web Audio là dựng một nút nguồn mới — kéo ngang màn hình sẽ
+ * dựng hàng trăm nút trong hai giây. Nên: im ngay từ sự kiện đầu tiên, và chỉ
+ * chạy lại một lần duy nhất khi tay đã dừng. Đủ ngắn để một cái bấm vào giữa
+ * thanh vẫn thấy như tức thì.
+ */
+const BGM_SEEK_SETTLE_MS = 150;
 
 /**
  * Phép thử CORS, nhớ theo origin.
@@ -161,6 +190,12 @@ export class AudioMixerEngine {
 
   /** Mốc `context.currentTime` ứng với `bgmOffset = 0` của lần phát hiện tại. */
   private bgmStartedAt = 0;
+
+  /** Đồng hồ báo vị trí nhạc nền về cho giao diện; chỉ chạy khi nhạc đang chạy. */
+  private bgmTicker: ReturnType<typeof setInterval> | null = null;
+
+  /** Đang chờ tay rời thanh tua để cho nhạc chạy lại; xem {@link seekBgm}. */
+  private bgmSeekTimer: ReturnType<typeof setTimeout> | null = null;
 
   /* --- Nhạc nền, đường lùi bằng thẻ audio --- */
   private bgmElement: HTMLAudioElement | null = null;
@@ -685,11 +720,28 @@ export class AudioMixerEngine {
 
     if (!track) {
       this.bgmBuffer = null;
-      this.patchBgm({ track: null, status: "idle", error: null });
+      this.patchBgm({
+        track: null,
+        status: "idle",
+        intent: "follow",
+        currentTime: 0,
+        duration: 0,
+        error: null,
+      });
       return;
     }
 
-    this.patchBgm({ track, status: "loading", error: null });
+    // Bản vừa chọn luôn quay về "theo giọng đọc": người ta chọn một bản nhạc để
+    // nghe cùng câu chuyện, chứ không phải để thừa hưởng quyết định tắt/mở mà
+    // họ đã đưa ra về một bản khác.
+    this.patchBgm({
+      track,
+      status: "loading",
+      intent: "follow",
+      currentTime: 0,
+      duration: 0,
+      error: null,
+    });
 
     try {
       if (this.state.mode === "webaudio") {
@@ -697,12 +749,14 @@ export class AudioMixerEngine {
         const buffer = await this.decode(track.url);
         if (this.disposed || token !== this.bgmToken) return;
         this.bgmBuffer = buffer;
+        this.patchBgm({ duration: buffer.duration });
       } else {
         const element = new Audio(track.url);
         element.loop = this.state.bgm.loop;
         element.preload = "auto";
+        this.attachBgmElement(element);
         if (this.bgmElement) {
-          this.bgmElement.pause();
+          this.detachBgmElement(this.bgmElement);
         }
         this.bgmElement = element;
       }
@@ -718,6 +772,36 @@ export class AudioMixerEngine {
     this.patchBgm({ status: "paused" });
     this.applyBgmVolume(false);
     this.syncBgmPlayback();
+  }
+
+  /*
+   * Đường lùi bằng thẻ audio cần vài sự kiện của riêng nó: độ dài để vẽ thanh
+   * tua, và lúc hết bài để nút bấm không còn nói "đang phát" khi đã im.
+   */
+
+  private handleBgmLoadedMetadata = (): void => {
+    const element = this.bgmElement;
+    if (!element) return;
+    this.patchBgm({ duration: Number.isFinite(element.duration) ? element.duration : 0 });
+  };
+
+  private handleBgmEnded = (): void => {
+    if (this.state.bgm.loop) return;
+    this.stopBgmTicker();
+    this.bgmOffset = 0;
+    this.patchBgm({ status: "paused", currentTime: 0 });
+  };
+
+  private attachBgmElement(element: HTMLAudioElement): void {
+    element.addEventListener("loadedmetadata", this.handleBgmLoadedMetadata);
+    element.addEventListener("ended", this.handleBgmEnded);
+  }
+
+  private detachBgmElement(element: HTMLAudioElement): void {
+    element.removeEventListener("loadedmetadata", this.handleBgmLoadedMetadata);
+    element.removeEventListener("ended", this.handleBgmEnded);
+    element.pause();
+    element.removeAttribute("src");
   }
 
   /**
@@ -762,6 +846,82 @@ export class AudioMixerEngine {
     this.applyBgmVolume();
   }
 
+  /* ---------------------------------------------------------------- */
+  /* Nhạc nền: điều khiển riêng                                        */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Nhạc nền có bộ điều khiển của riêng nó, độc lập với giọng đọc.
+   *
+   * Trước đây nhạc nền không có ý muốn nào cả: nó chạy khi và chỉ khi giọng đọc
+   * chạy. Nghĩa là người đang nghe một chương mà thấy nhạc vướng thì chỉ còn hai
+   * lối — kéo âm lượng nhạc về 0, hoặc bỏ chọn bản nhạc — và cả hai đều là xoá
+   * cái đã chọn chứ không phải tắt nó đi. Một cái bấm nói "im đi" là thứ còn
+   * thiếu, và một khi nó tồn tại thì chiều ngược lại cũng phải tồn tại: nghe
+   * riêng bản nhạc trong lúc câu chuyện đang dừng.
+   *
+   * @see BgmIntent để biết ba trạng thái ấy nghĩa là gì
+   */
+  private setBgmIntent(intent: BgmIntent): void {
+    if (this.disposed) return;
+    this.patchBgm({ intent });
+    // Bấm nhạc cũng là một thao tác của người dùng, nên nó đủ tư cách mở khoá
+    // đường tiếng — nếu không, cái bấm đầu tiên sẽ không ra tiếng gì.
+    void this.resumeContext();
+    this.syncBgmPlayback();
+  }
+
+  playBgm(): void {
+    this.setBgmIntent("play");
+  }
+
+  pauseBgm(): void {
+    this.setBgmIntent("pause");
+  }
+
+  /** Đang ra tiếng thì tắt, đang im thì bật — bất kể vì sao nó đang im. */
+  toggleBgm(): void {
+    if (this.state.bgm.track === null) return;
+    this.setBgmIntent(this.state.bgm.status === "playing" ? "pause" : "play");
+  }
+
+  /**
+   * Nhảy tới một chỗ khác trong bản nhạc.
+   *
+   * Nút nguồn của Web Audio không tua được: nó chỉ biết bắt đầu tại một mốc và
+   * chạy tới hết. Nên tua ở đây là dừng nút cũ, ghi lại mốc mới, rồi dựng một
+   * nút khác bắt đầu từ đó — và người nghe không nhận ra vì cả hai việc xảy ra
+   * trong cùng một nhịp, cách nhau một quãng chuyển 50 mili giây.
+   */
+  seekBgm(seconds: number): void {
+    if (this.disposed || this.state.bgm.track === null) return;
+
+    const { duration } = this.state.bgm;
+    const target = Math.max(0, duration > 0 ? Math.min(seconds, duration) : seconds);
+
+    /*
+     * Dừng ngay, chạy lại sau khi tay đã yên — xem BGM_SEEK_SETTLE_MS.
+     *
+     * `teardownBgmSource` cố ý không đụng tới `status`, nên suốt cả cú kéo
+     * trạng thái vẫn là "đang phát" nếu trước đó nó đang phát. Chính vì thế mà
+     * bộ đếm giờ ở dưới chỉ cần đọc lại `status` là biết có phải cho nhạc chạy
+     * tiếp hay không, không cần nhớ gì thêm.
+     */
+    this.teardownBgmSource(BGM_SEEK_FADE_S);
+    this.stopBgmTicker();
+
+    this.bgmOffset = target;
+    if (this.bgmElement) this.bgmElement.currentTime = target;
+    this.patchBgm({ currentTime: target });
+
+    if (this.bgmSeekTimer !== null) clearTimeout(this.bgmSeekTimer);
+    this.bgmSeekTimer = setTimeout(() => {
+      this.bgmSeekTimer = null;
+      if (this.disposed) return;
+      if (this.state.bgm.status === "playing") this.startBgm();
+    }, BGM_SEEK_SETTLE_MS);
+  }
+
   /**
    * Âm lượng nhạc nền thật sự nghe thấy = âm lượng đã chọn × hệ số nhường lời.
    *
@@ -781,16 +941,58 @@ export class AudioMixerEngine {
     }
   }
 
-  /** Nhạc nền chạy khi và chỉ khi có bản được chọn và giọng đọc đang nói. */
+  /**
+   * Nhạc nền chạy hay không: ý muốn của người nghe trước, giọng đọc sau.
+   *
+   * Chỉ ở `follow` — mặc định — thì giọng đọc mới có tiếng nói. Hai trạng thái
+   * kia là người nghe đã nói rõ, và một câu trả lời rõ ràng thì không nên bị
+   * một cái bấm phát/dừng ở chỗ khác lật lại.
+   */
   private syncBgmPlayback(): void {
-    const shouldPlay = this.state.bgm.track !== null
-      && this.state.narration.status === "playing";
+    const { track, intent } = this.state.bgm;
+    const shouldPlay = track !== null
+      && (intent === "play"
+        || (intent === "follow" && this.state.narration.status === "playing"));
 
     if (shouldPlay) {
       this.startBgm();
     } else {
       this.stopBgm();
     }
+  }
+
+  /**
+   * Nhạc nền đang ở giây thứ mấy.
+   *
+   * Không có sự kiện nào để hỏi, nên tính: mốc bắt đầu của lần phát này cách
+   * đồng hồ của `AudioContext` bao xa, rồi lấy dư theo độ dài bản nhạc để vòng
+   * lặp quay về 0 đúng chỗ. Lúc đang dừng thì mốc đã được ghi sẵn khi dừng.
+   */
+  private bgmPositionNow(): number {
+    if (this.state.mode !== "webaudio") {
+      return this.bgmElement?.currentTime ?? 0;
+    }
+
+    const context = this.context;
+    const buffer = this.bgmBuffer;
+    if (!this.bgmSource || !context || !buffer) return this.bgmOffset;
+
+    const played = context.currentTime - this.bgmStartedAt;
+    return buffer.duration > 0 ? played % buffer.duration : played;
+  }
+
+  private startBgmTicker(): void {
+    if (this.bgmTicker !== null) return;
+    this.bgmTicker = setInterval(() => {
+      if (this.disposed) return;
+      this.patchBgm({ currentTime: this.bgmPositionNow() });
+    }, BGM_TICK_MS);
+  }
+
+  private stopBgmTicker(): void {
+    if (this.bgmTicker === null) return;
+    clearInterval(this.bgmTicker);
+    this.bgmTicker = null;
   }
 
   private startBgm(): void {
@@ -802,6 +1004,9 @@ export class AudioMixerEngine {
       void element.play().catch(() => {
         // Cùng một chính sách tự phát; giọng đọc đã báo rồi, không báo hai lần.
       });
+      // Cùng một đồng hồ cho cả hai lối: thanh tua không nên đứng yên chỉ vì
+      // tiếng đang đi đường lùi.
+      this.startBgmTicker();
       this.patchBgm({ status: "playing" });
       return;
     }
@@ -832,17 +1037,26 @@ export class AudioMixerEngine {
         this.bgmSource = null;
         this.bgmSourceGain = null;
         this.bgmOffset = 0;
-        this.patchBgm({ status: "paused" });
+        this.stopBgmTicker();
+        this.patchBgm({ status: "paused", currentTime: 0 });
       }
     };
 
     this.bgmSource = source;
     this.bgmSourceGain = gain;
     this.bgmStartedAt = context.currentTime - offset;
+    this.startBgmTicker();
     this.patchBgm({ status: "playing" });
   }
 
-  private stopBgm(): void {
+  /**
+   * Gỡ nguồn nhạc đang chạy và ghi lại chỗ nó dừng — không đụng tới trạng thái.
+   *
+   * Tách khỏi {@link stopBgm} vì tua cũng phải làm đúng việc này, mà tua thì
+   * không phải là dừng: báo "đã tạm dừng" rồi báo "đang phát" ngay nhịp sau chỉ
+   * làm nút bấm chớp một cái.
+   */
+  private teardownBgmSource(fade: number): void {
     if (this.bgmElement) {
       this.bgmElement.pause();
     }
@@ -858,11 +1072,11 @@ export class AudioMixerEngine {
       this.bgmOffset = length > 0 ? played % length : 0;
 
       if (gain) {
-        this.rampTo(gain.gain, 0, BGM_FADE_S / 2);
+        this.rampTo(gain.gain, 0, fade);
       }
       source.onended = null;
       try {
-        source.stop(context.currentTime + BGM_FADE_S / 2);
+        source.stop(context.currentTime + fade);
       } catch {
         // Đã dừng rồi thì thôi.
       }
@@ -870,9 +1084,14 @@ export class AudioMixerEngine {
 
     this.bgmSource = null;
     this.bgmSourceGain = null;
+  }
+
+  private stopBgm(): void {
+    this.teardownBgmSource(BGM_FADE_S / 2);
+    this.stopBgmTicker();
 
     if (this.state.bgm.track && this.state.bgm.status === "playing") {
-      this.patchBgm({ status: "paused" });
+      this.patchBgm({ status: "paused", currentTime: this.bgmPositionNow() });
     }
   }
 
@@ -957,14 +1176,18 @@ export class AudioMixerEngine {
     this.disposed = true;
 
     this.stopBgm();
+    this.stopBgmTicker();
+    if (this.bgmSeekTimer !== null) {
+      clearTimeout(this.bgmSeekTimer);
+      this.bgmSeekTimer = null;
+    }
 
     if (this.element) {
       this.detachElement(this.element);
       this.element = null;
     }
     if (this.bgmElement) {
-      this.bgmElement.pause();
-      this.bgmElement.removeAttribute("src");
+      this.detachBgmElement(this.bgmElement);
       this.bgmElement = null;
     }
 

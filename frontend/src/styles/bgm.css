@@ -26,6 +26,43 @@
   color: var(--ink-muted);
 }
 
+/*
+ * Bộ nút của riêng bản nhạc.
+ *
+ * Cùng một hàng với cùng thứ tự như thanh tua của giọng đọc — nút, giờ đã trôi,
+ * thanh kéo, tổng thời lượng — nên hai thanh nằm trên cùng một cột đọc như hai
+ * dòng của một bảng chứ không như hai tiện ích khác nhau. Nhỏ hơn một cỡ, vì
+ * nó điều khiển bè đệm: giống nhau về hình, khác nhau về sức nặng.
+ */
+.bgm-transport {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.bgm-transport .nb-range {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bgm-transport-play {
+  width: 1.9rem;
+  height: 1.9rem;
+}
+
+.bgm-transport-play svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+/* Chỉ hiện khi người nghe đã tự quyết, nên nó luôn là một tin chứ không phải
+   một lời nhắc — và tin thì đáng được tách khỏi dòng trên nó. */
+.bgm-intent {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
 .bgm-volume {
   display: flex;
   flex-direction: column;

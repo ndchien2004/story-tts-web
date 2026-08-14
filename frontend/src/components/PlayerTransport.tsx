@@ -1,24 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { AudioMixerEngine } from "../audio/AudioMixerEngine";
+import { formatTime } from "../audio/formatTime";
 import type { MixerSnapshot } from "../audio/types";
 import { Button } from "./ui";
 
 const SKIP_SECONDS = 10;
 const RATE_OPTIONS = [0.75, 1, 1.25, 1.5, 2];
-
-/** `m:ss`, or `h:mm:ss` once the track passes an hour. */
-function formatTime(value: number): string {
-  if (!Number.isFinite(value) || value < 0) return "--:--";
-
-  const total = Math.floor(value);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const seconds = total % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-
-  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
-}
 
 /* ------------------------------------------------------------------ */
 /* Icons                                                               */

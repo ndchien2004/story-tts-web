@@ -1,22 +1,24 @@
 import { useRef } from "react";
 import type { ChangeEvent, CSSProperties } from "react";
+import { formatTime } from "../audio/formatTime";
 import type { MixerSnapshot } from "../audio/types";
 import type { UseBgmResult } from "../audio/useBgm";
 import { Alert, Button, Select, Switch } from "./ui";
 
 /**
- * Nhạc nền: chọn bản, chỉnh riêng âm lượng của nó.
+ * Nhạc nền: chọn bản, bật tắt và tua nó, chỉnh riêng âm lượng của nó.
  *
  * Ba điều được nói thẳng trên mặt giao diện, vì cả ba đều là câu hỏi người nghe
  * sẽ hỏi trong ba mươi giây đầu:
  *
- * — Nhạc chỉ chạy khi giọng đọc chạy. Nhạc nền tiếp tục sau khi câu chuyện dừng
- *   lại là một thứ bị bỏ quên đang phát trong một tab nào đó.
+ * — Nhạc có bộ nút của riêng nó. Mặc định nó chạy cùng giọng đọc và dừng cùng
+ *   giọng đọc, nhưng cái bấm ở đây thắng: tắt nhạc giữa chương mà câu chuyện
+ *   vẫn chạy tiếp, hoặc nghe riêng bản nhạc trong lúc câu chuyện đang dừng.
  * — Nhạc tự nhỏ lại khi có tiếng người. To đủ để cảm thấy trong lúc lặng thì
  *   cũng đủ để lấn lời, nên nó lùi lại và trở lại ở khoảng nghỉ.
- * — Trang này không đi kèm bản nhạc nào. Nhạc có bản quyền, nên thư mục nhạc để
- *   trống cho người dựng trang tự bỏ vào — và trong lúc chờ, người nghe mở được
- *   bản của chính họ.
+ * — Nhạc trong ô chọn là do quản trị viên tải lên. Kho ấy có thể còn trống, và
+ *   không phải bản nhạc nào cũng phát công khai được vì bản quyền — nên người
+ *   nghe luôn mở được bản của chính họ, dù kho có gì hay không.
  */
 
 const MusicIcon = () => (
@@ -35,6 +37,28 @@ const MusicIcon = () => (
   </svg>
 );
 
+/* Cùng hình với nút phát của giọng đọc, nhỏ hơn một cỡ: cùng một việc, nhưng
+   đây là bè đệm chứ không phải bè chính. */
+const playIcon = {
+  viewBox: "0 0 24 24",
+  fill: "currentColor",
+  stroke: "none",
+  "aria-hidden": true,
+} as const;
+
+const PlayIcon = () => (
+  <svg {...playIcon}>
+    <path d="M7 4.8v14.4a.8.8 0 0 0 1.22.68l11.5-7.2a.8.8 0 0 0 0-1.36L8.22 4.12A.8.8 0 0 0 7 4.8" />
+  </svg>
+);
+
+const PauseIcon = () => (
+  <svg {...playIcon}>
+    <rect x="6" y="4.5" width="4.2" height="15" rx="0.6" />
+    <rect x="13.8" y="4.5" width="4.2" height="15" rx="0.6" />
+  </svg>
+);
+
 export interface BgmMixerPanelProps {
   bgm: UseBgmResult;
   state: MixerSnapshot;
@@ -44,6 +68,12 @@ export default function BgmMixerPanel({ bgm, state }: BgmMixerPanelProps) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const { tracks, selected, loading } = bgm;
   const volumePercent = Math.round(state.bgm.volume * 100);
+
+  const { status, currentTime, duration, intent } = state.bgm;
+  const sounding = status === "playing";
+  const hasTrack = selected !== null;
+  const seekMax = duration || 0;
+  const seekProgress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <div className="bgm-panel stack">
@@ -81,8 +111,56 @@ export default function BgmMixerPanel({ bgm, state }: BgmMixerPanelProps) {
           chọn rỗng không giải thích gì là chỗ người ta tưởng trang bị hỏng. */}
       {!loading && tracks.length === 0 && (
         <p className="muted" style={{ fontSize: "0.85rem" }}>
-          Trang chưa có sẵn bản nhạc nền nào. Bạn có thể mở một bản nhạc từ máy mình để nghe cùng
-          giọng đọc.
+          Kho nhạc nền của trang đang trống. Bạn vẫn có thể mở một bản nhạc từ máy mình để nghe
+          cùng giọng đọc.
+        </p>
+      )}
+
+      {/*
+        Bộ nút của riêng bản nhạc: bật/tắt và tua, không đụng tới giọng đọc.
+
+        Trước đây nhạc nền không có nút nào cả — nó chạy khi giọng đọc chạy, và
+        cách duy nhất để tắt nó giữa chương là kéo âm lượng về 0 hoặc bỏ chọn cả
+        bản nhạc. Cả hai đều là xoá lựa chọn chứ không phải tắt tiếng, và cả hai
+        đều không có đường quay lại chỗ cũ trong bài.
+      */}
+      <div className="bgm-transport">
+        <Button
+          className="nb-icon-btn bgm-transport-play"
+          disabled={!hasTrack}
+          aria-label={sounding ? "Tạm dừng nhạc nền" : "Phát nhạc nền"}
+          title={sounding ? "Tạm dừng nhạc nền" : "Phát nhạc nền"}
+          onClick={bgm.toggle}
+        >
+          {sounding ? <PauseIcon /> : <PlayIcon />}
+        </Button>
+
+        <span className="nb-player-time">{formatTime(hasTrack ? currentTime : NaN)}</span>
+
+        <input
+          className="nb-range"
+          type="range"
+          min={0}
+          max={seekMax}
+          step={0.1}
+          value={Math.min(currentTime, seekMax)}
+          disabled={!hasTrack || duration <= 0}
+          aria-label="Vị trí trong bản nhạc nền"
+          aria-valuetext={`${formatTime(currentTime)} trên ${formatTime(duration)}`}
+          style={{ "--range-fill": `${seekProgress}%` } as CSSProperties}
+          onChange={(event) => bgm.seek(Number(event.target.value))}
+        />
+
+        <span className="nb-player-time">{formatTime(hasTrack ? duration : NaN)}</span>
+      </div>
+
+      {/* Chỉ nói khi có gì đó để nói: mặc định là "theo giọng đọc", và nhắc lại
+          điều mặc định ở mỗi lần nhìn là tiếng ồn. */}
+      {hasTrack && intent !== "follow" && (
+        <p className="bgm-intent muted" role="status">
+          {intent === "pause"
+            ? "Bạn đã tắt nhạc nền. Chọn lại bản nhạc để nó chạy cùng giọng đọc như cũ."
+            : "Nhạc nền đang chạy riêng, không phụ thuộc giọng đọc."}
         </p>
       )}
 
@@ -139,7 +217,8 @@ export default function BgmMixerPanel({ bgm, state }: BgmMixerPanelProps) {
       </div>
 
       <p className="muted" style={{ fontSize: "0.82rem" }}>
-        Nhạc nền chạy cùng giọng đọc và dừng khi bạn tạm dừng.
+        Mặc định nhạc nền chạy cùng giọng đọc và dừng khi bạn tạm dừng; nút ở trên cho phép bật,
+        tắt và tua riêng bản nhạc.
         {selected?.credit ? ` ${selected.credit}` : ""}
       </p>
     </div>

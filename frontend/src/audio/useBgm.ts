@@ -28,6 +28,10 @@ export interface UseBgmResult {
   loading: boolean;
   select: (trackId: string | null) => void;
   openLocalFile: (file: File) => void;
+  /** Bật/tắt riêng bản nhạc, không đụng tới giọng đọc. */
+  toggle: () => void;
+  /** Nhảy tới giây thứ `seconds` của bản nhạc. */
+  seek: (seconds: number) => void;
   setVolume: (volume: number) => void;
   setLoop: (loop: boolean) => void;
   setDuck: (duck: boolean) => void;
@@ -129,6 +133,21 @@ export function useBgm(engine: AudioMixerEngine): UseBgmResult {
     persist({ trackId: null });
   }, [engine, persist]);
 
+  /*
+   * Bật/tắt và tua không được ghi nhớ.
+   *
+   * Chúng nói về buổi nghe này — "lúc này tôi không muốn nhạc", "cho tôi nghe
+   * lại đoạn kia" — chứ không phải về cách người này thích nghe truyện. Mở
+   * chương sau mà nhạc vẫn im vì một cái bấm từ hôm trước là một câu đố.
+   */
+  const toggle = useCallback(() => {
+    engine.toggleBgm();
+  }, [engine]);
+
+  const seek = useCallback((seconds: number) => {
+    engine.seekBgm(seconds);
+  }, [engine]);
+
   const setVolume = useCallback((volume: number) => {
     engine.setBgmVolume(volume);
     persist({ volume });
@@ -150,6 +169,8 @@ export function useBgm(engine: AudioMixerEngine): UseBgmResult {
     loading,
     select,
     openLocalFile,
+    toggle,
+    seek,
     setVolume,
     setLoop,
     setDuck,

@@ -174,56 +174,70 @@
  *
  * The arithmetic it is built to satisfy, at 18rem of content width:
  *
- *   skip 2 + gap .4 + play 2.4 + gap .4 + skip 2   = 7.2rem
- *   gap between the two groups                     = 0.5rem
- *   rate 2.4 + gap .4 + mute 2 + gap .4 + vol 3    = 8.2rem
- *   ------------------------------------------------------
- *                                                    15.9rem
+ *   skip 1.75 + gap .3 + play 2.1 + gap .3 + skip 1.75   = 6.2rem
+ *   gap between the two groups                           = 0.4rem
+ *   rate 2.6 + gap .3 + mute 1.75 + gap .3 + vol 1.75    = 6.7rem
+ *   ------------------------------------------------------------
+ *                                                          13.3rem
  *
- * That leaves better than 2rem of slack, which is what the row was missing:
- * enough to absorb a scrollbar and still push the second group to the right
- * edge instead of jamming it against the first.
+ * The rate button is measured at its widest label — "1.25×", not "1×". Speed is
+ * remembered between sessions now, so most readers meet this row with a label
+ * wider than the one it used to be sized against.
+ *
+ * The set tightened once already and has now tightened again, for a reason that
+ * has nothing to do with the row: the listening column gained a music panel and
+ * two more switches, so it scrolls where it used to fit, and a scrollbar takes
+ * about a rem off the width every control here is measured against. Nearly 4rem
+ * of slack means the next thing to land in that column will not push the
+ * transport apart again.
+ *
+ * Which is also why the row is not allowed to wrap at this size. A transport
+ * that reflows into two rows stops reading as a transport, and the volume
+ * slider — the one flexible thing in it — gives up width long before that
+ * becomes necessary. Wrapping survives only below 15rem, where the arithmetic
+ * genuinely runs out.
  */
 @container (max-width: 24rem) {
   .nb-player-controls {
-    gap: var(--space-2);
+    gap: 0.4rem;
+    flex-wrap: nowrap;
   }
 
   .nb-player-group {
-    gap: 0.4rem;
+    gap: 0.3rem;
   }
 
   .nb-player-controls .nb-icon-btn {
-    width: 2rem;
-    height: 2rem;
+    width: 1.75rem;
+    height: 1.75rem;
   }
 
   .nb-player-controls .nb-icon-btn svg {
-    width: 0.95rem;
-    height: 0.95rem;
+    width: 0.85rem;
+    height: 0.85rem;
   }
 
   .nb-player-play {
-    width: 2.4rem;
-    height: 2.4rem;
+    width: 2.1rem;
+    height: 2.1rem;
   }
 
   .nb-player-play svg {
-    width: 1.1rem;
-    height: 1.1rem;
+    width: 1rem;
+    height: 1rem;
   }
 
   .nb-rate-btn {
-    min-width: 2.4rem;
-    height: 2rem;
-    padding: 0 0.35rem;
-    font-size: 0.78rem;
+    min-width: 2.1rem;
+    height: 1.75rem;
+    padding: 0 0.3rem;
+    font-size: 0.74rem;
   }
 
   .nb-player-volume {
-    flex: 1 1 3rem;
-    min-width: 2rem;
-    max-width: 4.5rem;
+    flex: 1 1 2.5rem;
+    min-width: 1.75rem;
+    max-width: 4rem;
   }
 }
 
@@ -234,6 +248,11 @@
  * right edge, so it starts from the left instead.
  */
 @container (max-width: 15rem) {
+  /* The tier above forbids wrapping; here it is the only way out. */
+  .nb-player-controls {
+    flex-wrap: wrap;
+  }
+
   .nb-player-group-end {
     margin-left: 0;
   }
