@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import Avatar from "./Avatar";
-import { Badge } from "./ui";
 
 const icon = {
   viewBox: "0 0 24 24",
@@ -146,16 +145,19 @@ export default function UserMenu({ onNavigate }) {
             <Avatar src={user.avatarUrl} name={name} size="md" />
             <div className="user-menu-identity">
               <strong>{name}</strong>
-              <span className="muted">@{user.username}</span>
+
+              {/* The rank rides on the handle rather than taking a row of its
+                  own under it. It is one short word about the account, the
+                  same kind of thing the handle is, and a full-size badge on a
+                  line by itself made the menu open two lines taller to say
+                  it. */}
+              <span className="user-menu-handle">
+                <span className="muted">@{user.username}</span>
+                {isAdmin && <span className="user-menu-tag">Admin</span>}
+                {!isAdmin && isVip && <span className="user-menu-tag user-menu-tag-vip">VIP</span>}
+              </span>
             </div>
           </div>
-
-          {(isAdmin || isVip) && (
-            <div className="user-menu-badges">
-              {isAdmin && <Badge tone="info">Admin</Badge>}
-              {!isAdmin && isVip && <Badge tone="vip">VIP</Badge>}
-            </div>
-          )}
 
           <Link to="/tai-khoan" className="user-menu-item" role="menuitem" onClick={close}>
             <PersonIcon />

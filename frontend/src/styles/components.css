@@ -993,21 +993,59 @@
   line-height: 1.25;
 }
 
-.user-menu-identity strong,
-.user-menu-identity span {
+/* Direct children only: the handle line holds a tag of its own, and it sets
+   its own size and does its own truncating. */
+.user-menu-identity > strong,
+.user-menu-identity > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.user-menu-identity span {
+.user-menu-identity > span {
   font-size: 0.8rem;
 }
 
-.user-menu-badges {
+/* The handle and the rank on one line: the handle takes what room there is and
+   gives way first, the rank keeps its few characters whatever happens. */
+.user-menu-handle {
   display: flex;
-  gap: var(--space-1);
-  padding: 0 var(--space-2) var(--space-2);
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.user-menu-handle > .muted {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * Small on purpose — smaller than a badge.
+ *
+ * It sits beside the handle rather than under it, which is only readable if it
+ * stays subordinate to the name above: a full badge on that line drew the eye
+ * before the name did.
+ */
+.user-menu-tag {
+  flex: 0 0 auto;
+  padding: 0.02rem 0.28rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: 3px;
+}
+
+/* The one rank worth filling in, as everywhere else on the site. */
+.user-menu-tag-vip {
+  color: var(--on-tint);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .user-menu-item {
@@ -1441,18 +1479,34 @@
  * that lined up with nothing. Here only the bar under the label moves, so
  * there is no box to misalign and hover cannot shift the layout.
  */
+/*
+ * Four tabs and a phone are not the same width.
+ *
+ * Left to wrap, the strip broke onto a second line and the rule under it cut
+ * through the middle of the row; left to overflow, it dragged the whole page
+ * sideways. It scrolls within itself instead, with the bar hidden — the tabs
+ * are short and the first one is the one already open.
+ */
 .story-tabs {
   flex: 0 0 auto;
   display: flex;
   gap: var(--space-5);
+  overflow-x: auto;
+  scrollbar-width: none;
   border-bottom: var(--outline-width) solid var(--outline);
 }
 
+.story-tabs::-webkit-scrollbar {
+  display: none;
+}
+
 .story-tab {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   padding: 0.55rem 0.15rem;
+  white-space: nowrap;
   font-size: var(--label-size);
   font-weight: 600;
   letter-spacing: var(--label-tracking);
@@ -1583,6 +1637,30 @@
  * two characters. The facts inside wrap on their own, so the same markup reads
  * as a row on a desktop and as a stack on a phone.
  */
+/*
+ * VIP an admin granted, stated where the orders would be.
+ *
+ * Not an order card: there is no order, no money and no date, and dressing it
+ * as one would invite the reader to look for those. A badge and a sentence.
+ */
+.order-grant {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  border-left: 2px solid var(--accent);
+  background: var(--bg-alt);
+}
+
+.order-grant p {
+  flex: 1 1 16rem;
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+}
+
 .order-list {
   display: flex;
   flex-direction: column;
@@ -1682,7 +1760,9 @@
 
 .shelf-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(23rem, 1fr));
+  /* `min()` rather than a bare 23rem: below that width the track would keep
+     its minimum and push the page sideways instead of giving in to it. */
+  grid-template-columns: repeat(auto-fill, minmax(min(23rem, 100%), 1fr));
   /* Column gap only — each row carries its own rule. */
   gap: 0 var(--space-5);
   padding: 0;

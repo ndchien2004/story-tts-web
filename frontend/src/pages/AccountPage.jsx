@@ -122,12 +122,14 @@ export default function AccountPage() {
             <dt>Loại tài khoản</dt>
             <dd>{isAdmin ? "Quản trị viên" : isVip ? "Thành viên VIP" : "Thành viên thường"}</dd>
           </div>
-          {/* Only shown to someone whose VIP actually runs out — a permanent
-              grant has no date to give. */}
-          {user.vipUntil && !user.vipGranted && (
+          {/* A granted VIP has no date to give — which is the fact itself, not
+              a reason to say nothing. Leaving the row out altogether left an
+              account reading "Thành viên VIP" with no answer to "đến bao giờ".
+              Only shown at all to an account that has a VIP of some kind. */}
+          {(user.vipGranted || user.vipUntil) && (
             <div>
-              <dt>VIP đến hết</dt>
-              <dd>{formatDate(user.vipUntil)}</dd>
+              <dt>Hạn VIP</dt>
+              <dd>{user.vipGranted ? "Vĩnh viễn" : formatDate(user.vipUntil)}</dd>
             </div>
           )}
           <div>
@@ -246,7 +248,7 @@ const ORDER_TONE = {
  * order. That is what the `checkoutUrl` on a pending order is for.
  */
 function OrderList() {
-  const { refresh: refreshUser } = useAuth();
+  const { user, refresh: refreshUser } = useAuth();
 
   const [orders, setOrders] = useState(null);
   const [error, setError] = useState(null);
@@ -305,82 +307,106 @@ function OrderList() {
   if (error) return <Alert tone="error">{error}</Alert>;
   if (!orders) return <Spinner label="Đang tải đơn nâng cấp…" />;
 
+  /*
+   * VIP an admin handed over rather than VIP someone bought.
+   *
+   * It has no order behind it and no date on it, so this tab had nothing to
+   * show and fell through to "bạn chưa có đơn nâng cấp nào" — which reads, to
+   * an account that *is* VIP, as if its VIP were not real. The grant is the
+   * thing to state here, above whatever was bought before it.
+   */
+  const granted = user?.vipGranted ? (
+    <div className="order-grant">
+      <Badge tone="vip">VIP vĩnh viễn</Badge>
+      <p>
+        Quản trị viên đã cấp VIP cho tài khoản này. Quyền VIP không có hạn sử dụng và không cần mua
+        gói nào.
+      </p>
+    </div>
+  ) : null;
+
   if (orders.length === 0) {
     return (
-      <EmptyState title="Bạn chưa có đơn nâng cấp nào">
-        Các gói VIP nằm ở <Link to="/nang-cap">trang nâng cấp</Link>. Đơn đã tạo sẽ hiện ở đây kèm
-        tình trạng thanh toán.
-      </EmptyState>
+      granted ?? (
+        <EmptyState title="Bạn chưa có đơn nâng cấp nào">
+          Các gói VIP nằm ở <Link to="/nang-cap">trang nâng cấp</Link>. Đơn đã tạo sẽ hiện ở đây kèm
+          tình trạng thanh toán.
+        </EmptyState>
+      )
     );
   }
 
   return (
-    <ul className="order-list">
-      {orders.map((order) => (
-        <li key={order.orderCode} className="order-card">
-          <div className="order-card-head">
-            <div>
-              <strong>{order.planName}</strong>
-              <span className="muted"> · {order.months} tháng</span>
-            </div>
-            <Badge tone={ORDER_TONE[order.status] ?? "neutral"}>{order.statusLabel}</Badge>
-          </div>
+    <>
+      {granted}
 
-          <dl className="order-facts">
-            <div>
-              <dt>Số tiền</dt>
-              <dd className="tabular-num">{formatVnd(order.amountVnd)}</dd>
-            </div>
-            <div>
-              <dt>Mã đơn</dt>
-              <dd className="tabular-num">{order.orderCode}</dd>
-            </div>
-            <div>
-              <dt>Tạo lúc</dt>
-              <dd>{formatDateTime(order.createdAt)}</dd>
-            </div>
-            {order.paidAt && (
+      <ul className="order-list">
+        {orders.map((order) => (
+          <li key={order.orderCode} className="order-card">
+            <div className="order-card-head">
               <div>
-                <dt>Thanh toán</dt>
-                <dd>{formatDateTime(order.paidAt)}</dd>
+                <strong>{order.planName}</strong>
+                <span className="muted"> · {order.months} tháng</span>
               </div>
-            )}
-            {order.vipUntilAfter && (
-              <div>
-                <dt>VIP đến hết</dt>
-                <dd>{formatDate(order.vipUntilAfter)}</dd>
-              </div>
-            )}
-          </dl>
+              <Badge tone={ORDER_TONE[order.status] ?? "neutral"}>{order.statusLabel}</Badge>
+            </div>
 
-          {order.status === "PENDING" && (
-            <div className="order-card-actions">
-              {/* Only a pending order carries a checkout link, so this is also
-                  the only branch that can offer to finish paying. */}
-              {order.checkoutUrl && (
-                <a className="nb-btn nb-btn-primary nb-btn-sm" href={order.checkoutUrl}>
-                  Thanh toán tiếp
-                </a>
+            <dl className="order-facts">
+              <div>
+                <dt>Số tiền</dt>
+                <dd className="tabular-num">{formatVnd(order.amountVnd)}</dd>
+              </div>
+              <div>
+                <dt>Mã đơn</dt>
+                <dd className="tabular-num">{order.orderCode}</dd>
+              </div>
+              <div>
+                <dt>Tạo lúc</dt>
+                <dd>{formatDateTime(order.createdAt)}</dd>
+              </div>
+              {order.paidAt && (
+                <div>
+                  <dt>Thanh toán</dt>
+                  <dd>{formatDateTime(order.paidAt)}</dd>
+                </div>
               )}
-              <Button
-                size="sm"
-                loading={busy === order.orderCode}
-                onClick={() => recheck(order.orderCode)}
-              >
-                Đã trả rồi, kiểm tra lại
-              </Button>
-              <Button
-                size="sm"
-                loading={busy === order.orderCode}
-                onClick={() => cancel(order.orderCode)}
-              >
-                Hủy đơn
-              </Button>
-            </div>
-          )}
-        </li>
-      ))}
-    </ul>
+              {order.vipUntilAfter && (
+                <div>
+                  <dt>VIP đến hết</dt>
+                  <dd>{formatDate(order.vipUntilAfter)}</dd>
+                </div>
+              )}
+            </dl>
+
+            {order.status === "PENDING" && (
+              <div className="order-card-actions">
+                {/* Only a pending order carries a checkout link, so this is
+                    also the only branch that can offer to finish paying. */}
+                {order.checkoutUrl && (
+                  <a className="nb-btn nb-btn-primary nb-btn-sm" href={order.checkoutUrl}>
+                    Thanh toán tiếp
+                  </a>
+                )}
+                <Button
+                  size="sm"
+                  loading={busy === order.orderCode}
+                  onClick={() => recheck(order.orderCode)}
+                >
+                  Đã trả rồi, kiểm tra lại
+                </Button>
+                <Button
+                  size="sm"
+                  loading={busy === order.orderCode}
+                  onClick={() => cancel(order.orderCode)}
+                >
+                  Hủy đơn
+                </Button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
