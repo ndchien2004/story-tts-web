@@ -182,6 +182,52 @@ function ContinuousSwitch({ checked, disabled, onChange }) {
 }
 
 /**
+ * Bám chữ theo giọng đọc.
+ *
+ * Hai công tắc chứ không phải một, vì đó là hai mong muốn khác nhau: có người
+ * muốn thấy chữ sáng lên nhưng tự cuộn lấy, và trên màn hình rộng thì cả chương
+ * nằm gọn trong tầm mắt nên tự cuộn chỉ tổ làm trang chữ nhúc nhích.
+ *
+ * Cả khối biến mất khi bản audio đang nghe không có mốc thời gian — bản admin
+ * thu sẵn chẳng hạn. Một công tắc bật lên rồi không có gì xảy ra là lời hứa suông.
+ */
+function KaraokeSwitches({ karaoke }) {
+  if (!karaoke?.available) {
+    return null;
+  }
+
+  return (
+    <div className="stack" style={{ gap: "0.75rem" }}>
+      <Switch
+        label="Bám chữ theo giọng đọc"
+        hint={
+          karaoke.loading
+            ? "Đang tải mốc thời gian của bản đọc…"
+            : "Chữ sáng lên đúng lúc giọng đọc đọc tới."
+        }
+        checked={karaoke.enabled}
+        onChange={(event) => karaoke.onToggle(event.target.checked)}
+      />
+
+      <Switch
+        label="Tự cuộn theo"
+        hint="Giữ dòng đang đọc ở giữa màn hình."
+        checked={karaoke.autoScroll}
+        disabled={!karaoke.enabled}
+        onChange={(event) => karaoke.onToggleAutoScroll(event.target.checked)}
+      />
+
+      {karaoke.stale && (
+        <p className="muted" style={{ fontSize: "0.85rem" }}>
+          Nội dung chương đã được sửa sau khi dựng bản audio này, nên phần bám chữ không còn khớp.
+          Bản audio vẫn nghe bình thường.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * Chapter audio panel.
  *
  * A chapter with no recording can still be listened to: the reader asks for
@@ -206,6 +252,7 @@ export default function AudioPlayer({
   engine,
   mixerState,
   bgm,
+  karaoke,
 }) {
   const { tracks, activeTrack, setActiveTrack, generating, error, requestTts } = audio;
 
@@ -297,6 +344,8 @@ export default function AudioPlayer({
           disabled={!hasNextChapter}
           onChange={onToggleAutoContinue}
         />
+
+        <KaraokeSwitches karaoke={karaoke} />
 
         {bgm && <BgmMixerPanel bgm={bgm} state={mixerState} />}
       </div>

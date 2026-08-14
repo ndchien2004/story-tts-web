@@ -1,0 +1,114 @@
+/**
+ * Bám chữ theo giọng đọc.
+ *
+ * Hai quy tắc chi phối cả tệp này:
+ *
+ * 1. **Không có gì được xê dịch.** Ô chữ nào cũng mang sẵn phần đệm và phần bù
+ *    âm của nó, kể cả lúc không được tô. Nếu phần đệm chỉ xuất hiện lúc sáng
+ *    lên, mỗi chữ được đọc tới sẽ đẩy cả dòng nhích sang một chút, và cả đoạn
+ *    văn rung suốt buổi nghe.
+ * 2. **Chỉ đổi màu.** Đổi cỡ chữ, đậm nhạt hay giãn chữ đều làm dòng chảy chữ
+ *    phải tính lại — sáu mươi lần một giây thì đó là việc nặng nhất trên trang.
+ *    Màu nền và màu chữ thì trình duyệt chỉ cần vẽ lại, không phải bố cục lại.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Ô chữ                                                               */
+/* ------------------------------------------------------------------ */
+
+.k-word {
+  /* Phần đệm có sẵn, phần bù âm triệt tiêu nó. Ô chữ vì thế chiếm đúng chỗ nó
+     vẫn chiếm khi chưa có gì tô sáng. */
+  padding: 0.06em 0.16em;
+  margin-inline: -0.16em;
+  border-radius: 3px;
+
+  color: inherit;
+  background: transparent;
+
+  /* Chữ dài rơi xuống hai dòng thì cả hai dòng cùng được tô, chứ không phải chỉ
+     dòng đầu mang nền. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+
+  transition:
+    background-color var(--transition),
+    color var(--transition);
+}
+
+/* Chữ đang được đọc: một vệt bút dạ quang, thứ duy nhất có màu trên cả trang
+   chữ đen, nên mắt tìm thấy nó mà không cần đi tìm. */
+.k-word.is-speaking {
+  color: var(--karaoke-mark-ink);
+  background: var(--karaoke-mark);
+}
+
+/* Đã đọc qua: nhạt đi để thành một vệt đường đã đi, không phải một thứ thứ hai
+   đòi được nhìn. */
+.k-word.is-spoken {
+  color: var(--ink-muted);
+}
+
+/* Câu đang đọc: cùng sắc vàng ấy nhưng nhạt gần hết, đủ để mắt biết đường quay
+   về sau khi rời trang một lúc mà không tranh chỗ với vệt bút. */
+.k-line {
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition);
+}
+
+.k-line.is-current {
+  background: var(--karaoke-line);
+}
+
+/* Bấm vào một chữ là tua tới đó — con trỏ nói trước điều ấy. */
+.reader-content.is-karaoke .k-word {
+  cursor: pointer;
+}
+
+/*
+ * Người đọc đã tắt hiệu ứng chuyển động trong hệ điều hành.
+ *
+ * Phần tô sáng vẫn chạy — nó là thông tin, không phải trang trí — nhưng nó
+ * chuyển tức thì thay vì mờ dần, và phần tự cuộn nhảy thẳng tới nơi thay vì
+ * trượt (xem `prefersReducedMotion` trong useKaraoke).
+ */
+@media (prefers-reduced-motion: reduce) {
+  .k-word,
+  .k-line {
+    transition: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Về chỗ đang đọc                                                     */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Chỉ hiện ra sau khi người đọc tự cuộn đi chỗ khác.
+ *
+ * Nổi trên nền chữ nên nó là một trong số ít thứ trong trang này được phép có
+ * bóng đổ. Đặt ở giữa cạnh dưới của khung chữ: gần ngón tay cái trên điện
+ * thoại, và không che mất dòng nào ở giữa màn hình.
+ */
+.karaoke-resume {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 5;
+
+  display: block;
+  margin-inline: auto;
+  padding: 0.4rem 1rem;
+
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--on-tint);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+}
+
+.karaoke-resume:hover {
+  background: var(--accent-strong);
+}

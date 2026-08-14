@@ -73,6 +73,22 @@
   --danger: #b42318;
 
   /**
+   * Bút dạ quang của phần bám chữ theo giọng đọc.
+   *
+   * Ngoại lệ thứ hai của trang này với quy tắc "chỉ lỗi mới có màu", và là một
+   * ngoại lệ có lý do: chữ đang được đọc phải tìm thấy được bằng cái liếc mắt,
+   * giữa một trang toàn chữ đen. Vàng dạ quang là thứ mắt người đã quen đọc
+   * đúng như thế từ thời còn tô sách giấy.
+   *
+   * Màu chữ trên vệt tô được ghim cứng chứ không lấy từ `--ink`: `--ink` lật
+   * sang gần trắng ở nền tối, mà trắng trên vàng thì không đọc được. Nền vàng
+   * thì ở đâu cũng là nền sáng, nên chữ trên nó luôn phải tối.
+   */
+  --karaoke-mark: #ffe14d;
+  --karaoke-mark-ink: #1c1c21;
+  --karaoke-line: rgba(255, 209, 26, 0.16);
+
+  /**
    * Flat by design.
    *
    * Only genuinely floating things — dropdown menus, modals — are allowed
@@ -173,6 +189,12 @@
 
   /* Lifted off the light-mode red, which goes muddy on a dark ground. */
   --danger: #f97066;
+
+  /* Hạ độ chói một nấc: đúng sắc vàng ấy trên nền tối thì rực lên thành đèn
+     chứ không còn là vệt bút. Chữ trên vệt vẫn tối, vì vệt vẫn sáng. */
+  --karaoke-mark: #f2c53d;
+  --karaoke-mark-ink: #16171b;
+  --karaoke-line: rgba(242, 197, 61, 0.14);
 
   --shadow-lg: 0 12px 28px -10px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.5);
 }

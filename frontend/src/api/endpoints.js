@@ -101,6 +101,19 @@ export const audioApi = {
     client.get(`/api/chapters/${chapterId}/tts/${audioId}`).then((r) => r.data),
 
   /**
+   * Mốc thời gian từng chữ của một bản audio, cho phần tô sáng theo giọng đọc.
+   *
+   * Một lời gọi cho cả chương, gọi lúc mở chương. Cố ý không có đường nào hỏi
+   * theo nhịp phát: dò tìm là việc của trình duyệt, và một yêu cầu mạng mỗi
+   * giây sẽ biến phần tô sáng thành thứ giật theo chất lượng đường truyền.
+   *
+   * Bản không có mốc trả về `timestamps` rỗng chứ không báo lỗi — nên chỗ đáng
+   * hỏi trước là cờ `hasTranscript` trong danh sách bản audio.
+   */
+  transcript: (chapterId, audioId) =>
+    client.get(`/api/chapters/${chapterId}/audio/${audioId}/transcript`).then((r) => r.data),
+
+  /**
    * Builds the URL for an `<audio>` element.
    *
    * The element cannot send an Authorization header, so the token travels as a

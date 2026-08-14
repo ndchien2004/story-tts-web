@@ -3,7 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { audioApi, chapterApi, progressApi } from "../api/endpoints";
 import useAudioMixer from "../audio/useAudioMixer";
 import useBgm from "../audio/useBgm";
+import useTranscript from "../audio/useTranscript";
+import useKaraoke from "../audio/karaoke/useKaraoke";
 import AudioPlayer from "../components/AudioPlayer";
+import KaraokeText from "../components/KaraokeText";
 import LockedGate from "../components/LockedGate";
 import ReaderSettings from "../components/ReaderSettings";
 import { useAuth } from "../context/auth-context";
@@ -12,12 +15,29 @@ import useTtsStatus from "../hooks/useTtsStatus";
 import { Alert, Button, ChevronIcon, Spinner } from "../components/ui";
 
 const AUTO_CONTINUE_KEY = "storytts.autoContinue";
+const KARAOKE_KEY = "storytts.karaoke.v1";
 
 /** How close to the bottom of the text still counts as having reached the end. */
 const END_THRESHOLD_PX = 40;
 
 /** How often the listening position is written back while audio plays. */
 const POSITION_SAVE_INTERVAL_MS = 15_000;
+
+/** Bám chữ và tự cuộn đều bật sẵn: đó là lý do người ta mở một trang truyện audio. */
+function readKaraokePreferences() {
+  try {
+    const raw = localStorage.getItem(KARAOKE_KEY);
+    if (!raw) return { enabled: true, autoScroll: true };
+
+    const parsed = JSON.parse(raw);
+    return {
+      enabled: typeof parsed?.enabled === "boolean" ? parsed.enabled : true,
+      autoScroll: typeof parsed?.autoScroll === "boolean" ? parsed.autoScroll : true,
+    };
+  } catch {
+    return { enabled: true, autoScroll: true };
+  }
+}
 
 /**
  * Reading screen.
@@ -29,8 +49,9 @@ const POSITION_SAVE_INTERVAL_MS = 15_000;
  * <h3>Ai giữ tiếng</h3>
  * Không phải khối này, và cũng không phải trình phát. Tiếng do bộ trộn giữ —
  * một `AudioContext` duy nhất dựng ở đây và sống suốt buổi đọc, kể cả khi người
- * đọc sang chương khác. Nhờ vậy nhạc nền không đứt quãng ở ranh giới hai chương:
- * đổi chương là đổi nguồn tiếng, không phải dựng lại đường tiếng.
+ * đọc sang chương khác. Nhờ vậy nhạc nền không đứt quãng ở ranh giới hai chương,
+ * và phần tô sáng chữ đọc đồng hồ từ đúng cái nguồn đang phát ra tiếng chứ
+ * không từ một bản sao trong trạng thái React.
  */
 export default function ChapterPage() {
   const { chapterId } = useParams();
@@ -41,6 +62,7 @@ export default function ChapterPage() {
   // narration run out can all fire, and only the first needs to reach the server.
   const markedRead = useRef(false);
   const contentRef = useRef(null);
+  const textRef = useRef(null);
   const lastPositionSaveRef = useRef(0);
 
   const [chapter, setChapter] = useState(null);
@@ -50,6 +72,7 @@ export default function ChapterPage() {
   const [autoContinue, setAutoContinue] = useState(
     () => localStorage.getItem(AUTO_CONTINUE_KEY) === "true",
   );
+  const [karaokePreferences, setKaraokePreferences] = useState(readKaraokePreferences);
 
   // Set only when the previous chapter finished playing; the mixer reads it to
   // decide whether it may start on its own, then it is cleared.
@@ -107,6 +130,10 @@ export default function ChapterPage() {
   useEffect(() => {
     localStorage.setItem(AUTO_CONTINUE_KEY, String(autoContinue));
   }, [autoContinue]);
+
+  useEffect(() => {
+    localStorage.setItem(KARAOKE_KEY, JSON.stringify(karaokePreferences));
+  }, [karaokePreferences]);
 
   /**
    * Open the chapter's progress record, so "Đọc tiếp" on the story page knows
@@ -241,6 +268,36 @@ export default function ChapterPage() {
     const seconds = engine.exactPosition();
     if (seconds > 0) savePosition(seconds);
   }, [engine, savePosition]);
+
+  /* -------------------------------------------------------------- */
+  /* Bám chữ theo giọng đọc                                          */
+  /* -------------------------------------------------------------- */
+
+  const karaokeAvailable = Boolean(activeTrack?.hasTranscript);
+
+  const transcript = useTranscript(
+    chapterId,
+    karaokeAvailable ? activeTrack.id : null,
+    chapter?.content,
+    karaokePreferences.enabled,
+  );
+
+  const { following, resumeFollowing } = useKaraoke({
+    engine,
+    timeline: transcript.timeline,
+    containerRef: textRef,
+    enabled: karaokePreferences.enabled && Boolean(transcript.timeline),
+    autoScroll: karaokePreferences.autoScroll,
+  });
+
+  /** Bấm vào một chữ là nói "đọc lại từ đây" — một cách tua bằng mắt. */
+  const seekToWord = useCallback(
+    (wordIndex) => {
+      const at = transcript.timeline?.wordStart(wordIndex);
+      if (at !== null && at !== undefined) engine.seek(at);
+    },
+    [engine, transcript.timeline],
+  );
 
   /**
    * Reaching the bottom of the text counts as having read the chapter — that
@@ -380,7 +437,20 @@ export default function ChapterPage() {
           </header>
 
           <div className="reader-pane-body scroll-area" ref={contentRef} onScroll={handleScroll}>
-            <div className="reader-content">{chapter.content}</div>
+            <KaraokeText
+              content={chapter.content ?? ""}
+              timeline={transcript.timeline}
+              innerRef={textRef}
+              onSeekToWord={seekToWord}
+            />
+
+            {/* Người đọc vừa cuộn tay đi chỗ khác: phần tự cuộn đã nhường, và
+                đây là đường quay lại — do họ bấm, chứ không phải bị kéo về. */}
+            {transcript.timeline && karaokePreferences.autoScroll && !following && (
+              <button type="button" className="karaoke-resume" onClick={resumeFollowing}>
+                Về chỗ đang đọc
+              </button>
+            )}
           </div>
         </section>
 
@@ -401,6 +471,17 @@ export default function ChapterPage() {
               engine={engine}
               mixerState={mixerState}
               bgm={bgm}
+              karaoke={{
+                available: karaokeAvailable,
+                enabled: karaokePreferences.enabled,
+                autoScroll: karaokePreferences.autoScroll,
+                loading: transcript.loading,
+                stale: transcript.stale,
+                onToggle: (enabled) =>
+                  setKaraokePreferences((current) => ({ ...current, enabled })),
+                onToggleAutoScroll: (autoScroll) =>
+                  setKaraokePreferences((current) => ({ ...current, autoScroll })),
+              }}
             />
           </div>
         </aside>
