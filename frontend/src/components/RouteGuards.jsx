@@ -26,13 +26,17 @@ export function RequireAuth() {
  * Signing in or registering again is meaningless once a session exists, so
  * those pages send an authenticated visitor home instead of showing a form
  * that would replace their own session.
+ *
+ * "Home" is the console for an admin — the same rule the sign-in form applies
+ * after a successful login, so reopening `/dang-nhap` with a live session lands
+ * in the same place as signing in would have.
  */
 export function RequireGuest() {
-  const { isAuthenticated, initialising } = useAuth();
+  const { isAuthenticated, isAdmin, initialising } = useAuth();
 
   if (initialising) return <Spinner label="Đang kiểm tra phiên đăng nhập…" />;
 
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  if (isAuthenticated) return <Navigate to={isAdmin ? "/admin" : "/"} replace />;
 
   return <Outlet />;
 }

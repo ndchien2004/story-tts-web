@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import GoogleAuth from "../components/GoogleAuth";
 import useAuthProviders from "../hooks/useAuthProviders";
+import { landingPathFor } from "../utils/routing";
 import { Alert, Button, Field, PasswordInput, TextInput } from "../components/ui";
 
 export default function LoginPage() {
@@ -30,8 +31,10 @@ export default function LoginPage() {
     setFieldErrors({});
 
     try {
-      await login(form);
-      navigate(redirectTo, { replace: true });
+      // Who signed in decides where they land: an admin goes straight to the
+      // console rather than to the reading site they never came here for.
+      const user = await login(form);
+      navigate(landingPathFor(user, redirectTo), { replace: true });
     } catch (err) {
       setError(err.message);
       setFieldErrors(err.fieldErrors ?? {});

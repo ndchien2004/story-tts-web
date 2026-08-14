@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import GoogleSignInButton from "./GoogleSignInButton";
+import { landingPathFor } from "../utils/routing";
 
 /**
  * The "or continue with Google" half of the sign-in and sign-up forms.
@@ -27,8 +28,9 @@ export default function GoogleAuth({ providers, text, redirectTo = "/", onError 
     setSigningIn(true);
     onError(null);
     try {
-      await loginWithGoogle(credential);
-      navigate(redirectTo, { replace: true });
+      // Same rule as the password form: an admin lands in the console.
+      const user = await loginWithGoogle(credential);
+      navigate(landingPathFor(user, redirectTo), { replace: true });
     } catch (err) {
       setSigningIn(false);
       onError(err.message);
