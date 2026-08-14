@@ -1,0 +1,44 @@
+{
+  /*
+   * TypeScript ở đây là để canh phần audio, không phải để đổi cả dự án.
+   *
+   * Trang web này viết bằng JSX thuần và vẫn đang chạy tốt; viết lại toàn bộ chỉ
+   * để có kiểu là một việc rủi ro mà không đổi lấy được gì. Nhưng hai thứ mới —
+   * bộ trộn âm thanh và phần đồng bộ chữ theo giọng đọc — thì khác: chúng là máy
+   * trạng thái có nút, có mốc thời gian, có vòng lặp mỗi khung hình, và một chỗ
+   * lẫn giây với mili giây ở đấy là một lỗi không hiện ra cho tới khi người dùng
+   * nghe thấy.
+   *
+   * Nên: `allowJs` để mã cũ vẫn được nhập vào bình thường, `checkJs` tắt để
+   * không biến việc thêm một tính năng thành việc sửa tám mươi tệp, và `strict`
+   * bật hết cho những gì viết mới.
+   */
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+
+    "allowJs": true,
+    "checkJs": false,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+
+    /* Vite dịch từng tệp một, không nhìn cả chương trình. */
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "useDefineForClassFields": true,
+
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["src", "vite.config.js"]
+}
