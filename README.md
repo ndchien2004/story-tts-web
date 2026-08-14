@@ -40,7 +40,7 @@ nhau bằng JWT.
 | Đọc | Trang đọc riêng, chuyển chương trước/sau, chỉnh cỡ chữ và giãn dòng, giao diện sáng/tối |
 | Khóa chương | Chương không đủ quyền hiện icon 🔒 kèm mức yêu cầu; nội dung **không bao giờ** được gửi về trình duyệt |
 | Nghe | Trình phát có tua (HTTP Range), nhớ vị trí đang nghe, chế độ nghe liên tục tự chuyển chương |
-| Nhạc nền | Chọn một bản nhạc chạy song song với giọng đọc, chỉnh âm lượng riêng, lặp lại, và **tự nhỏ lại khi có tiếng người**; hai đường tiếng trộn qua một `AudioContext` chung nên không lệch nhau trên điện thoại |
+| Nhạc nền | Chọn một bản trong **kho nhạc quản trị viên tải lên** — hoặc mở bản của chính mình từ máy — chạy song song với giọng đọc, chỉnh âm lượng riêng, lặp lại, và **tự nhỏ lại khi có tiếng người**; hai đường tiếng trộn qua một `AudioContext` chung nên không lệch nhau trên điện thoại |
 | Bám chữ theo giọng đọc | Chữ sáng lên đúng lúc được đọc tới, dòng đang đọc tự giữ ở giữa màn hình, bấm vào một chữ là nghe lại từ chỗ đó; mốc thời gian lấy theo từng chữ ngay trong lần tổng hợp giọng nói |
 | Chương chưa có audio | Nút **"Nghe bằng AI"** ngay trên trang đọc: dựng audio rồi tự phát, có hạn mức mỗi ngày để một lần bấm không thành một khoản chi không kiểm soát; nghe lại chương đã có audio thì không tính lượt |
 | Cá nhân | Tủ truyện (đang đọc dở / đã đọc xong / yêu thích), tiến độ đọc, hồ sơ + ảnh đại diện |
@@ -56,6 +56,7 @@ nhau bằng JWT.
 | Truyện, chương & audio | Vào tab thấy danh sách truyện (sửa thông tin, xóa); bấm vào một truyện thì mở danh sách chương của nó, nơi sửa nội dung, đặt mức khóa, **đổi mức khóa hàng loạt**, lọc theo tình trạng audio, upload bản thu và **tạo audio hàng loạt** (tối đa 20 chương/lượt) |
 | Audio của một chương | Trong màn hình sửa chương: xem mọi bản audio kể cả bản hỏng, tải lên bản mới, chọn giọng, tạo lại, xóa từng bản |
 | Thể loại & tác giả | CRUD, kèm số truyện của từng mục; chặn xóa mục còn truyện đang dùng |
+| Nhạc nền | Tải nhạc nền lên cho người nghe chọn, đặt tên và dòng ghi công; **tạm ẩn** một bản khỏi danh sách mà vẫn giữ file, hoặc xóa hẳn |
 | Bình luận | Kiểm duyệt toàn bộ bình luận của mọi truyện, tìm kiếm và xóa |
 | Thành viên | Cấp/thu hồi VIP vĩnh viễn, khóa/mở tài khoản, nâng/hạ quyền quản trị |
 | Gói VIP & thanh toán | Tự đặt gói bán ra (số tháng và giá tùy ý), bật/tắt bán; xem mọi đơn và đối chiếu lại đơn còn treo với cổng thanh toán |
@@ -76,7 +77,7 @@ nhau bằng JWT.
 | Giọng đọc | ElevenLabs Text-to-Speech, model đa ngôn ngữ |
 | Thanh toán | PayOS (tạo link thanh toán + webhook, ký HMAC-SHA256) |
 | Lưu ảnh đại diện, ảnh thương hiệu | Cloudinary |
-| Lưu audio | Thư mục local `backend/uploads/audio` |
+| Lưu audio, nhạc nền | Thư mục local `backend/uploads/audio` và `backend/uploads/bgm` |
 | Tài liệu API | springdoc-openapi (Swagger UI) |
 
 Giao diện tự viết bằng CSS thuần, không dùng thư viện UI. Không có state manager ngoài React Context.
@@ -293,9 +294,19 @@ là cả chương tô sáng sai một nhịp, mà lệch một nhịp còn tệ 
 ngờ chính mắt mình. Dưới 60% số chữ khớp được thì coi như bản mốc ấy không còn thuộc về chương này,
 và trang đọc nói thẳng điều đó thay vì tô bừa.
 
-Nhạc nền: xem `frontend/public/bgm/README.md`. Trang **không đi kèm bản nhạc nào** — nhạc có bản
-quyền — nhưng người nghe mở được bản của chính họ từ máy, và người dựng trang thả tệp vào thư mục ấy
-rồi khai vào `manifest.json` là xong, không cần dịch lại frontend.
+Nhạc nền có ba nguồn, hỏi song song và hỏng độc lập nhau:
+
+1. **Kho trên máy chủ** — quản trị viên tải lên ở `/admin/nhac-nen`, người nghe thấy ngay ở lần mở
+   trang sau. Đây là nguồn chính, và là nguồn duy nhất thêm được nhạc mà không phải dịch lại
+   frontend. File nằm ở `BGM_DIR`, bảng `bgm_tracks` chỉ giữ tên file.
+2. **`frontend/public/bgm/manifest.json`** — cách cũ, vẫn chạy: ai đã bỏ sẵn nhạc vào bản build thì
+   chúng hiện sau nhạc trên máy chủ. Xem `frontend/public/bgm/README.md`.
+3. **Máy người nghe** — vì bản quyền: không phải bản nhạc nào cũng phát công khai được. Tệp mở từ máy
+   thành một object URL sống trong tab đang mở, không rời khỏi máy họ, và mất khi tải lại trang.
+
+Một bản nhạc rút khỏi kho thì **tắt** chứ không xóa: người nghe có thể đang nghe dở, và một câu hỏi
+bản quyền thường được gỡ ra rồi đưa lại. Đường phát vẫn phục vụ bản đã tắt; chỉ danh sách chọn là
+không còn nó.
 
 ### Luồng mua VIP
 
@@ -456,7 +467,7 @@ story-tts-web/
 │     ├─ hooks/          useChapterAudio, useDebouncedValue, useAuthProviders
 │     ├─ pages/          Trang theo route (thư mục con admin/)
 │     ├─ styles/         CSS thuần, chia theo nhóm
-│     ├─ utils/          Định dạng tiền/ngày, chuẩn hóa Unicode
+│     ├─ utils/          Định dạng tiền/ngày, chuẩn hóa Unicode, đích đến sau đăng nhập
 │     └─ brand.js        URL logo và ảnh banner trên Cloudinary
 ├─ docker-compose.yml    MySQL 8
 ├─ .env                  Cấu hình thật — ĐÃ loại khỏi Git
@@ -679,6 +690,7 @@ tự hỏi lại cổng thanh toán nên luồng mua vẫn chạy đủ.
 | `APP_ADMIN_USERNAME` / `_PASSWORD` | admin / Admin@123 | Tài khoản Admin tạo ở lần chạy đầu |
 | `CORS_ALLOWED_ORIGINS` | localhost:5173… | Origin được phép gọi API |
 | `AUDIO_DIR` | ./uploads/audio | Nơi lưu file audio |
+| `BGM_DIR` | ./uploads/bgm | Nơi lưu nhạc nền quản trị viên tải lên |
 | `SERVER_PORT` | 8080 | Cổng backend |
 
 ---
@@ -698,6 +710,12 @@ Thêm 50 tài khoản độc giả mẫu `docgia01` … `docgia50` (mật khẩu
 cho bình luận mẫu và để trang quản lý thành viên có đủ dữ liệu nhiều trang.
 
 > Mật khẩu Admin lấy từ `APP_ADMIN_PASSWORD` trong `.env`. Đổi ngay khi triển khai thật.
+
+Đăng nhập bằng tài khoản quản trị thì vào thẳng `/admin` — bằng mật khẩu hay bằng Google đều vậy, và
+mở lại trang đăng nhập khi đã có phiên cũng đưa về đó. Không phải để chặn: quản trị viên vẫn mở được
+mọi trang của người đọc, và thanh bên có sẵn lối "Xem trang người đọc". Chỉ là họ không mở trang để
+hạ cánh xuống trang chủ rồi tự tìm đường qua menu tài khoản. Chỗ họ *đang định* tới vẫn được tôn
+trọng: bị bật khỏi một trang quản trị vì hết phiên thì đăng nhập lại là quay đúng về trang ấy.
 
 ---
 
@@ -725,6 +743,8 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | GET | `/api/chapters/{id}/audio/{audioId}/transcript` | Mốc thời gian từng chữ, cho phần bám chữ theo giọng đọc — cùng lớp chặn quyền với đường stream |
 | GET | `/api/tts/status` | Có tạo được audio không, và còn bao nhiêu lượt hôm nay |
 | GET | `/api/genres`, `/api/authors` | Danh mục |
+| GET | `/api/bgm` | Kho nhạc nền đang mở cho người nghe chọn |
+| GET | `/api/bgm/{id}/stream` | Phát một bản nhạc nền — trả trọn file, cache 1 ngày |
 | GET | `/api/stories/{id}/comments` | Bình luận của một truyện |
 | GET | `/api/vip/plans` | Bảng giá các gói VIP đang bán |
 | POST | `/api/payments/payos/webhook` | PayOS gọi về — bảo vệ bằng chữ ký HMAC, không phải JWT |
@@ -765,6 +785,11 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | POST | `/api/admin/audio/batch-tts` | Tạo audio hàng loạt — chọn giọng tự do, **không bị hạn mức** |
 | GET | `/api/admin/comments` | Toàn bộ bình luận để kiểm duyệt |
 | POST/PUT/DELETE | `/api/admin/genres`, `/api/admin/authors` | CRUD danh mục |
+| GET | `/api/admin/bgm` | Mọi bản nhạc nền, **kể cả bản đã tắt** |
+| POST | `/api/admin/bgm` | Tải lên một bản nhạc nền (tên và ghi công đi kèm trong cùng multipart) |
+| PUT | `/api/admin/bgm/{id}` | Sửa tên, dòng ghi công, thứ tự |
+| PATCH | `/api/admin/bgm/{id}/active` | Bật/tắt một bản trong danh sách người nghe chọn |
+| DELETE | `/api/admin/bgm/{id}` | Xóa hẳn, file trên đĩa cũng bị xóa |
 | GET | `/api/admin/users` | Danh sách thành viên |
 | PATCH | `/api/admin/users/{id}/vip` · `/enabled` · `/role` | Cấp VIP vĩnh viễn, khóa tài khoản, đổi quyền |
 | GET/POST/PUT | `/api/admin/vip/plans` | Xem và cấu hình các gói VIP |
