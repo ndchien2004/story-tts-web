@@ -39,7 +39,9 @@ nhau bằng JWT.
 | Duyệt truyện | Danh sách có phân trang, lọc theo thể loại, sắp xếp (mới nhất / phổ biến / A-Z), tìm theo tên truyện hoặc tác giả |
 | Đọc | Trang đọc riêng, chuyển chương trước/sau, chỉnh cỡ chữ và giãn dòng, giao diện sáng/tối |
 | Khóa chương | Chương không đủ quyền hiện icon 🔒 kèm mức yêu cầu; nội dung **không bao giờ** được gửi về trình duyệt |
-| Nghe | Trình phát HTML5 có tua (HTTP Range), nhớ vị trí đang nghe, chế độ nghe liên tục tự chuyển chương |
+| Nghe | Trình phát có tua (HTTP Range), nhớ vị trí đang nghe, chế độ nghe liên tục tự chuyển chương |
+| Nhạc nền | Chọn một bản nhạc chạy song song với giọng đọc, chỉnh âm lượng riêng, lặp lại, và **tự nhỏ lại khi có tiếng người**; hai đường tiếng trộn qua một `AudioContext` chung nên không lệch nhau trên điện thoại |
+| Bám chữ theo giọng đọc | Chữ sáng lên đúng lúc được đọc tới, dòng đang đọc tự giữ ở giữa màn hình, bấm vào một chữ là nghe lại từ chỗ đó; mốc thời gian lấy theo từng chữ ngay trong lần tổng hợp giọng nói |
 | Chương chưa có audio | Nút **"Nghe bằng AI"** ngay trên trang đọc: dựng audio rồi tự phát, có hạn mức mỗi ngày để một lần bấm không thành một khoản chi không kiểm soát; nghe lại chương đã có audio thì không tính lượt |
 | Cá nhân | Tủ truyện (đang đọc dở / đã đọc xong / yêu thích), tiến độ đọc, hồ sơ + ảnh đại diện |
 | Gợi ý | Truyện cùng thể loại với những truyện đã đọc, hiện ở trang chủ |
@@ -200,6 +202,101 @@ Việc chờ dựng xong dùng `GET /api/chapters/{id}/tts/{audioId}` chứ khô
 danh sách cố ý ghi một lượt nghe mỗi lần gọi, mà thăm dò vài giây một lần sẽ thổi phồng biểu đồ thống
 kê của trang quản trị lên hàng chục lượt nghe không có thật.
 
+### Trộn âm thanh và bám chữ theo giọng đọc
+
+Hai tính năng, một đường tiếng. Cả hai đều nằm ở `frontend/src/audio/` (TypeScript), phần duy nhất
+cần tới máy chủ là mốc thời gian từng chữ.
+
+#### Mốc thời gian đến từ đâu
+
+Không đo lại, không đoán: ElevenLabs trả về mốc của **từng ký tự** ngay trong lần tổng hợp, qua
+đường `/with-timestamps` — cùng một lần gọi, cùng một khoản tiền.
+
+```
+TtsGenerationWorker
+   └─ ElevenLabsTtsClient.synthesize
+        ├─ cắt chương thành khúc ≤ 4500 ký tự (TextChunker)
+        ├─ mỗi khúc: POST …/with-timestamps → { audio_base64, alignment }
+        │     và nhớ khúc ấy nằm ở đâu trong nội dung chương
+        ├─ WordAligner: gộp ký tự thành chữ (ranh giới = khoảng trắng),
+        │     cộng dồn thời gian giữa các khúc, quy vị trí ký tự về chương gốc
+        └─ ProviderSpeech { audio, words[] }
+   └─ TranscriptCodec → bảng audio_transcripts (JSON), audio_files.transcript_words = N
+```
+
+Bốn quyết định đáng nêu:
+
+1. **Bảng riêng, không phải một cột.** Một chương ra chừng ba trăm KB JSON, mà Hibernate nạp mọi cột
+   thường của một hàng ngay khi nạp hàng ấy — để chung thì mỗi lần liệt kê bản audio của một chương
+   là một lần kéo cả mảng số đó về rồi vứt đi. Bên `audio_files` chỉ giữ lại một số nguyên đếm chữ,
+   đủ để trả lời "bản này bám chữ được không". Khóa ngoại có `ON DELETE CASCADE`, nên mốc thời gian
+   không bao giờ sống sót qua bản audio sinh ra nó.
+2. **Hoặc đủ cả, hoặc bỏ hết.** Thiếu mốc của một khúc giữa chương thì mọi khúc sau nó lệch đi đúng
+   bằng độ dài khúc thiếu. Một bản tô sáng lệch nửa phút tệ hơn hẳn một bản không tô sáng, nên thiếu
+   một khúc là bỏ cả chương.
+3. **Tài khoản không có đường `/with-timestamps` vẫn dùng được.** Gặp 404/405 thì client tự lùi về
+   đường cũ và nhớ luôn cho các lần sau. Bản audio ra bình thường, chỉ là không bám chữ được.
+4. **Endpoint mốc thời gian đi qua đúng hai lớp cửa của đường phát** (quyền chương + chủ sở hữu bản
+   audio). Mốc thời gian gần như là nội dung chương chép lại thành mảng — để hở chỗ này là mở một cửa
+   sau vào chương trả phí, và `AudioOwnershipTest` ghim điều đó.
+
+#### Bộ trộn: vì sao Web Audio chứ không phải hai thẻ `<audio>`
+
+```
+                 ┌── MediaElementAudioSourceNode ──┐
+<audio> giọng đọc┤  (phát dần + tua bằng Range)    ├── narrationGain ──┐
+                 └─────────────────────────────────┘                   │
+                                                                        ├── destination
+        nhạc nền ── fetch → decodeAudioData → AudioBufferSourceNode ── bgmGain ──┘
+                          (lặp liền mạch, không khe hở)
+```
+
+- **Một `AudioContext`, một đồng hồ.** Hai thẻ `<audio>` có hai đồng hồ và bị hệ điều hành đánh thức
+  độc lập; trên điện thoại chúng trôi xa nhau, và cái người nghe nhận ra là nhạc nền tự to lên đúng
+  lúc giọng đọc đang nói.
+- **Giọng đọc vẫn đi qua thẻ `<audio>`** vì chương dài hàng chục phút: `decodeAudioData` sẽ bắt người
+  nghe chờ trọn file trước chữ đầu tiên và làm mất khả năng tua bằng HTTP Range. Nhạc nền thì ngược
+  lại — ngắn, và cần lặp không có khe hở, thứ mà `<audio loop>` không làm được vì phần đệm của MP3.
+- **Nhường lời (ducking)** bằng `linearRampToValueAtTime` trên `bgmGain`: nhạc lùi xuống 35% khi có
+  tiếng người, trở lại ở khoảng nghỉ.
+- **Lối lùi bắt buộc phải có.** `createMediaElementSource` trên một file khác nguồn gốc mà không có
+  CORS thì **không báo lỗi — nó im lặng cho ra toàn số 0**. Máy chủ audio ở đây nằm khác origin với
+  trình duyệt, nên trước lần tải đầu tiên có một phép thử CORS hai byte; hỏng thì cả bộ trộn chuyển
+  sang chế độ `element` (âm lượng chỉnh thẳng trên thẻ audio, nhạc nền chạy bằng thẻ thứ hai). Mất
+  phần trộn mượt, giữ lại phần nghe được.
+- **Bộ trộn sống lâu hơn giao diện.** Nó được dựng ở `ChapterPage` và giữ nguyên khi người đọc sang
+  chương khác — đổi chương là đổi nguồn tiếng, không phải dựng lại đường tiếng, nên nhạc nền không
+  đứt ở ranh giới hai chương.
+
+#### Bám chữ: vì sao `requestAnimationFrame` chứ không phải `timeupdate`
+
+`timeupdate` bắn khoảng bốn lần mỗi giây, vào lúc trình duyệt chọn chứ không phải lúc màn hình sắp
+vẽ — tô sáng theo nó là trễ tới một phần tư giây, và trễ không đều. Vòng lặp ở đây chạy đúng trước
+mỗi lần vẽ, và giữa hai lần `currentTime` nhích lên thì nó **nội suy bằng đồng hồ tường nhân tốc độ
+đọc** (có trần 0.25s để không chạy trước giọng đọc lúc đang chờ dữ liệu).
+
+Ba điều giữ cho nó không tốn kém:
+
+1. **Vòng lặp không đụng tới React.** Một chương có năm nghìn ô chữ; `setState` mỗi khung hình sẽ kéo
+   cả cây React đi so sánh lại sáu mươi lần một giây. Vòng lặp ghi thẳng lớp CSS vào DOM, và bảng tra
+   nút DOM được dựng sẵn một lần cho mỗi chương. Thứ duy nhất đi qua React là "người đọc có tự cuộn
+   tay hay không".
+2. **Tra theo gợi ý, không duyệt lại.** Giọng đọc chạy tiến nên chữ tiếp theo gần như luôn nằm ngay
+   sau chữ vừa rồi; chỉ khi người nghe tua thì mới cần tìm chia đôi (`WordTimeline`).
+3. **Chỉ chạy khi có tiếng.** Lúc dừng, mỗi lần trạng thái đổi chỉ cần đúng một lần cập nhật.
+
+Phần dóng chữ (`karaoke/align.ts`) đáng chú ý riêng: chỉ số ký tự máy chủ gửi về chỉ được dùng làm
+**gợi ý**, luôn kiểm lại bằng chính nội dung chữ và dò tiếp vài chữ nếu sai. Chuỗi đến được màn hình
+không phải lúc nào cũng là chuỗi đã gửi đi đọc — tầng gọi API gấp mọi phản hồi về Unicode NFC, chương
+có thể đã được sửa một chữ sau khi bản audio dựng xong. Tin tuyệt đối vào chỉ số thì lệch một ký tự
+là cả chương tô sáng sai một nhịp, mà lệch một nhịp còn tệ hơn không tô, vì nó khiến người đọc nghi
+ngờ chính mắt mình. Dưới 60% số chữ khớp được thì coi như bản mốc ấy không còn thuộc về chương này,
+và trang đọc nói thẳng điều đó thay vì tô bừa.
+
+Nhạc nền: xem `frontend/public/bgm/README.md`. Trang **không đi kèm bản nhạc nào** — nhạc có bản
+quyền — nhưng người nghe mở được bản của chính họ từ máy, và người dựng trang thả tệp vào thư mục ấy
+rồi khai vào `manifest.json` là xong, không cần dịch lại frontend.
+
 ### Luồng mua VIP
 
 ```
@@ -352,6 +449,8 @@ story-tts-web/
 ├─ frontend/
 │  └─ src/
 │     ├─ api/            client Axios + khai báo endpoint
+│     ├─ audio/          TypeScript: bộ trộn Web Audio (giọng đọc + nhạc nền) và
+│     │                  karaoke/ cho phần bám chữ theo giọng đọc
 │     ├─ components/     Component dùng lại
 │     ├─ context/        Auth, Theme
 │     ├─ hooks/          useChapterAudio, useDebouncedValue, useAuthProviders
@@ -427,6 +526,7 @@ Giao diện ở `http://localhost:5173`.
 | `npm run dev` | Frontend chế độ phát triển |
 | `npm run build` | Build frontend cho production |
 | `npm run lint` | Kiểm tra frontend bằng oxlint |
+| `npm run typecheck` | Kiểm kiểu phần TypeScript (`src/audio/`, các component `.tsx`) — mã `.jsx` cũ vẫn để nguyên, xem `tsconfig.json` |
 
 ---
 
@@ -622,6 +722,7 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | GET | `/api/chapters/{id}` | Nội dung chương — **403 nếu không đủ quyền** |
 | GET | `/api/chapters/{id}/audio` | Các bản audio của chương (mỗi lần gọi tính một lượt nghe) |
 | GET | `/api/chapters/{id}/audio/{audioId}` | Stream audio, hỗ trợ Range |
+| GET | `/api/chapters/{id}/audio/{audioId}/transcript` | Mốc thời gian từng chữ, cho phần bám chữ theo giọng đọc — cùng lớp chặn quyền với đường stream |
 | GET | `/api/tts/status` | Có tạo được audio không, và còn bao nhiêu lượt hôm nay |
 | GET | `/api/genres`, `/api/authors` | Danh mục |
 | GET | `/api/stories/{id}/comments` | Bình luận của một truyện |
@@ -688,6 +789,8 @@ bên ngoài đều được thay bằng mock).
 | `AccessControlServiceTest` | 19 | Toàn bộ bảng phân quyền 3 mức khóa × 4 nhóm người dùng, chương không đặt mức khóa, và `requireAccess` phải ném 403 **không kèm nội dung chương** |
 | `TtsServiceTest` | 20 | Chặn TTS với chương bị khóa (kể cả khi đã có sẵn cache), dùng lại bản READY, dọn bản FAILED rồi tạo lại, xếp hàng bất đồng bộ, kẹp tốc độ, giọng lạ quay về mặc định, và **ngân sách được hỏi ở đúng một chỗ**: sau khi kiểm quyền và tra cache, trước khi ghi |
 | `ReaderTtsServiceTest` | 16 | Ngân sách của nút "Nghe bằng AI": bắt đăng nhập, hạn mức theo bậc Thành viên/VIP/Admin, trần chung xét trước hạn mức cá nhân, trần độ dài chương, đếm theo ngày giờ Việt Nam, và **trúng bản đã có thì không đếm hạn mức của ai** |
+| `WordAlignerTest` | 8 | Gộp mốc thời gian từng ký tự thành từng chữ: ranh giới trùng với cách trình duyệt cắt chữ, dấu câu đi theo chữ, nhiều khúc thì thời gian cộng dồn và vị trí ký tự quy về nội dung chương, mảng lệch độ dài không làm nổ, ký tự bị nhà cung cấp bỏ qua không kéo phần sau lệch theo |
+| `AudioOwnershipTest` | 7 | Bản audio người đọc tự dựng là của riêng họ — kể cả đường lấy mốc thời gian, vốn gần như là nội dung chương chép lại thành mảng |
 | `RegistrationServiceTest` | 16 | Bước một không ghi gì vào `users`, chỉ băm của mã được lưu, mật khẩu không bị băm chồng ở bước hai, hết lượt thử thì hủy lượt đăng ký, và bấm gửi lại quá sớm bị chặn |
 | `PasswordResetServiceTest` | 12 | Email lạ và tài khoản bị khóa không nhận được liên kết, chỉ băm của token được lưu, liên kết cũ bị vô hiệu, và một liên kết chỉ dùng được một lần |
 | `AuthServiceGoogleTest` | 10 | Tạo tài khoản ở lần đăng nhập Google đầu tiên, ghép vào tài khoản cùng email, ưu tiên `google_id`, không ghi đè ảnh đại diện cũ, chặn tài khoản bị khóa |
