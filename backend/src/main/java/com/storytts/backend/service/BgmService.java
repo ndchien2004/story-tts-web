@@ -89,6 +89,14 @@ public class BgmService {
     /* Ghi                                                               */
     /* ---------------------------------------------------------------- */
 
+    /**
+     * Nhận một bản nhạc nền mới.
+     *
+     * <p>File xuống đĩa trước mọi câu lệnh SQL, cùng lý do như
+     * {@code AudioService.uploadForChapter}: Hibernate chỉ lấy kết nối ở câu lệnh
+     * đầu tiên, nên chép file trước là chép ngoài lúc đang cầm kết nối. Ghi cơ sở
+     * dữ liệu hỏng thì file vừa ghi được dọn ở khối catch.
+     */
     @Transactional
     public BgmTrackDto upload(MultipartFile file, String title, String credit) {
         if (file == null || file.isEmpty()) {
@@ -114,20 +122,25 @@ public class BgmService {
             throw new BadRequestException("Không đọc được file tải lên.");
         }
 
-        BgmTrack track = BgmTrack.builder()
-                .title(name)
-                .credit(blankToNull(credit))
-                .filePath(fileName)
-                .contentType(contentType)
-                .fileSize(file.getSize())
-                .active(true)
-                // Mới lên thì xuống cuối danh sách, chứ không chen lên đầu ô chọn.
-                .sortOrder(nextSortOrder())
-                .build();
+        try {
+            BgmTrack track = BgmTrack.builder()
+                    .title(name)
+                    .credit(blankToNull(credit))
+                    .filePath(fileName)
+                    .contentType(contentType)
+                    .fileSize(file.getSize())
+                    .active(true)
+                    // Mới lên thì xuống cuối danh sách, chứ không chen lên đầu ô chọn.
+                    .sortOrder(nextSortOrder())
+                    .build();
 
-        BgmTrack saved = bgmTrackRepository.save(track);
-        log.info("Uploaded background music '{}' ({} bytes)", name, file.getSize());
-        return BgmTrackDto.from(saved);
+            BgmTrack saved = bgmTrackRepository.save(track);
+            log.info("Uploaded background music '{}' ({} bytes)", name, file.getSize());
+            return BgmTrackDto.from(saved);
+        } catch (RuntimeException ex) {
+            storageService.deleteBgm(fileName);
+            throw ex;
+        }
     }
 
     @Transactional

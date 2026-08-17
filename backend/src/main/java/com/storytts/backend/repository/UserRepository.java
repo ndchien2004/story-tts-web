@@ -5,8 +5,10 @@ import com.storytts.backend.domain.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -53,4 +55,18 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** Dùng để chặn việc hạ quyền người quản trị cuối cùng. */
     long countByRole(Role role);
+
+    /**
+     * Ghi đường dẫn ảnh đại diện mới.
+     *
+     * <p>Một câu UPDATE thay vì đọc-sửa-lưu, để lần ghi này là một giao dịch ngắn
+     * đứng riêng: việc tải ảnh lên Cloudinary xảy ra trước đó và mất tới 45 giây,
+     * nên nó phải nằm ngoài mọi giao dịch. Xem {@code UserProfileService}.
+     *
+     * @return số dòng đã sửa; 0 nghĩa là tài khoản không còn tồn tại
+     */
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE User u SET u.avatarUrl = :url WHERE u.id = :id")
+    int updateAvatarUrl(@Param("id") Long id, @Param("url") String url);
 }

@@ -189,7 +189,16 @@ public class AudioService {
         return new StreamHandle(resource, audio.getContentType());
     }
 
-    /** Stores an admin-supplied recording, replacing any previous upload. */
+    /**
+     * Stores an admin-supplied recording, replacing any previous upload.
+     *
+     * <p><b>Thứ tự ở đây có chủ ý.</b> File được chép xuống đĩa trước mọi câu lệnh
+     * SQL, vì Hibernate chỉ lấy kết nối khỏi pool ở câu lệnh đầu tiên chứ không
+     * phải lúc giao dịch mở ra (xem {@code hibernate.connection.handling_mode}
+     * trong application.properties). Đảo lại thứ tự này là giữ một kết nối suốt
+     * lúc ghi một file tới 64 MB. Đổi lại, một chương không tồn tại sẽ để lại file
+     * vừa ghi, nên nó được dọn ở khối catch bên dưới.
+     */
     @Transactional
     public AudioInfoDto uploadForChapter(Long chapterId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -205,17 +214,6 @@ public class AudioService {
                     "Định dạng không được hỗ trợ. Vui lòng dùng file MP3, WAV, OGG hoặc M4A.");
         }
 
-        Chapter chapter = chapterService.findDetailEntity(chapterId);
-
-        // One recording per chapter: drop the old one so storage does not grow
-        // every time an admin re-uploads.
-        audioFileRepository
-                .findFirstByChapterIdAndSourceAndStatus(chapterId, AudioSource.UPLOAD, AudioStatus.READY)
-                .ifPresent(existing -> {
-                    storageService.deleteAudio(existing.getFilePath());
-                    audioFileRepository.delete(existing);
-                });
-
         String fileName;
         try {
             fileName = storageService.storeAudio(
@@ -224,18 +222,35 @@ public class AudioService {
             throw new BadRequestException("Không đọc được file tải lên.");
         }
 
-        AudioFile audio = AudioFile.builder()
-                .chapter(chapter)
-                .filePath(fileName)
-                .source(AudioSource.UPLOAD)
-                .status(AudioStatus.READY)
-                .contentType(contentType)
-                .fileSize(file.getSize())
-                .build();
+        try {
+            Chapter chapter = chapterService.findDetailEntity(chapterId);
 
-        AudioFile saved = audioFileRepository.save(audio);
-        log.info("Uploaded audio for chapter {} ({} bytes)", chapterId, file.getSize());
-        return AudioInfoDto.from(saved, chapterId);
+            // One recording per chapter: drop the old one so storage does not grow
+            // every time an admin re-uploads.
+            audioFileRepository
+                    .findFirstByChapterIdAndSourceAndStatus(chapterId, AudioSource.UPLOAD, AudioStatus.READY)
+                    .ifPresent(existing -> {
+                        storageService.deleteAudio(existing.getFilePath());
+                        audioFileRepository.delete(existing);
+                    });
+
+            AudioFile audio = AudioFile.builder()
+                    .chapter(chapter)
+                    .filePath(fileName)
+                    .source(AudioSource.UPLOAD)
+                    .status(AudioStatus.READY)
+                    .contentType(contentType)
+                    .fileSize(file.getSize())
+                    .build();
+
+            AudioFile saved = audioFileRepository.save(audio);
+            log.info("Uploaded audio for chapter {} ({} bytes)", chapterId, file.getSize());
+            return AudioInfoDto.from(saved, chapterId);
+        } catch (RuntimeException ex) {
+            // Giao dịch sẽ cuộn ngược, nên hàng trỏ tới file này không tồn tại.
+            storageService.deleteAudio(fileName);
+            throw ex;
+        }
     }
 
     @Transactional

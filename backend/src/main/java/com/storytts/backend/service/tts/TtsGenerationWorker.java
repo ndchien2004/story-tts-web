@@ -1,22 +1,13 @@
 package com.storytts.backend.service.tts;
 
-import com.storytts.backend.domain.AudioFile;
-import com.storytts.backend.domain.AudioStatus;
-import com.storytts.backend.domain.AudioTranscript;
 import com.storytts.backend.exception.TtsException;
-import com.storytts.backend.repository.AudioFileRepository;
-import com.storytts.backend.repository.AudioTranscriptRepository;
 import com.storytts.backend.service.StorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
-
-import java.util.List;
 
 /**
  * Runs synthesis off the request thread.
@@ -25,6 +16,23 @@ import java.util.List;
  * the PROCESSING row inside its own transaction, and a worker running on another
  * thread would not see that row until the commit lands. The row is flipped to
  * READY or FAILED here, and the client polls for that change.
+ *
+ * <h3>Vì sao method này không có {@code @Transactional}</h3>
+ * Một lượt dựng là ba đoạn nối nhau: đọc bản ghi, gọi ElevenLabs, ghi kết quả.
+ * Đoạn giữa mất hàng phút — một chương 20.000 ký tự bị cắt thành năm lần gọi, mỗi
+ * lần chờ tối đa hai phút — và trong suốt quãng ấy không có câu lệnh SQL nào.
+ *
+ * <p>Trước đây cả ba nằm trong một {@code @Transactional(REQUIRES_NEW)}, nên
+ * kết nối lấy ra ở đoạn một bị giữ tới hết đoạn ba. Bốn luồng nền dựng cùng lúc
+ * là bốn trong mười kết nối của cả ứng dụng nằm im chờ mạng, và những request
+ * bình thường còn lại xếp hàng cho tới khi Hikari hết kiên nhẫn:
+ * {@code Connection is not available, request timed out}.
+ *
+ * <p>Giờ mỗi đầu là một giao dịch ngắn riêng của {@link TtsGenerationRecords},
+ * còn quãng chờ mạng ở giữa không cầm kết nối nào. Đổi lại là một khoảng hở có
+ * thật: máy chủ tắt giữa chừng thì file đã ghi mà hàng vẫn ở PROCESSING. Khoảng
+ * hở ấy vốn đã tồn tại — file luôn được ghi trước lúc commit — và
+ * {@link StaleGenerationReconciler} dọn nó ở lần khởi động sau.
  */
 @Component
 @RequiredArgsConstructor
@@ -33,80 +41,56 @@ public class TtsGenerationWorker {
 
     private final TtsEngine ttsEngine;
     private final StorageService storageService;
-    private final AudioFileRepository audioFileRepository;
-    private final AudioTranscriptRepository audioTranscriptRepository;
-    private final TranscriptCodec transcriptCodec;
+    private final TtsGenerationRecords records;
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onGenerationRequested(TtsGenerationRequested event) {
-        AudioFile audio = audioFileRepository.findById(event.audioId()).orElse(null);
-        if (audio == null) {
-            log.warn("Audio row {} no longer exists; skipping synthesis", event.audioId());
+        Long audioId = event.audioId();
+
+        // Giao dịch ngắn thứ nhất, đóng lại ngay khi trả lời xong.
+        if (!records.stillQueued(audioId)) {
+            log.warn("Audio row {} no longer exists; skipping synthesis", audioId);
             return;
         }
 
+        String fileName = null;
         try {
+            // ---- Ngoài mọi giao dịch: chờ mạng và ghi đĩa ----
             SynthesisResult result = ttsEngine.synthesize(event.text(), event.voice(), event.speed());
-            String fileName = storageService.storeAudio(result.audio(), ".mp3");
+            fileName = storageService.storeAudio(result.audio(), ".mp3");
 
-            audio.setFilePath(fileName);
-            audio.setFileSize((long) result.audio().length);
-            audio.setContentType("audio/mpeg");
-            audio.setProvider(result.providerId());
-            // Trước khi cờ READY được bật, và trong cùng một giao dịch với nó:
-            // trang đọc thấy READY là đi hỏi mốc thời gian ngay, nên thứ tự này
-            // là thứ giữ cho nó không hỏi đúng vào lúc chưa có gì.
-            audio.setTranscriptWords(storeTranscript(audio.getId(), result.words()));
-            audio.setStatus(AudioStatus.READY);
-            audio.setErrorMessage(null);
-            audioFileRepository.save(audio);
+            // ---- Giao dịch ngắn thứ hai ----
+            if (!records.markReady(audioId, result, fileName)) {
+                // Hàng biến mất trong lúc dựng: file vừa ghi không còn ai trỏ tới.
+                log.warn("Audio row {} disappeared during synthesis; discarding the file", audioId);
+                storageService.deleteAudio(fileName);
+                return;
+            }
 
             log.info("Synthesis finished for audio {} via {} ({} bytes, {} chữ có mốc thời gian)",
-                    event.audioId(), result.providerId(), result.audio().length, result.words().size());
+                    audioId, result.providerId(), result.audio().length, result.words().size());
         } catch (TtsException ex) {
-            log.warn("Synthesis failed for audio {}: {}", event.audioId(), ex.getMessage());
-            markFailed(audio, ex.getMessage());
+            log.warn("Synthesis failed for audio {}: {}", audioId, ex.getMessage());
+            discard(fileName);
+            records.markFailed(audioId, ex.getMessage());
         } catch (Exception ex) {
-            log.error("Unexpected synthesis failure for audio {}", event.audioId(), ex);
-            markFailed(audio, "Không tạo được audio. Vui lòng thử lại sau.");
+            log.error("Unexpected synthesis failure for audio {}", audioId, ex);
+            discard(fileName);
+            records.markFailed(audioId, "Không tạo được audio. Vui lòng thử lại sau.");
         }
     }
 
     /**
-     * Cất mốc thời gian sang bảng riêng của nó.
+     * Bỏ file đã ghi khi lượt dựng này rốt cuộc không thành.
      *
-     * @return số chữ đã cất, hay null khi không có gì để cất — chính là giá trị
-     *         cột {@code transcript_words} muốn nhận
+     * <p>Chỉ có việc với lỗi xảy ra <i>sau</i> lúc ghi đĩa — tức lúc ghi cơ sở dữ
+     * liệu hỏng. Không có bước này thì mỗi lần ấy để lại một file không hàng nào
+     * trỏ tới, và không còn đường nào tìm ra nó nữa.
      */
-    private Integer storeTranscript(Long audioId, List<WordTimestamp> words) {
-        String json = transcriptCodec.encode(words);
-        if (json == null) {
-            return null;
+    private void discard(String fileName) {
+        if (fileName != null) {
+            storageService.deleteAudio(fileName);
         }
-
-        // save chứ không insert thẳng: dựng lại một bản audio cũ dùng lại đúng
-        // id ấy trong vài đường, và hai dòng cùng khóa chính là một lỗi ràng buộc
-        // thay vì một bản đọc được cập nhật.
-        audioTranscriptRepository.save(AudioTranscript.builder()
-                .audioId(audioId)
-                .wordsJson(json)
-                .build());
-
-        return words.size();
-    }
-
-    private void markFailed(AudioFile audio, String message) {
-        audio.setStatus(AudioStatus.FAILED);
-        audio.setErrorMessage(truncate(message));
-        audioFileRepository.save(audio);
-    }
-
-    private String truncate(String message) {
-        if (message == null) {
-            return null;
-        }
-        return message.length() <= 1000 ? message : message.substring(0, 1000);
     }
 }
