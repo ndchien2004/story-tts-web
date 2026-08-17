@@ -1,157 +1,102 @@
 package com.storytts.backend.service;
 
-import com.storytts.backend.config.StorageProperties;
-import com.storytts.backend.exception.BadRequestException;
-import jakarta.annotation.PostConstruct;
+import com.storytts.backend.service.storage.ByteRange;
+import com.storytts.backend.service.storage.MediaKind;
+import com.storytts.backend.service.storage.MediaSlice;
+import com.storytts.backend.service.storage.MediaStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
 import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.UUID;
+import java.time.Duration;
 
 /**
- * Stores generated and uploaded media on the local filesystem.
+ * Cửa vào duy nhất tới nơi lưu media, cho toàn bộ tầng nghiệp vụ.
  *
- * Only the file name is persisted in the database; resolving it back to an
- * absolute path always goes through {@link #resolveAudio(String)}, which
- * rejects anything that escapes the configured directory.
+ * <p>Chỉ có khóa lưu trữ được cất vào cơ sở dữ liệu; việc khóa ấy nghĩa là một
+ * tên file trên đĩa hay một public_id trên Cloudinary là chuyện của
+ * {@link MediaStorage} và của cấu hình, không phải chuyện của nơi gọi. Trước đây
+ * lớp này tự ghi đĩa, và chính điều đó khiến "audio nằm ở đâu" trở thành một giả
+ * định nằm rải rác khắp mã nguồn thay vì một lựa chọn có thể đổi.
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class StorageService {
 
-    private final StorageProperties properties;
+    private final MediaStorage storage;
 
-    private Path audioRoot;
-    private Path bgmRoot;
-    private Path coverRoot;
+    /* ---------------------------------------------------------------- */
+    /* Ghi                                                               */
+    /* ---------------------------------------------------------------- */
 
-    @PostConstruct
-    void init() {
-        audioRoot = createDirectory(properties.audioDir());
-        bgmRoot = createDirectory(properties.bgmDir());
-        coverRoot = createDirectory(properties.coverDir());
-        log.info("Audio storage directory: {}", audioRoot);
-    }
-
-    private Path createDirectory(String configured) {
-        // A missing property used to surface as a NullPointerException from
-        // Paths.get, three frames deep in bean creation, naming nothing.
-        if (configured == null || configured.isBlank()) {
-            throw new IllegalStateException(
-                    "Thiếu cấu hình thư mục lưu trữ (app.storage.*). Xem application.properties.");
-        }
-        try {
-            Path path = Paths.get(configured).toAbsolutePath().normalize();
-            Files.createDirectories(path);
-            return path;
-        } catch (IOException ex) {
-            throw new UncheckedIOException("Cannot create storage directory: " + configured, ex);
-        }
-    }
-
-    /** Writes bytes under a generated name and returns that name. */
+    /** Lưu audio đã có sẵn trong bộ nhớ và trả về khóa lưu trữ. */
     public String storeAudio(byte[] content, String extension) {
-        String fileName = UUID.randomUUID() + normaliseExtension(extension);
-        Path target = audioRoot.resolve(fileName);
-        try {
-            Files.write(target, content);
-        } catch (IOException ex) {
-            throw new UncheckedIOException("Cannot write audio file " + fileName, ex);
-        }
-        return fileName;
+        return storage.store(content, MediaKind.AUDIO, extension);
     }
 
-    /** Copies an uploaded stream under a generated name and returns that name. */
+    /** Lưu audio từ một luồng và trả về khóa lưu trữ. */
     public String storeAudio(InputStream input, String extension) {
-        return store(audioRoot, input, extension);
+        return storage.store(input, MediaKind.AUDIO, extension);
     }
 
     /**
-     * Same, into the background-music directory.
+     * Lưu một bản nhạc nền.
      *
-     * <p>A directory of its own rather than a prefix in the audio one: chapter
-     * narration is derived data that gets rebuilt, while these are files an admin
-     * uploaded once. Keeping them apart means a cleanup that empties the audio
-     * directory cannot take the music library with it.
+     * <p>Ngăn riêng chứ không phải một tiền tố trong ngăn audio: audio chương là
+     * dữ liệu dựng lại được, nhạc nền thì không. Tách ra nghĩa là một lượt dọn
+     * dẹp quét ngăn audio không thể mang kho nhạc đi theo.
      */
     public String storeBgm(InputStream input, String extension) {
-        return store(bgmRoot, input, extension);
+        return storage.store(input, MediaKind.BGM, extension);
     }
 
-    private String store(Path root, InputStream input, String extension) {
-        String fileName = UUID.randomUUID() + normaliseExtension(extension);
-        Path target = root.resolve(fileName);
-        try {
-            Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException ex) {
-            throw new UncheckedIOException("Cannot write file " + fileName, ex);
-        }
-        return fileName;
-    }
+    /* ---------------------------------------------------------------- */
+    /* Đọc                                                               */
+    /* ---------------------------------------------------------------- */
 
     /**
-     * Resolves a stored file name to a readable resource.
+     * Mở một lát audio để phát.
      *
-     * @throws BadRequestException if the name would escape the audio directory
+     * @param range khoảng byte trình phát hỏi tới, hay null để lấy trọn file
+     * @throws com.storytts.backend.service.storage.MediaNotFoundException
+     *         nếu khóa không còn ứng với dữ liệu nào
      */
-    public Resource resolveAudio(String fileName) {
-        return resolve(audioRoot, fileName);
+    public MediaSlice openAudio(String key, ByteRange range) {
+        return storage.open(key, MediaKind.AUDIO, range);
     }
 
-    public Resource resolveBgm(String fileName) {
-        return resolve(bgmRoot, fileName);
+    public MediaSlice openBgm(String key, ByteRange range) {
+        return storage.open(key, MediaKind.BGM, range);
     }
 
-    private Resource resolve(Path root, String fileName) {
-        Path path = root.resolve(fileName).normalize();
-        if (!path.startsWith(root)) {
-            throw new BadRequestException("Đường dẫn file không hợp lệ.");
-        }
-        return new FileSystemResource(path);
+    /** Có còn dữ liệu sau khóa này không. Đừng gọi trên đường phát — xem {@link MediaStorage#exists}. */
+    public boolean audioExists(String key) {
+        return storage.exists(key, MediaKind.AUDIO);
     }
 
-    /** Best-effort delete; a missing file is not an error. */
-    public void deleteAudio(String fileName) {
-        delete(audioRoot, fileName);
-    }
+    /* ---------------------------------------------------------------- */
+    /* Xóa và dọn                                                        */
+    /* ---------------------------------------------------------------- */
 
-    public void deleteBgm(String fileName) {
-        delete(bgmRoot, fileName);
-    }
-
-    private void delete(Path root, String fileName) {
-        if (fileName == null || fileName.isBlank()) {
+    /** Xóa tạm được; file vốn đã không còn thì không phải lỗi. */
+    public void deleteAudio(String key) {
+        if (key == null || key.isBlank()) {
             return;
         }
-        try {
-            Path path = root.resolve(fileName).normalize();
-            if (path.startsWith(root)) {
-                Files.deleteIfExists(path);
-            }
-        } catch (IOException ex) {
-            log.warn("Could not delete file {}: {}", fileName, ex.getMessage());
-        }
+        storage.delete(key, MediaKind.AUDIO);
     }
 
-    public Path getCoverRoot() {
-        return coverRoot;
+    public void deleteBgm(String key) {
+        if (key == null || key.isBlank()) {
+            return;
+        }
+        storage.delete(key, MediaKind.BGM);
     }
 
-    private String normaliseExtension(String extension) {
-        if (extension == null || extension.isBlank()) {
-            return ".mp3";
-        }
-        return extension.startsWith(".") ? extension : "." + extension;
+    /** Dọn những file ghi dở mà một lượt ghi hỏng để lại. */
+    public int sweepTemporary(Duration olderThan) {
+        return storage.sweepTemporary(olderThan);
     }
 }

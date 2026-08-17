@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -20,6 +21,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -40,8 +44,23 @@ import java.util.UUID;
 @Slf4j
 public class CloudinaryService {
 
-    private static final String UPLOAD_URL = "https://api.cloudinary.com/v1_1/%s/image/upload";
+    /** {@code .../<cloud_name>/<resource_type>/<action>} — upload hay destroy. */
+    private static final String API_URL = "https://api.cloudinary.com/v1_1/%s/%s/%s";
+
+    /**
+     * Đường phát của một file đã lưu ở dạng {@code authenticated}.
+     *
+     * <p>Audio đi vào Cloudinary dưới {@code resource_type=video} — đó là ngăn
+     * dành cho mọi thứ có trục thời gian, không riêng hình ảnh động — nên đường
+     * phát cũng nằm dưới {@code /video/}.
+     */
+    private static final String DELIVERY_URL =
+            "https://res.cloudinary.com/%s/video/authenticated/s--%s--/%s";
+
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(45);
+
+    /** Thời gian chờ khi tải audio về để phát; rộng hơn vì file lớn hơn ảnh nhiều. */
+    private static final Duration STREAM_TIMEOUT = Duration.ofSeconds(60);
 
     private final CloudinaryProperties properties;
     private final ObjectMapper objectMapper;
@@ -67,11 +86,139 @@ public class CloudinaryService {
         validateImage(file);
 
         String folder = properties.folder() + "/avatars";
-        return upload(readBytes(file), fileName(file), Map.of(
+        JsonNode result = callApi("image", "upload", readBytes(file), fileName(file), Map.of(
                 "folder", folder,
                 "public_id", "user-" + userId,
                 "overwrite", "true",
                 "invalidate", "true"));
+
+        String url = result.path("secure_url").asText(null);
+        if (url == null || url.isBlank()) {
+            throw new BadRequestException("Cloudinary không trả về đường dẫn ảnh.");
+        }
+        return url;
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Audio                                                             */
+    /* ---------------------------------------------------------------- */
+
+    /**
+     * Tải một file audio lên và trả về public_id do Cloudinary cấp.
+     *
+     * <p>Lưu ở dạng {@code authenticated}: file không phát được bằng một đường
+     * dẫn đoán ra, mà phải kèm chữ ký dựng từ API secret. Đây <b>không</b> phải
+     * lớp kiểm quyền của ứng dụng — quyền nghe một chương vẫn do
+     * {@code ChapterAccessService} quyết ở từng request, và chữ ký này chỉ nằm
+     * giữa máy chủ với Cloudinary, không bao giờ tới tay trình duyệt.
+     *
+     * <p>Trả về <b>đường dẫn phát</b> — {@code <public_id>.<định dạng>} — chứ
+     * không phải riêng public_id, và đó chính là chuỗi được cất vào cột
+     * {@code file_path}. Ghép sẵn ở đây vì hai mẩu ấy không bao giờ dùng rời
+     * nhau: chuỗi đem đi ký và chuỗi nằm trong đường dẫn phải giống nhau từng ký
+     * tự, nên để chúng thành một giá trị duy nhất là cách chắc chắn nhất để
+     * chúng không lệch. Cả hai mẩu đều đọc từ phản hồi chứ không tự đoán, vì
+     * Cloudinary có quyền chuẩn hóa lại tên lẫn định dạng.
+     */
+    public String uploadAudio(byte[] content, String folder, String extension) {
+        requireConfigured();
+        JsonNode result = callApi("video", "upload", content, "audio" + normaliseExtension(extension), Map.of(
+                "folder", properties.folder() + "/" + folder,
+                "public_id", UUID.randomUUID().toString(),
+                "type", "authenticated"));
+
+        String publicId = result.path("public_id").asText(null);
+        String format = result.path("format").asText(null);
+        if (publicId == null || publicId.isBlank() || format == null || format.isBlank()) {
+            throw new BadRequestException("Cloudinary không trả về public_id hoặc định dạng của file audio.");
+        }
+
+        String deliveryPath = publicId + "." + format;
+        log.info("Đã tải audio lên Cloudinary: {} ({} byte)", deliveryPath, content.length);
+        return deliveryPath;
+    }
+
+    /** Gỡ một file audio khỏi Cloudinary; file vốn đã không còn thì không phải lỗi. */
+    public void destroyAudio(String deliveryPath) {
+        if (!isConfigured() || deliveryPath == null || deliveryPath.isBlank()) {
+            return;
+        }
+        try {
+            callApi("video", "destroy", null, null, Map.of(
+                    "public_id", stripFormat(deliveryPath),
+                    "type", "authenticated",
+                    "invalidate", "true"));
+        } catch (RuntimeException ex) {
+            // Không ném tiếp: chỗ gọi luôn là một lượt dọn dẹp, và làm hỏng
+            // đường đang chạy vì dọn không xong là đổi một vết rác lấy một lỗi.
+            log.warn("Không xóa được {} trên Cloudinary: {}", deliveryPath, ex.getMessage());
+        }
+    }
+
+    /**
+     * Đường phát đã ký của một file {@code authenticated}.
+     *
+     * <p>Chữ ký là tám ký tự đầu của SHA-1 (mã hóa base64 an toàn cho URL) của
+     * chuỗi {@code <đường dẫn phát> + api_secret}. Khác với chữ ký của API upload
+     * ở bên dưới, chỗ này dùng base64 chứ không phải hex — hai chỗ cùng một hàm
+     * băm nhưng khác cách mã hóa, và nhầm lẫn giữa chúng là lý do phổ biến nhất
+     * khiến Cloudinary trả về 401.
+     *
+     * <p>Không kèm số version vào đường dẫn, nên cũng không kèm nó vào chuỗi ký:
+     * mỗi lần tải lên là một UUID mới và không có gì bị ghi đè, nên không có
+     * phiên bản cũ nào để mà trỏ nhầm.
+     */
+    public String signedAudioUrl(String deliveryPath) {
+        requireConfigured();
+        return DELIVERY_URL.formatted(
+                properties.cloudName(), deliverySignature(deliveryPath), deliveryPath);
+    }
+
+    private String deliverySignature(String deliveryPath) {
+        byte[] digest = sha1(deliveryPath + properties.apiSecret());
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(digest).substring(0, 8);
+    }
+
+    /** {@code folder/uuid.mp3} → {@code folder/uuid}; public_id không mang định dạng. */
+    private static String stripFormat(String deliveryPath) {
+        int dot = deliveryPath.lastIndexOf('.');
+        return dot > 0 ? deliveryPath.substring(0, dot) : deliveryPath;
+    }
+
+    private static String normaliseExtension(String extension) {
+        if (extension == null || extension.isBlank()) {
+            return ".mp3";
+        }
+        return extension.startsWith(".") ? extension : "." + extension;
+    }
+
+    /**
+     * Tải một file audio về, có thể chỉ một khoảng byte.
+     *
+     * <p>Việc gọi mạng nằm ở đây chứ không ở nơi lưu trữ, để API secret và đường
+     * dẫn đã ký không rời khỏi lớp này. Bên gọi chỉ đưa khóa và khoảng byte, rồi
+     * nhận về phản hồi thô — nó chịu trách nhiệm đóng thân phản hồi.
+     *
+     * @param rangeHeader giá trị header {@code Range}, hay null để lấy trọn file
+     */
+    public HttpResponse<InputStream> fetchAudio(String deliveryPath, String rangeHeader) {
+        requireConfigured();
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(signedAudioUrl(deliveryPath)))
+                .timeout(STREAM_TIMEOUT)
+                .GET();
+        if (rangeHeader != null) {
+            builder.header("Range", rangeHeader);
+        }
+
+        try {
+            return httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
+        } catch (IOException ex) {
+            throw new UncheckedIOException("Không tải được audio từ Cloudinary: " + deliveryPath, ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Việc tải audio bị gián đoạn.", ex);
+        }
     }
 
     private void requireConfigured() {
@@ -97,8 +244,19 @@ public class CloudinaryService {
         }
     }
 
-    /** Ký tham số, dựng body multipart rồi đọc {@code secure_url} trong phản hồi. */
-    private String upload(byte[] content, String fileName, Map<String, String> params) {
+    /**
+     * Ký tham số, dựng body multipart rồi trả về phản hồi đã phân tích.
+     *
+     * <p>{@code content} để null thì không có phần file nào được gửi — đó là dạng
+     * của những lệnh chỉ thao tác trên một asset đã có, như {@code destroy}.
+     *
+     * <p>Thân request được gửi thành nhiều mảng byte nối nhau thay vì gộp lại một
+     * mảng duy nhất. Với ảnh đại diện vài MB thì hai cách như nhau, nhưng một
+     * chương audio có thể tới vài chục MB, mà ứng dụng chạy với heap 224MB: gộp
+     * lại là giữ nội dung hai lần trong bộ nhớ cùng lúc, không vì lý do gì.
+     */
+    private JsonNode callApi(String resourceType, String action,
+                             byte[] content, String fileName, Map<String, String> params) {
         // TreeMap để tham số luôn theo thứ tự alphabet — đúng thứ tự Cloudinary ký.
         Map<String, String> signed = new TreeMap<>(params);
         signed.put("timestamp", String.valueOf(System.currentTimeMillis() / 1000));
@@ -106,18 +264,30 @@ public class CloudinaryService {
         String signature = sign(signed);
         String boundary = "----storytts" + UUID.randomUUID();
 
-        ByteArrayOutputStream body = new ByteArrayOutputStream();
-        signed.forEach((key, value) -> writeField(body, boundary, key, value));
-        writeField(body, boundary, "api_key", properties.apiKey());
-        writeField(body, boundary, "signature", signature);
-        writeFile(body, boundary, fileName, content);
-        write(body, "--" + boundary + "--\r\n");
+        ByteArrayOutputStream prefix = new ByteArrayOutputStream();
+        signed.forEach((key, value) -> writeField(prefix, boundary, key, value));
+        writeField(prefix, boundary, "api_key", properties.apiKey());
+        writeField(prefix, boundary, "signature", signature);
+
+        List<byte[]> parts = new ArrayList<>();
+        if (content == null) {
+            write(prefix, "--" + boundary + "--\r\n");
+            parts.add(prefix.toByteArray());
+        } else {
+            writeFileHeader(prefix, boundary, fileName);
+            parts.add(prefix.toByteArray());
+            parts.add(content);
+
+            ByteArrayOutputStream suffix = new ByteArrayOutputStream();
+            write(suffix, "\r\n--" + boundary + "--\r\n");
+            parts.add(suffix.toByteArray());
+        }
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(UPLOAD_URL.formatted(properties.cloudName())))
+                .uri(URI.create(API_URL.formatted(properties.cloudName(), resourceType, action)))
                 .timeout(REQUEST_TIMEOUT)
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
+                .POST(HttpRequest.BodyPublishers.ofByteArrays(parts))
                 .build();
 
         HttpResponse<String> response;
@@ -127,27 +297,30 @@ public class CloudinaryService {
             throw new BadRequestException("Không gọi được Cloudinary: " + ex.getMessage());
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new BadRequestException("Việc tải ảnh bị gián đoạn.");
+            throw new BadRequestException("Việc tải file lên bị gián đoạn.");
         }
 
         if (response.statusCode() >= 300) {
-            log.warn("Cloudinary trả về {}: {}", response.statusCode(), response.body());
-            throw new BadRequestException("Cloudinary từ chối ảnh này (mã " + response.statusCode() + ").");
+            log.warn("Cloudinary trả về {} cho {}/{}: {}",
+                    response.statusCode(), resourceType, action, response.body());
+            throw new BadRequestException(
+                    "Cloudinary từ chối yêu cầu này (mã " + response.statusCode() + ").");
         }
 
         try {
-            JsonNode json = objectMapper.readTree(response.body());
-            String url = json.path("secure_url").asText(null);
-            if (url == null || url.isBlank()) {
-                throw new BadRequestException("Cloudinary không trả về đường dẫn ảnh.");
-            }
-            log.info("Đã tải ảnh lên Cloudinary: {}", json.path("public_id").asText());
-            return url;
+            return objectMapper.readTree(response.body());
         } catch (IOException ex) {
             throw new BadRequestException("Không đọc được phản hồi từ Cloudinary.");
         }
     }
 
+    /**
+     * Chữ ký của API upload: SHA-1 dạng <b>hex</b>.
+     *
+     * <p>Khác với chữ ký của đường phát ở {@link #deliverySignature(String)},
+     * vốn là base64 và chỉ lấy tám ký tự. Cùng một hàm băm, hai cách mã hóa,
+     * hai mục đích — viết tách hẳn ra để không ai dùng nhầm cái này cho cái kia.
+     */
     private String sign(Map<String, String> params) {
         StringBuilder toSign = new StringBuilder();
         params.forEach((key, value) -> {
@@ -158,14 +331,17 @@ public class CloudinaryService {
         });
         toSign.append(properties.apiSecret());
 
+        byte[] digest = sha1(toSign.toString());
+        StringBuilder hex = new StringBuilder(digest.length * 2);
+        for (byte b : digest) {
+            hex.append("%02x".formatted(b));
+        }
+        return hex.toString();
+    }
+
+    private static byte[] sha1(String value) {
         try {
-            byte[] digest = MessageDigest.getInstance("SHA-1")
-                    .digest(toSign.toString().getBytes(StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                hex.append("%02x".formatted(b));
-            }
-            return hex.toString();
+            return MessageDigest.getInstance("SHA-1").digest(value.getBytes(StandardCharsets.UTF_8));
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("JVM thiếu thuật toán SHA-1", ex);
         }
@@ -177,12 +353,11 @@ public class CloudinaryService {
         write(body, value + "\r\n");
     }
 
-    private static void writeFile(ByteArrayOutputStream body, String boundary, String fileName, byte[] content) {
+    /** Phần đầu của trường file; nội dung được nối vào sau dưới dạng mảng byte riêng. */
+    private static void writeFileHeader(ByteArrayOutputStream body, String boundary, String fileName) {
         write(body, "--" + boundary + "\r\n");
         write(body, "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n");
         write(body, "Content-Type: application/octet-stream\r\n\r\n");
-        body.writeBytes(content);
-        write(body, "\r\n");
     }
 
     private static void write(ByteArrayOutputStream body, String text) {

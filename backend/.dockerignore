@@ -1,0 +1,25 @@
+# Nhung gi KHONG duoc gui len may dung anh Docker.
+#
+# Dockerfile chi COPY pom.xml va src/, nen khong co gi trong so nay tung lot vao
+# anh. Van chan o day vi hai le: build context duoc nen va gui di nguyen ven
+# truoc khi Dockerfile chay, nen `uploads/` hang chuc MB la hang chuc MB gui
+# thua moi lan trien khai; va mot dong COPY rong tay trong tuong lai khong nen
+# la thu quyet dinh `.env` co nam trong anh hay khong.
+
+# Bi mat
+.env
+*.env
+!.env.example
+
+# File nguoi dung tai len / audio TTS
+uploads/
+
+# Ket qua bien dich - anh tu build lai tu dau
+target/
+
+# Cong cu
+.git/
+.gitignore
+.idea/
+*.iml
+HELP.md

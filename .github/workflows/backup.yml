@@ -1,0 +1,60 @@
+# Sao luu co so du lieu theo lich.
+#
+# VI SAO CHAY O DAY CHU KHONG PHAI TREN MAY CHU: Render goi mien phi khong cho
+# truy cap shell va khong chay duoc cron, nen khong co cho nao tren ha tang dang
+# dung de dat mot lenh dinh ky. GitHub Actions la noi gan nhat co ca lich chay
+# lan quyen doc bi mat.
+#
+# Aiven co ban sao luu tu dong cua rieng ho, va do la lop bao ve thu nhat. Lop
+# nay bao ve truoc mot thu khac han: mat quyen truy cap chinh tai khoan Aiven.
+# Ban sao luu nam trong tai khoan sap mat thi khong phai la ban sao luu.
+
+name: Sao luu co so du lieu
+
+on:
+  schedule:
+    # 19:00 UTC = 02:00 gio Viet Nam, luc it nguoi dung nhat.
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cai mysql-client va age
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mysql-client age
+
+      - name: Chay sao luu
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          # CHI la khoa cong khai. Khoa rieng khong bao gio duoc dat vao
+          # GitHub Secrets: neu no o day thi ai vao duoc kho ma nguon cung doc
+          # duoc moi ban sao luu, va lop bao ve nay mat sach y nghia.
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          BACKUP_DIR: ./backups
+        run: |
+          chmod +x ops/backup.sh
+          ops/backup.sh
+
+      - name: Kiem tra goi da duoc ma hoa
+        # Chot chan cuoi. Thieu BACKUP_AGE_RECIPIENT thi backup.sh van chay xong
+        # va de lai mot goi tho - dung thu duoc tai len lam artifact.
+        run: |
+          if ! ls backups/*.age >/dev/null 2>&1; then
+            echo "Goi sao luu chua duoc ma hoa. Kiem tra secret BACKUP_AGE_RECIPIENT." >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ github.run_id }}
+          path: backups/*.age
+          retention-days: 30

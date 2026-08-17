@@ -9,6 +9,14 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /build/target/*.jar app.jar
 
+# Chạy bằng tài khoản không đặc quyền. Ứng dụng chỉ cần đọc app.jar và mở một
+# cổng cao, không cần gì tới quyền quản trị — mà mặc định của ảnh nền là root,
+# nên phải nói ra thì mới thôi. Nếu một lỗ hổng nào đó cho phép chạy lệnh trong
+# tiến trình này, đây là ranh giới quyết định lệnh ấy làm được tới đâu.
+RUN useradd --system --uid 10001 --no-create-home storytts \
+    && chown storytts /app/app.jar
+USER storytts
+
 # Cấu hình cho hộp 512MB - gói miễn phí của Render. Heap chỉ là một phần chỗ
 # JVM chiếm, nên đặt heap sát trần là cách chắc chắn nhất để bị hạ tiến trình:
 # Metaspace, vùng mã đã biên dịch và ngăn xếp của từng luồng đều nằm ngoài heap

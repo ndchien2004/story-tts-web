@@ -142,6 +142,16 @@ public interface AudioFileRepository extends JpaRepository<AudioFile, Long> {
 
     long countByStatus(AudioStatus status);
 
+    /**
+     * Những bản đang ở một trạng thái nhất định.
+     *
+     * <p>Có mặt để {@code StaleGenerationReconciler} khỏi phải gọi {@code findAll()}
+     * rồi lọc trong bộ nhớ. Khác biệt ấy đáng kể hơn vẻ ngoài của nó: lượt dọn ấy
+     * chạy mỗi lần ứng dụng khởi động, mà trên nền tảng ngủ khi vắng khách thì
+     * "mỗi lần khởi động" nghĩa là vài chục lần một ngày — và heap chỉ có 224MB.
+     */
+    List<AudioFile> findByStatus(AudioStatus status);
+
     /** Các chương (trong danh sách truyền vào) đang có bản audio ở trạng thái đã cho. */
     @Query("""
             SELECT DISTINCT a.chapter.id FROM AudioFile a

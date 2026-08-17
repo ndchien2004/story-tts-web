@@ -16,9 +16,11 @@ nhau bằng JWT.
 - [Tính năng](#tính-năng)
 - [Công nghệ](#công-nghệ)
 - [Kiến trúc](#kiến-trúc)
+- [Ba vấn đề lớn và cách giải](#ba-vấn-đề-lớn-và-cách-giải)
 - [Cấu trúc thư mục](#cấu-trúc-thư-mục)
 - [Cài đặt và chạy](#cài-đặt-và-chạy)
 - [Cấu hình API key](#cấu-hình-api-key)
+- [Triển khai và lưu trữ](#triển-khai-và-lưu-trữ)
 - [Tài khoản có sẵn](#tài-khoản-có-sẵn)
 - [Danh sách API](#danh-sách-api)
 - [Kiểm thử](#kiểm-thử)
@@ -436,7 +438,130 @@ hạn hoặc hết lượt thử là bị xóa, và chỉ khi mã đúng thì n�
 Google vẫn có `password_hash` — cột đó NOT NULL — nhưng là một chuỗi ngẫu nhiên không ai đoán được;
 muốn có mật khẩu thật thì đi đường "quên mật khẩu".
 
-Schema do Hibernate tự tạo (`ddl-auto=update`), không cần chạy file SQL nào.
+Lược đồ do **Flyway** dựng, từ các tệp trong `backend/src/main/resources/db/migration`. Hibernate để
+ở `ddl-auto=validate`: nó chỉ đối chiếu và báo lỗi ngay lúc khởi động nếu entity lệch với lược đồ, chứ
+không tự sửa bảng sau lưng nữa. Migration chạy tự động khi ứng dụng khởi động — không có bước thủ công
+nào, và cũng không có file SQL nào phải chạy tay.
+
+---
+
+## Ba vấn đề lớn và cách giải
+
+Ba đợt thay đổi gần nhất, mỗi đợt giải một vấn đề khác hẳn nhau. Ghi lại ở đây vì **cách chọn** trong
+cả ba đều đáng nói hơn thứ cuối cùng được viết ra.
+
+### 1. Kết nối cơ sở dữ liệu bị giữ suốt lúc chờ mạng
+
+**Triệu chứng.** `Connection is not available, request timed out` hiện lên ở những request chẳng liên
+quan gì tới audio.
+
+**Nguyên nhân.** Việc dựng audio nằm gọn trong một giao dịch: mở giao dịch, đọc hàng chờ, rồi gọi
+ElevenLabs và đứng chờ. Một chương bị cắt thành nhiều lần gọi 4500 ký tự, mỗi lần chờ tối đa hai phút —
+nên một chương 20.000 ký tự giữ một kết nối suốt **mười phút mà không chạy câu lệnh SQL nào**. Một lô
+hai mươi chương do Admin dựng giữ bốn kết nối, trên tổng số mười của cả ứng dụng.
+
+**Cách giải.** Cắt một lượt dựng thành ba đoạn, và chỉ hai đoạn đầu cuối cần cơ sở dữ liệu:
+
+```
+đọc bản ghi   ──►   gọi ElevenLabs   ──►   ghi kết quả
+(giao dịch 1)      (KHÔNG giao dịch)      (giao dịch 2)
+   vài ms            hàng phút              vài ms
+```
+
+Việc này buộc phải tách thành một bean riêng (`TtsGenerationRecords`): `@Transactional` chạy bằng
+proxy, nên hai method trong cùng một lớp không mở được hai giao dịch. Tải file lên cũng vậy — file
+được ghi **trước câu lệnh SQL đầu tiên**, dựa vào việc Hibernate lấy kết nối một cách trì hoãn, nên
+`hibernate.connection.handling_mode` được viết thẳng vào `application.properties` thay vì để nó là một
+mặc định mà mã nguồn lặng lẽ phụ thuộc.
+
+**Điều cố ý không làm:** nâng kích thước pool. Mười kết nối vốn thừa cho hai mươi luồng Tomcat khi giao
+dịch chỉ sống vài mili giây; nâng lên chỉ dời thời điểm cạn và vứt mất manh mối. Thay vào đó bật
+`leak-detection-threshold=20s` — sau đợt sửa, giao dịch dài nhất còn lại chỉ gồm vài câu lệnh, nên bất
+cứ thứ gì chạm ngưỡng ấy đều đáng in ra ngăn xếp.
+
+### 2. Mua lẻ từng chương, bên cạnh gói VIP
+
+**Vấn đề.** Người đọc muốn đúng một chương chỉ có hai lựa chọn: mua cả tháng VIP, hoặc không đọc.
+
+**Cách giải.** Ví Xu + giá theo từng chương. Hai quyết định về cấu trúc đáng chú ý:
+
+**Mức khóa và giá là hai cột riêng, không gộp thành một enum.** Chúng trả lời hai câu hỏi khác nhau —
+*ai được thấy chương* và *mở nó tốn bao nhiêu*. Gộp lại thì mỗi cách bán mới lại nhân đôi số giá trị:
+`VIP`, `COIN`, `VIP_OR_COIN`, `MEMBER_AND_COIN`. Tách ra thì chúng tự kết hợp: VIP kèm giá 50 nghĩa là
+VIP đọc miễn phí, còn lại trả 50 Xu. Mọi chương cũ nhận giá 0, và nhánh giá-0 gọi thẳng vào lớp kiểm
+quyền cũ không sửa gì — nên không có gì đã xuất bản đổi hành vi.
+
+**Vừa có số dư vừa có sổ cái, không chọn một.** Số dư đứng một mình không nói được vì sao nó là con số
+ấy, và câu hỏi đầu tiên về "mất Xu" sẽ không có câu trả lời. Sổ cái đứng một mình thì mỗi lần mở chương
+là một lần cộng dồn cả lịch sử. Cả hai được ghi trong cùng một giao dịch, và mỗi dòng sổ mang số dư
+trước/sau, nên lệch thì tìm ra bằng một câu truy vấn chứ không phải bằng một cuộc điều tra.
+
+**Không có chỗ nào tin vào "kiểm rồi ghi".** Tiêu Xu là `UPDATE ... WHERE balance >= price`, nên hai
+lượt mua đồng thời mà chỉ đủ tiền cho một thì đúng một lượt thành công. Mua trùng bị chặn bởi
+`UNIQUE(user_id, chapter_id)`, nên nhấp đúp hay request thử lại không bị tính tiền hai lần. Cả hai đều
+do cơ sở dữ liệu bảo đảm, vì hai request đua nhau đều đọc thấy "chưa mua" trước khi bên nào kịp ghi.
+
+### 3. Dữ liệu và audio sống sót qua mỗi lần triển khai
+
+**Đây là vấn đề mà tiền đề ban đầu sai, và điều đó thay đổi toàn bộ lời giải.**
+
+Ý định lúc đầu là: để audio tạm trong một thư mục trên máy chủ, deploy xong thì mã hóa cả thư mục dữ
+liệu, tự tạo database rồi nhập dữ liệu vào. Khi đi kiểm tra hạ tầng thật thì lộ ra hai điều:
+
+**Không có thư mục nào để mà mã hóa.** Backend chạy trên Render gói miễn phí, mà hệ tệp ở đó là *tạm
+thời*: file bị xóa sạch mỗi lần triển khai lại, mỗi lần khởi động lại, **và sau 15 phút không ai truy
+cập** (dịch vụ ngủ đi, tỉnh dậy là một máy sạch). Gói miễn phí cũng không gắn được Persistent Disk.
+
+**Và hậu quả nặng hơn là một bug đang chạy:** mỗi bản audio dựng bằng ElevenLabs — mất tiền thật cho
+từng bản — biến mất trong vòng một giờ, trong khi hàng trong cơ sở dữ liệu (nằm ở Aiven, bền vững) vẫn
+ghi `status = READY`. Cờ ấy khiến bộ nhớ đệm từ chối dựng lại, nên chương đó **kẹt vĩnh viễn** ở trạng
+thái có audio mà bấm play không ra gì.
+
+**Cách giải — lưu trữ.** Nơi lưu file trở thành một lựa chọn theo môi trường, không còn là giả định nằm
+rải rác trong mã nghiệp vụ:
+
+```
+                        MediaStorage  (giao diện)
+                              │
+              ┌───────────────┴───────────────┐
+      LocalMediaStorage              CloudinaryMediaStorage
+   máy cá nhân / máy có đĩa riêng      bắt buộc trên Render
+```
+
+Bản cục bộ ghi vào file `.tmp` cùng thư mục rồi đổi tên nguyên tử, nên tên thật chỉ xuất hiện khi byte
+cuối cùng đã nằm trên đĩa — tiến trình bị giết giữa chừng để lại một file tạm vô hại chứ không để lại
+một file MP3 cụt mang tên hợp lệ. Bản Cloudinary lưu ở dạng `authenticated` và **chuyển tiếp HTTP Range**
+lên nơi lưu, nên máy chủ không bao giờ giữ trọn một chương trong bộ nhớ để trả về một khúc giữa của nó.
+
+Quyền nghe vẫn do máy chủ giữ, không đưa URL cho trình duyệt: trên gói Cloudinary miễn phí chữ ký
+**không hết hạn được**, mà quyền nghe ở đây thì thay đổi và phải thu hồi được (VIP có hạn, chương bán
+bằng Xu, bản audio người đọc tự dựng là của riêng họ).
+
+**Cách giải — mã hóa.** Không mã hóa cả thư mục, và cũng không mã hóa file audio đang chạy. Lý do:
+khóa buộc phải nằm cùng máy với ứng dụng đọc nó, nên nó không chặn được ai đã đọc được ứng dụng — đổi
+lại thì mất HTTP Range, phải giải mã trong heap 224MB, và mất khóa là mất sạch audio. Mã hóa được đặt
+vào đúng chỗ nó có tác dụng thật: **gói sao lưu**, thứ duy nhất rời khỏi vành đai nhà cung cấp (chứa
+email thật, mật khẩu đã băm, lịch sử giao dịch Xu). Dùng `age`, và **khóa riêng không bao giờ nằm trên
+máy chủ hay trong GitHub Secrets** — máy chạy sao lưu chỉ cần khóa công khai, nên bị chiếm cũng không
+đọc được gói cũ.
+
+**Cách giải — tự tạo database và nhập dữ liệu.** Tách làm hai vòng đời riêng:
+
+```
+Ứng dụng khởi động  ──►  Flyway migrate  ──►  ddl-auto=validate đối chiếu  ──►  /actuator/health
+                          (tự động)              (báo lỗi nếu lệch)
+
+Nhập nội dung       ──►  --spring.profiles.active=import   (việc riêng, chạy khi cần)
+```
+
+Lược đồ **tự dựng** khi ứng dụng khởi động; không có bước thủ công nào. Nhưng nhập nội dung thì **cố ý
+không** nằm trong đường khởi động — một tệp JSON sai dấu phẩy không được phép làm cả trang web không lên
+được. Importer chạy lại nhiều lần an toàn (truyện nhận diện theo tên, chương theo cặp truyện + số
+chương), mỗi chương là một giao dịch riêng nên chương thứ 47 hỏng không kéo theo 46 chương trước nó, và
+audio được đối chiếu SHA-256 **trước** khi có gì được ghi. Cờ `READY` chỉ bật sau khi byte đã tới nơi.
+
+Chi tiết: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) · [docs/BACKUP.md](docs/BACKUP.md) ·
+[content/README.md](content/README.md)
 
 ---
 
@@ -469,7 +594,11 @@ story-tts-web/
 │     ├─ styles/         CSS thuần, chia theo nhóm
 │     ├─ utils/          Định dạng tiền/ngày, chuẩn hóa Unicode, đích đến sau đăng nhập
 │     └─ brand.js        URL logo và ảnh banner trên Cloudinary
-├─ docker-compose.yml    MySQL 8
+├─ content/              Gói nội dung để nhập truyện/chương/audio (xem README trong đó)
+├─ docs/                 DEPLOYMENT.md, BACKUP.md
+├─ ops/                  backup.sh, restore.sh
+├─ render.yaml           Cấu hình dịch vụ trên Render
+├─ docker-compose.yml    MySQL 8 cho máy cá nhân
 ├─ .env                  Cấu hình thật — ĐÃ loại khỏi Git
 └─ .env.example          Bản mẫu để sao chép
 ```
@@ -689,9 +818,72 @@ tự hỏi lại cổng thanh toán nên luồng mua vẫn chạy đủ.
 | `JWT_EXPIRATION_MS` | 86400000 | Hạn dùng token (24 giờ) |
 | `APP_ADMIN_USERNAME` / `_PASSWORD` | admin / Admin@123 | Tài khoản Admin tạo ở lần chạy đầu |
 | `CORS_ALLOWED_ORIGINS` | localhost:5173… | Origin được phép gọi API |
-| `AUDIO_DIR` | ./uploads/audio | Nơi lưu file audio |
-| `BGM_DIR` | ./uploads/bgm | Nơi lưu nhạc nền quản trị viên tải lên |
+| `STORAGE_DRIVER` | local | `local` hoặc `cloudinary` — xem mục dưới |
+| `AUDIO_DIR` | ./uploads/audio | Nơi lưu file audio (chỉ khi `STORAGE_DRIVER=local`) |
+| `BGM_DIR` | ./uploads/bgm | Nơi lưu nhạc nền (chỉ khi `STORAGE_DRIVER=local`) |
 | `SERVER_PORT` | 8080 | Cổng backend |
+
+---
+
+## Triển khai và lưu trữ
+
+Bản chạy thật nằm trên ba dịch vụ, đều là gói miễn phí:
+
+```
+   Vercel                Render                  Aiven
+  React SPA  ──HTTPS──►  Spring Boot  ──TLS──►  MySQL 8 (1GB)
+                              │
+                              ▼
+                         Cloudinary
+                      audio + ảnh đại diện
+```
+
+### Audio nằm ở đâu, và vì sao
+
+Ứng dụng không tự quyết định nơi lưu file — nó nói chuyện với `MediaStorage`, và
+`STORAGE_DRIVER` chọn bản triển khai:
+
+| | Dùng khi | Ghi chú |
+|---|---|---|
+| `local` | Lập trình ở máy cá nhân; máy chủ có đĩa riêng | Ghi qua file tạm rồi đổi tên nguyên tử, nên không có file MP3 cụt nào mang tên hợp lệ |
+| `cloudinary` | **Bắt buộc trên Render** | Lưu dạng `authenticated`; máy chủ ký đường dẫn và chuyển tiếp byte |
+
+> **Vì sao bắt buộc trên Render:** hệ tệp của gói miễn phí là *tạm thời* — file
+> biến mất mỗi lần triển khai lại, khởi động lại, **và sau 15 phút không ai truy
+> cập**. Để `local` ở đó nghĩa là mỗi bản audio dựng bằng ElevenLabs (mất tiền
+> thật) bốc hơi trong vòng một giờ, trong khi hàng trong cơ sở dữ liệu vẫn ghi
+> `READY` — và cờ ấy chặn luôn đường dựng lại.
+
+### Quyền nghe vẫn do máy chủ giữ
+
+Audio **không** được trả về dưới dạng URL cho trình duyệt, kể cả URL đã ký. Trên
+gói Cloudinary miễn phí, chữ ký không hết hạn được (thời hạn là tính năng gói
+Advanced), mà quyền nghe ở đây thì thay đổi và phải thu hồi được: VIP có hạn,
+chương bán bằng Xu, bản audio người đọc tự dựng là của riêng họ.
+
+Nên mọi byte đi qua `GET /api/chapters/{id}/audio/{audioId}`, sau hai lớp cửa
+đã có sẵn — `ChapterAccessService` rồi `requireOwnership`. Khoảng byte trình phát
+hỏi được chuyển tiếp lên Cloudinary, nên máy chủ không bao giờ giữ trọn một
+chương trong bộ nhớ để trả về một khúc giữa của nó. Tua vẫn chạy như trước.
+
+### Tài liệu chi tiết
+
+| | |
+|---|---|
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Biến môi trường, luồng triển khai, hạn mức từng dịch vụ |
+| [docs/BACKUP.md](docs/BACKUP.md) | Sao lưu, phục hồi, và chỗ cất khóa mã hóa |
+| [content/README.md](content/README.md) | Nhập truyện/chương/audio từ tệp trên đĩa |
+| `render.yaml` | Cấu hình Render, để trong Git thay vì chỉ ở dashboard |
+
+### Đối chiếu cơ sở dữ liệu với nơi lưu file
+
+```
+GET  /api/admin/storage/audit     # liệt kê bản ghi trỏ tới file không còn tồn tại
+POST /api/admin/storage/repair    # đánh dấu chúng hỏng, để chương dựng lại được
+```
+
+Không cần chạy định kỳ: gặp một bản audio mất file trên đường phát thì nó tự
+được đánh dấu ngay tại chỗ, và nút "Nghe bằng AI" dựng lại được bản mới.
 
 ---
 

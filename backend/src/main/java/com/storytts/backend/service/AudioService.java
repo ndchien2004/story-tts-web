@@ -13,10 +13,12 @@ import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.ResourceNotFoundException;
 import com.storytts.backend.repository.AudioFileRepository;
 import com.storytts.backend.repository.AudioTranscriptRepository;
+import com.storytts.backend.service.storage.ByteRange;
+import com.storytts.backend.service.storage.MediaNotFoundException;
+import com.storytts.backend.service.storage.MediaSlice;
 import com.storytts.backend.service.tts.TranscriptCodec;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -46,7 +48,17 @@ public class AudioService {
             "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav",
             "audio/ogg", "audio/mp4", "audio/aac");
 
-    private static final long MAX_UPLOAD_BYTES = 64L * 1024 * 1024;
+    /**
+     * Trần dung lượng một bản thu admin tải lên.
+     *
+     * <p>Hạ từ 64MB xuống khi audio chuyển sang lưu ở Cloudinary. Đường lưu cục
+     * bộ chép thẳng từ luồng xuống đĩa nên dung lượng file không ảnh hưởng bộ
+     * nhớ, còn Cloudinary nhận file trong một request có chữ ký nên nội dung
+     * buộc phải nằm trọn trong heap — mà heap ở đây là 224MB, dùng chung với mọi
+     * request khác đang chạy. Chương audio thật đo được nằm trong khoảng 40KB
+     * đến 8MB, nên con số này vẫn còn rộng gấp mấy lần chỗ cần dùng.
+     */
+    private static final long MAX_UPLOAD_BYTES = 32L * 1024 * 1024;
 
     private final AudioFileRepository audioFileRepository;
     private final AudioTranscriptRepository audioTranscriptRepository;
@@ -54,6 +66,7 @@ public class AudioService {
     private final ChapterService chapterService;
     private final ChapterAccessService chapterAccessService;
     private final StorageService storageService;
+    private final AudioAssetRepair audioAssetRepair;
     private final ViewEventService viewEventService;
     private final CurrentUserService currentUserService;
 
@@ -161,13 +174,28 @@ public class AudioService {
     }
 
     /**
-     * Resolves an audio file for streaming.
+     * Kiểm quyền rồi trả về chỗ cần đọc — <b>không</b> mở luồng byte nào.
+     *
+     * <h3>Vì sao tách làm hai bước</h3>
+     * Đây là một giao dịch, còn {@link #openStream} thì không, và ranh giới giữa
+     * chúng nằm đúng trước lời gọi mạng đầu tiên. Khi audio nằm ở Cloudinary,
+     * mở một lát byte là một vòng mạng đi ra ngoài; gộp nó vào giao dịch này là
+     * cầm một kết nối cơ sở dữ liệu suốt quãng chờ ấy. Với pool mười kết nối và
+     * hai mươi luồng Tomcat, vài người cùng bấm nghe là đủ để những request
+     * bình thường xếp hàng chờ — đúng cái bẫy mà
+     * {@link com.storytts.backend.service.tts.TtsGenerationWorker} đã tách ra
+     * để tránh.
+     *
+     * <p>Không gộp được hai bước bằng cách gọi lẫn nhau trong cùng một bean:
+     * {@code @Transactional} chạy bằng proxy, nên một method gọi method khác
+     * cùng lớp thì annotation lặng lẽ vô hiệu. Bên gọi phải đi qua cả hai —
+     * xem {@code AudioController.stream}.
      *
      * @throws com.storytts.backend.exception.ChapterLockedException if the caller
      *         may not access the parent chapter
      */
     @Transactional(readOnly = true)
-    public StreamHandle openForStreaming(Long chapterId, Long audioId) {
+    public StreamTarget resolveForStreaming(Long chapterId, Long audioId) {
         Chapter chapter = chapterService.findDetailEntity(chapterId);
         chapterAccessService.requireAccess(chapter);
 
@@ -182,11 +210,47 @@ public class AudioService {
             throw new BadRequestException("File audio chưa sẵn sàng để phát.");
         }
 
-        Resource resource = storageService.resolveAudio(audio.getFilePath());
-        if (!resource.exists() || !resource.isReadable()) {
-            throw new ResourceNotFoundException("File audio không còn tồn tại trên máy chủ.");
+        return new StreamTarget(audioId, audio.getFilePath(), audio.getContentType());
+    }
+
+    /**
+     * Mở lát byte đã được {@link #resolveForStreaming} cho phép.
+     *
+     * <p>Cố ý không có {@code @Transactional}: xem lý do ở method trên.
+     *
+     * <p>Bản ghi trỏ tới một file không còn tồn tại được đánh dấu FAILED ngay
+     * tại đây, chứ không chỉ báo lỗi rồi thôi — xem {@link AudioAssetRepair}.
+     * Người bấm nghe vẫn nhận một thông báo, nhưng lần bấm "Nghe bằng AI" tiếp
+     * theo dựng được bản mới thay vì gặp lại đúng bản chết ấy.
+     *
+     * @param range khoảng byte trình phát hỏi tới, hay null để phát từ đầu
+     */
+    public MediaSlice openStream(StreamTarget target, ByteRange range) {
+        MediaSlice slice;
+        try {
+            slice = storageService.openAudio(target.key(), range);
+        } catch (MediaNotFoundException ex) {
+            audioAssetRepair.markMissing(target.audioId(), target.key());
+            throw new ResourceNotFoundException(AudioAssetRepair.MESSAGE);
         }
-        return new StreamHandle(resource, audio.getContentType());
+
+        // Kiểu media lấy từ bản ghi trước: đó là kiểu của file lúc được nhận vào,
+        // còn nơi lưu trữ chỉ là bên chuyển tiếp và có thể mô tả khác đi.
+        String contentType = target.contentType() != null
+                ? target.contentType()
+                : slice.contentType();
+        return new MediaSlice(slice.body(), slice.contentLength(), slice.totalLength(),
+                slice.start(), slice.end(), contentType, slice.partial());
+    }
+
+    /**
+     * Chỗ cần đọc của một bản audio đã qua kiểm quyền.
+     *
+     * @param audioId     để đánh dấu bản ghi nếu file của nó đã biến mất
+     * @param key         khóa lưu trữ
+     * @param contentType kiểu media ghi trong bản ghi, có thể null
+     */
+    public record StreamTarget(Long audioId, String key, String contentType) {
     }
 
     /**
@@ -205,7 +269,8 @@ public class AudioService {
             throw new BadRequestException("Vui lòng chọn file audio để tải lên.");
         }
         if (file.getSize() > MAX_UPLOAD_BYTES) {
-            throw new BadRequestException("File audio vượt quá 64 MB.");
+            throw new BadRequestException(
+                    "File audio vượt quá %d MB.".formatted(MAX_UPLOAD_BYTES / (1024 * 1024)));
         }
 
         String contentType = file.getContentType();
@@ -267,9 +332,5 @@ public class AudioService {
         }
         int dot = originalName.lastIndexOf('.');
         return dot >= 0 ? originalName.substring(dot) : ".mp3";
-    }
-
-    /** Resource plus its media type, ready for a range-aware controller. */
-    public record StreamHandle(Resource resource, String contentType) {
     }
 }

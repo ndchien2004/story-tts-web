@@ -6,9 +6,10 @@ import com.storytts.backend.dto.bgm.BgmTrackRequest;
 import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.ResourceNotFoundException;
 import com.storytts.backend.repository.BgmTrackRepository;
+import com.storytts.backend.service.storage.MediaNotFoundException;
+import com.storytts.backend.service.storage.MediaSlice;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -73,16 +74,23 @@ public class BgmService {
      * so với việc để một bản đã rút phát nốt. Rút hẳn thì xóa.
      */
     @Transactional(readOnly = true)
-    public StreamHandle openForStreaming(Long id) {
+    public MediaSlice openForStreaming(Long id) {
         BgmTrack track = findEntity(id);
-        Resource resource = storageService.resolveBgm(track.getFilePath());
-        if (!resource.exists() || !resource.isReadable()) {
+        MediaSlice slice;
+        try {
+            // Không truyền khoảng byte: trình duyệt tải trọn bản nhạc rồi giải mã
+            // vào bộ nhớ để lặp cho liền mạch, nên nó không bao giờ hỏi một khúc
+            // giữa. Xem javadoc của BgmController.
+            slice = storageService.openBgm(track.getFilePath(), null);
+        } catch (MediaNotFoundException ex) {
             throw ResourceNotFoundException.of("bản nhạc nền", id);
         }
-        return new StreamHandle(resource, track.getContentType());
-    }
 
-    public record StreamHandle(Resource resource, String contentType) {
+        String contentType = track.getContentType() != null
+                ? track.getContentType()
+                : slice.contentType();
+        return new MediaSlice(slice.body(), slice.contentLength(), slice.totalLength(),
+                slice.start(), slice.end(), contentType, slice.partial());
     }
 
     /* ---------------------------------------------------------------- */

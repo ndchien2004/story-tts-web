@@ -1,0 +1,122 @@
+# Cong chan truoc khi trien khai.
+#
+# Truoc day khong co gi chay giua `git push` va Render dung anh moi: mot test
+# hong, mot migration sai cu phap, hay mot loi bien dich o frontend deu chi lo
+# ra khi ban moi da chay that. Tep nay dat phan kiem tra len truoc.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Push lien tiep thi chi giu lan chay moi nhat - goi mien phi cua GitHub Actions
+# co han muc phut, va ket qua cua mot commit da bi thay the thi khong ai doc.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend - test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+
+      - name: Chay test
+        working-directory: backend
+        run: ./mvnw -B --no-transfer-progress test
+
+  # Migration duoc chay tren MySQL that, khong phai H2.
+  #
+  # Ly do tach thanh mot job rieng: test o tren dung H2 va TAT Flyway (xem
+  # src/test/resources/application.properties), vi cac tep trong db/migration
+  # viet bang phuong ngu MySQL ma H2 khong hieu. Nghia la truoc day khong co gi
+  # kiem duoc rang chung chay duoc, va mot migration hong se hong tren
+  # production. Job nay dung MySQL sach roi cho ung dung tu chay Flyway; buoc
+  # `ddl-auto=validate` sau do la thu doi chieu luoc do voi entity.
+  migration:
+    name: Migration - MySQL that
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpass
+          MYSQL_DATABASE: story_tts
+          MYSQL_USER: storytts
+          MYSQL_PASSWORD: storytts
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -prootpass"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+
+      - name: Dong goi
+        working-directory: backend
+        run: ./mvnw -B --no-transfer-progress -DskipTests package
+
+      - name: Chay Flyway roi doi chieu luoc do voi entity
+        working-directory: backend
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_NAME: story_tts
+          DB_USER: storytts
+          DB_PASSWORD: storytts
+          DB_CREATE_IF_MISSING: 'false'
+          SEED_ENABLED: 'false'
+          TTS_ENABLED: 'false'
+          JWT_SECRET: chuoi-chi-dung-trong-ci-du-32-ky-tu-khong-phai-bi-mat
+          # Co so du lieu nay sach hoan toan, khong co lich su tu thoi ddl-auto.
+          # Tat baseline de Flyway chay V1 that su chu khong danh dau roi bo qua.
+          SPRING_FLYWAY_BASELINE_ON_MIGRATE: 'false'
+        run: |
+          # Khoi dong roi tat ngay: chi can biet Flyway chay tron va
+          # ddl-auto=validate khong tim thay cho nao lech.
+          timeout 180 java -jar target/*.jar --spring.main.web-application-type=none \
+            || EXIT=$?
+          if [ "${EXIT:-0}" -ne 0 ] && [ "${EXIT:-0}" -ne 124 ]; then
+            echo "Migration hoac validate that bai (ma $EXIT)"
+            exit 1
+          fi
+
+  frontend:
+    name: Frontend - lint va build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build

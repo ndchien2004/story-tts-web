@@ -62,6 +62,8 @@ class AudioOwnershipTest {
     @Mock
     private StorageService storageService;
     @Mock
+    private AudioAssetRepair audioAssetRepair;
+    @Mock
     private ViewEventService viewEventService;
     @Mock
     private CurrentUserService currentUserService;
@@ -72,7 +74,7 @@ class AudioOwnershipTest {
     void setUp() {
         audioService = new AudioService(audioFileRepository, audioTranscriptRepository,
                 transcriptCodec, chapterService, chapterAccessService, storageService,
-                viewEventService, currentUserService);
+                audioAssetRepair, viewEventService, currentUserService);
 
         when(chapterService.findDetailEntity(CHAPTER_ID)).thenReturn(chuong());
     }
@@ -93,7 +95,7 @@ class AudioOwnershipTest {
         dangCo(banCua(NGUOI_DUNG_MOT));
         dangDangNhapLa(NGUOI_DUNG_HAI);
 
-        assertThatThrownBy(() -> audioService.openForStreaming(CHAPTER_ID, AUDIO_ID))
+        assertThatThrownBy(() -> audioService.resolveForStreaming(CHAPTER_ID, AUDIO_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -103,7 +105,7 @@ class AudioOwnershipTest {
         dangCo(banCua(NGUOI_DUNG_MOT));
         when(currentUserService.currentUserId()).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> audioService.openForStreaming(CHAPTER_ID, AUDIO_ID))
+        assertThatThrownBy(() -> audioService.resolveForStreaming(CHAPTER_ID, AUDIO_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 

@@ -1,0 +1,99 @@
+# Cau hinh dich vu tren Render, dat trong Git thay vi chi nam o dashboard.
+#
+# Truoc day moi thu o day chi ton tai trong bang dieu khien cua Render: khong ai
+# review duoc, khong co lich su thay doi, va mat tai khoan la dung lai tu tri
+# nho. Tep nay la ban mo ta ay - Render doc no khi dung Blueprint, con neu dich
+# vu da duoc tao bang tay thi no van la tai lieu dung de doi chieu.
+#
+# Bien nao co `sync: false` thi Render KHONG doc gia tri tu day: phai tu dien
+# trong dashboard (Environment). Do la cach giu bi mat nam ngoai kho ma nguon.
+
+services:
+  - type: web
+    name: story-tts-backend
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    branch: main
+
+    # Duong nay do spring-boot-starter-actuator dung len va SecurityConfig mo
+    # cho nguoi chua dang nhap. Render goi vao day de biet ban moi da song chua
+    # truoc khi chuyen luu luong sang.
+    healthCheckPath: /actuator/health
+
+    envVars:
+      # ---------- Luu tru file: BAT BUOC tren Render ----------
+      # He tep cua Render goi mien phi la tam thoi - bi xoa sach moi lan trien
+      # khai lai, moi lan khoi dong lai, va moi lan dich vu ngu sau 15 phut vang
+      # khach. De `local` o day nghia la moi ban audio dung bang ElevenLabs deu
+      # bien mat trong vong mot gio, trong khi hang trong co so du lieu van ghi
+      # la READY va chan luon duong dung lai.
+      - key: STORAGE_DRIVER
+        value: cloudinary
+
+      # ---------- Co so du lieu (Aiven) ----------
+      # Aiven bat buoc ma hoa duong truyen, va cap san mot co so du lieu ma tai
+      # khoan khong duoc phep tao them - hai dong duoi la hai dieu do.
+      - key: DB_SSL_MODE
+        value: REQUIRED
+      - key: DB_CREATE_IF_MISSING
+        value: "false"
+      # Goi mien phi cua Aiven cho toi da 76 ket noi cho ca tai khoan.
+      - key: DB_POOL_SIZE
+        value: "10"
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+
+      # ---------- Du lieu mau ----------
+      # Tat tren ban chay that: DataSeeder dung 6 truyen demo va vai tai khoan
+      # demo, thu chi co ich o may ca nhan.
+      - key: SEED_ENABLED
+        value: "false"
+
+      # ---------- Bi mat: dien trong dashboard ----------
+      - key: JWT_SECRET
+        sync: false
+      - key: APP_ADMIN_PASSWORD
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: MAIL_RESET_URL
+        sync: false
+      - key: PAYOS_CLIENT_ID
+        sync: false
+      - key: PAYOS_API_KEY
+        sync: false
+      - key: PAYOS_CHECKSUM_KEY
+        sync: false
+      - key: PAYOS_RETURN_URL
+        sync: false
+      - key: PAYOS_CANCEL_URL
+        sync: false

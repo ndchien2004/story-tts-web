@@ -1,6 +1,0 @@
-# Caddy tu xin va tu gia han chung chi Let's Encrypt cho SITE_ADDRESS.
-# Dieu kien duy nhat: ten mien phai tro ve dia chi IP cua Droplet, va cong 80
-# phai mo de ben cap chung chi kiem tra duoc.
-{$SITE_ADDRESS} {
-	reverse_proxy backend:8080
-}

@@ -2,6 +2,8 @@ package com.storytts.backend.controller;
 
 import com.storytts.backend.dto.bgm.BgmTrackDto;
 import com.storytts.backend.service.BgmService;
+import com.storytts.backend.service.storage.MediaSlice;
+import com.storytts.backend.service.storage.MediaStreamResource;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +16,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.IOException;
 import java.util.List;
 
 /**
@@ -52,18 +53,17 @@ public class BgmController {
      */
     @GetMapping("/{id}/stream")
     @Operation(summary = "Phát một bản nhạc nền")
-    public ResponseEntity<Resource> stream(@PathVariable Long id) throws IOException {
-        BgmService.StreamHandle handle = bgmService.openForStreaming(id);
-        Resource resource = handle.resource();
+    public ResponseEntity<Resource> stream(@PathVariable Long id) {
+        MediaSlice slice = bgmService.openForStreaming(id);
 
-        MediaType mediaType = handle.contentType() == null
+        MediaType mediaType = slice.contentType() == null
                 ? MediaType.parseMediaType("audio/mpeg")
-                : MediaType.parseMediaType(handle.contentType());
+                : MediaType.parseMediaType(slice.contentType());
 
         return ResponseEntity.ok()
                 .contentType(mediaType)
-                .contentLength(resource.contentLength())
+                .contentLength(slice.contentLength())
                 .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
-                .body(resource);
+                .body(new MediaStreamResource(slice));
     }
 }

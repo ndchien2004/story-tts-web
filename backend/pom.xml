@@ -43,6 +43,16 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-aop</artifactId>
 		</dependency>
+		<!--
+			Health check cua nen tang trien khai goi vao /actuator/health.
+			SecurityConfig da mo san duong ay tu truoc, nhung thieu thu vien nay
+			thi no tra 404 - cong kiem tra luc nao cung bao "khong tim thay".
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-mail</artifactId>

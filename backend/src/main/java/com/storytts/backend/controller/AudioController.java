@@ -3,14 +3,15 @@ package com.storytts.backend.controller;
 import com.storytts.backend.dto.audio.AudioInfoDto;
 import com.storytts.backend.dto.audio.ChapterTranscriptDto;
 import com.storytts.backend.service.AudioService;
+import com.storytts.backend.service.storage.ByteRange;
+import com.storytts.backend.service.storage.MediaSlice;
+import com.storytts.backend.service.storage.MediaStreamResource;
 import com.storytts.backend.service.tts.ReaderTtsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpRange;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,7 +22,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.IOException;
 import java.util.List;
 
 /**
@@ -104,39 +104,42 @@ public class AudioController {
      *
      * The browser's audio element cannot set an Authorization header, so the
      * token may also arrive as an `access_token` query parameter.
+     *
+     * <p>Khoảng byte được đọc từ header rồi giới hạn ở {@link #CHUNK_SIZE} <b>trước
+     * khi</b> chạm tới nơi lưu trữ, chứ không cắt sau khi đã mở trọn file. Khác
+     * biệt ấy không thấy được khi audio nằm trên đĩa ngay cạnh, nhưng khi nó nằm
+     * ở Cloudinary thì đây là chỗ quyết định máy chủ tải về một megabyte hay tải
+     * về cả chương chỉ để trả lại một megabyte.
      */
     @GetMapping("/audio/{audioId}")
     @Operation(summary = "Phát audio (hỗ trợ tua bằng HTTP Range)")
-    public ResponseEntity<ResourceRegion> stream(@PathVariable Long chapterId,
-                                                 @PathVariable Long audioId,
-                                                 @RequestHeader HttpHeaders headers) throws IOException {
-        AudioService.StreamHandle handle = audioService.openForStreaming(chapterId, audioId);
-        Resource resource = handle.resource();
-        long length = resource.contentLength();
+    public ResponseEntity<Resource> stream(@PathVariable Long chapterId,
+                                           @PathVariable Long audioId,
+                                           @RequestHeader HttpHeaders headers) {
+        ByteRange requested = ByteRange.parseFirst(headers.getFirst(HttpHeaders.RANGE));
 
-        MediaType mediaType = handle.contentType() == null
+        // Hai bước, và thứ tự này là một ràng buộc chứ không phải một cách viết:
+        // bước đầu là giao dịch kiểm quyền, bước sau là lời gọi mạng ra ngoài.
+        // Xem AudioService.resolveForStreaming về lý do chúng không được gộp.
+        AudioService.StreamTarget target = audioService.resolveForStreaming(chapterId, audioId);
+        MediaSlice slice = audioService.openStream(
+                target, requested == null ? null : requested.cap(CHUNK_SIZE));
+
+        MediaType mediaType = slice.contentType() == null
                 ? MediaType.parseMediaType("audio/mpeg")
-                : MediaType.parseMediaType(handle.contentType());
+                : MediaType.parseMediaType(slice.contentType());
 
-        List<HttpRange> ranges = headers.getRange();
-        if (ranges.isEmpty()) {
-            return ResponseEntity.ok()
-                    .contentType(mediaType)
-                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
-                    .body(new ResourceRegion(resource, 0, length));
-        }
+        ResponseEntity.BodyBuilder response = slice.partial()
+                ? ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                        .header(HttpHeaders.CONTENT_RANGE, slice.contentRangeHeader())
+                : ResponseEntity.ok();
 
-        HttpRange range = ranges.getFirst();
-        long start = range.getRangeStart(length);
-        long end = range.getRangeEnd(length);
-        long count = Math.min(CHUNK_SIZE, end - start + 1);
-
-        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+        return response
                 .contentType(mediaType)
+                .contentLength(slice.contentLength())
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                 .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
-                .body(new ResourceRegion(resource, start, count));
+                .body(new MediaStreamResource(slice));
     }
 
 }

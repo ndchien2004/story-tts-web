@@ -24,6 +24,19 @@ target/
 uploads/
 backend/uploads/
 
+# Chan them theo duoi tep, khong chi theo thu muc. Hai dong tren da du cho noi
+# audio dang nam, nhung mot ban ghi keo nham vao kho ma nguon thi khong bao gio
+# nam o cho minh doan truoc - va file audio la thu rat kho go khoi lich su Git
+# sau khi da tro thanh mot commit.
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.ogg
+*.flac
+*.opus
+*.enc
+
 # ===== Node / React =====
 node_modules/
 dist/
