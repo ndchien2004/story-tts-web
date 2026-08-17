@@ -25,10 +25,79 @@ const ACCESS_LEVELS = [
   { value: "VIP", label: "Yêu cầu VIP" },
 ];
 
+/**
+ * Ô giá Xu sửa được ngay trên dòng.
+ *
+ * <p>Ghi khi rời ô hoặc khi bấm Enter, không ghi theo từng phím: gõ "150" mà ghi
+ * mỗi ký tự là ba lần lưu, và lần đầu tiên đặt giá chương thành 1 Xu.
+ *
+ * <p>Giữ giá trị đang gõ trong trạng thái riêng thay vì đọc thẳng từ dòng dữ
+ * liệu, vì trong lúc gõ hai thứ ấy cố ý lệch nhau. Đồng bộ lại khi máy chủ trả
+ * về giá mới — kể cả khi lệnh ghi hỏng, để ô không hiện một con số chưa bao giờ
+ * được lưu.
+ */
+function PriceCell({ chapter, disabled, onCommit }) {
+  const saved = chapter.coinPrice ?? 0;
+  const [value, setValue] = useState(String(saved));
+
+  useEffect(() => {
+    setValue(String(saved));
+  }, [saved]);
+
+  // Chương công khai ai cũng đọc được rồi, nên một cái giá gắn lên đó là hai câu
+  // mâu thuẫn nhau. Máy chủ từ chối, và ô này nói trước điều đó.
+  const locked = chapter.accessLevel === "PUBLIC";
+
+  function commit() {
+    const next = Math.max(Number(value) || 0, 0);
+    if (next === saved) {
+      setValue(String(saved));
+      return;
+    }
+    onCommit(next);
+  }
+
+  return (
+    <input
+      type="number"
+      min="0"
+      step="10"
+      className="nb-input admin-price-input"
+      aria-label={`Giá Xu của chương ${chapter.chapterNumber}`}
+      title={
+        locked
+          ? "Chương công khai không đặt giá được — đổi mức khóa trước."
+          : "0 = không bán lẻ. VIP luôn đọc miễn phí."
+      }
+      disabled={disabled || locked}
+      value={locked ? "" : value}
+      placeholder={locked ? "—" : "0"}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
 const AUDIO_FILTERS = [
   { value: "", label: "Mọi tình trạng audio" },
   { value: "missing", label: "Chưa có audio" },
   { value: "has", label: "Đã có audio" },
+];
+
+/*
+ * "Chương nào đang bán bằng Xu" là câu hỏi không trả lời được bằng cách nhìn
+ * cột mức khóa — giá là một trục riêng. Bộ lọc này là chỗ trả lời nó.
+ */
+const PRICE_FILTERS = [
+  { value: "", label: "Mọi mức giá" },
+  { value: "paid", label: "Đang bán bằng Xu" },
+  { value: "free", label: "Không bán lẻ" },
 ];
 
 /** Mirrors MAX_BATCH on the server; selecting more is refused there anyway. */
@@ -90,6 +159,7 @@ export default function AdminChaptersPage() {
 
   const [filter, setFilter] = useState("");
   const [audioFilter, setAudioFilter] = useState("");
+  const [priceFilter, setPriceFilter] = useState("");
 
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -99,6 +169,8 @@ export default function AdminChaptersPage() {
   const [selected, setSelected] = useState([]);
   const [bulkLevel, setBulkLevel] = useState("PUBLIC");
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkPrice, setBulkPrice] = useState("0");
+  const [bulkPricing, setBulkPricing] = useState(false);
 
   const [voices, setVoices] = useState([]);
   const [voice, setVoice] = useState("");
@@ -164,6 +236,40 @@ export default function AdminChaptersPage() {
     }
   }
 
+  /**
+   * Đặt giá Xu cho một chương, ngay trên dòng của nó.
+   *
+   * <p>Đi bằng lệnh gọi riêng chứ không kèm vào lệnh đổi mức khóa: hai thứ trả
+   * lời hai câu khác nhau, và máy chủ cũng tách chúng ra ở hai endpoint vì lý do
+   * ấy. Gộp lại thì mỗi lần đổi mức khóa lại gửi kèm một cái giá không ai chạm
+   * vào — và giá dương trên chương công khai bị từ chối.
+   */
+  async function handlePriceChange(chapter, coinPrice) {
+    if (coinPrice === chapter.coinPrice) return;
+
+    setSavingId(chapter.id);
+    setError(null);
+
+    try {
+      const updated = await adminApi.setChapterPrice(chapter.id, coinPrice);
+      setChapters((current) =>
+        current.map((row) => (row.id === chapter.id ? { ...row, ...updated } : row)),
+      );
+      notify(
+        coinPrice > 0
+          ? `“${chapter.title}” giờ mở khóa bằng ${coinPrice.toLocaleString("vi-VN")} Xu.`
+          : `“${chapter.title}” không còn bán lẻ bằng Xu.`,
+      );
+    } catch (err) {
+      setError(err.message);
+      // Ghi đè lại bằng giá trị máy chủ đang giữ, để ô nhập không hiện một con
+      // số chưa bao giờ được lưu.
+      setChapters((current) => [...current]);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   function toggleSelected(chapterId) {
     setSelected((current) =>
       current.includes(chapterId)
@@ -192,6 +298,34 @@ export default function AdminChaptersPage() {
       setError(err.message);
     } finally {
       setBulkSaving(false);
+    }
+  }
+
+  /**
+   * Đặt cùng một giá cho mọi chương đã tick.
+   *
+   * <p>Một request chứ không phải một vòng lặp, cùng lý do với việc đổi mức khóa
+   * hàng loạt: máy chủ làm cả danh sách trong một giao dịch, nên không có cách
+   * nào để lại một truyện đặt giá dở dang mà nhìn vào không phân biệt được với
+   * một sắp xếp cố ý.
+   */
+  async function applyBulkPrice() {
+    setBulkPricing(true);
+    setError(null);
+    try {
+      const price = Number(bulkPrice) || 0;
+      const { updated } = await adminApi.setChapterPriceBulk(selected, price);
+      notify(
+        price > 0
+          ? `Đã đặt giá ${price.toLocaleString("vi-VN")} Xu cho ${updated} chương.`
+          : `Đã bỏ giá bán lẻ của ${updated} chương.`,
+      );
+      setSelected([]);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBulkPricing(false);
     }
   }
 
@@ -272,11 +406,28 @@ export default function AdminChaptersPage() {
       ) {
         return false;
       }
+      if (priceFilter) {
+        const paid = (chapter.coinPrice ?? 0) > 0;
+        if (priceFilter === "paid" ? !paid : paid) return false;
+      }
+
       if (!audioFilter) return true;
       const hasAudio = audioStatus[chapter.id]?.hasAudio ?? chapter.hasAudio;
       return audioFilter === "has" ? hasAudio : !hasAudio;
     });
-  }, [chapters, filter, audioFilter, audioStatus]);
+  }, [chapters, filter, audioFilter, priceFilter, audioStatus]);
+
+  /*
+   * Chương công khai không đặt giá được, và máy chủ làm cả lô trong một giao
+   * dịch — nên một chương công khai lẫn vào sẽ làm hỏng cả lệnh. Biết trước thì
+   * nút tự tắt, thay vì để người dùng bấm rồi nhận một lỗi không nói rõ chương nào.
+   */
+  const bulkPriceBlocked = useMemo(() => {
+    if ((Number(bulkPrice) || 0) <= 0) return false;
+    return chapters.some(
+      (chapter) => selected.includes(chapter.id) && chapter.accessLevel === "PUBLIC",
+    );
+  }, [chapters, selected, bulkPrice]);
 
   // "Select all" means all of what is on screen, not all of what exists — with
   // a filter applied, the other reading would tick rows nobody can see.
@@ -427,6 +578,13 @@ export default function AdminChaptersPage() {
               value={audioFilter}
               onChange={setAudioFilter}
             />
+
+            <FilterChips
+              label="Lọc theo giá Xu"
+              options={PRICE_FILTERS}
+              value={priceFilter}
+              onChange={setPriceFilter}
+            />
           </div>
 
           {/* Only appears once rows are ticked; an empty toolbar above every
@@ -449,6 +607,32 @@ export default function AdminChaptersPage() {
 
               <Button variant="primary" loading={bulkSaving} onClick={applyBulkLevel}>
                 Đổi mức khóa
+              </Button>
+
+              {/* Đặt giá cho cả lô — cách duy nhất hợp lý để khóa nửa sau của
+                  một truyện hai trăm chương. */}
+              <input
+                type="number"
+                min="0"
+                step="10"
+                className="nb-input admin-price-input"
+                aria-label="Giá Xu cho các chương đã chọn"
+                value={bulkPrice}
+                onChange={(event) => setBulkPrice(event.target.value)}
+              />
+
+              <Button
+                variant="primary"
+                loading={bulkPricing}
+                disabled={bulkPriceBlocked}
+                title={
+                  bulkPriceBlocked
+                    ? "Trong danh sách đã chọn có chương công khai — chương công khai không đặt giá được."
+                    : "Đặt giá Xu cho các chương đã chọn"
+                }
+                onClick={applyBulkPrice}
+              >
+                Đặt giá Xu
               </Button>
 
               {voices.length > 0 && (
@@ -488,6 +672,15 @@ export default function AdminChaptersPage() {
               {selected.length > MAX_BATCH && (
                 <span className="muted">Tạo audio tối đa {MAX_BATCH} chương mỗi lượt.</span>
               )}
+
+              {/* Nói trước thay vì để máy chủ từ chối cả lô: giao dịch bên đó là
+                  tất-cả-hoặc-không, nên một chương công khai lẫn vào sẽ làm hỏng
+                  cả lệnh mà không đặt được giá cho chương nào. */}
+              {bulkPriceBlocked && (
+                <span className="muted">
+                  Có chương công khai trong danh sách chọn — đổi mức khóa trước rồi mới đặt giá.
+                </span>
+              )}
             </div>
           )}
 
@@ -517,6 +710,7 @@ export default function AdminChaptersPage() {
                     <th>#</th>
                     <th>Tiêu đề</th>
                     <th>Mức khóa</th>
+                    <th>Giá Xu</th>
                     <th>Audio</th>
                     <th className="admin-cell-actions">Thao tác</th>
                   </tr>
@@ -560,6 +754,13 @@ export default function AdminChaptersPage() {
                               </option>
                             ))}
                           </Select>
+                        </td>
+                        <td>
+                          <PriceCell
+                            chapter={chapter}
+                            disabled={savingId === chapter.id}
+                            onCommit={(price) => handlePriceChange(chapter, price)}
+                          />
                         </td>
                         <td>
                           {audio?.processing ? (
@@ -620,7 +821,7 @@ export default function AdminChaptersPage() {
                     if (previewing === chapter.id && audio?.audioId) {
                       rows.push(
                         <tr key={`${chapter.id}-preview`} className="admin-row-preview">
-                          <td colSpan={6}>
+                          <td colSpan={7}>
                             <AudioPreview
                               streamUrl={`/api/chapters/${chapter.id}/audio/${audio.audioId}`}
                             />

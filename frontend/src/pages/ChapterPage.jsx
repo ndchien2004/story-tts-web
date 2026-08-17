@@ -8,6 +8,7 @@ import useKaraoke from "../audio/karaoke/useKaraoke";
 import AudioPlayer from "../components/AudioPlayer";
 import KaraokeText from "../components/KaraokeText";
 import LockedGate from "../components/LockedGate";
+import PurchaseReceipt from "../components/PurchaseReceipt";
 import ReaderSettings from "../components/ReaderSettings";
 import { useAuth } from "../context/auth-context";
 import useChapterAudio from "../hooks/useChapterAudio";
@@ -69,6 +70,22 @@ export default function ChapterPage() {
   const [lockError, setLockError] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Chương bán lẻ bằng Xu: giá, số dư và phần còn thiếu, lấy từ chính lần bị từ
+  // chối. Null nghĩa là chương này không nằm sau một cái giá nào.
+  const [purchase, setPurchase] = useState(null);
+  const [purchasing, setPurchasing] = useState(false);
+  const [purchaseError, setPurchaseError] = useState(null);
+
+  // Biên nhận sau khi vừa trả Xu. Sống độc lập với việc tải chương, vì nó phải ở
+  // lại trên màn hình trong lúc chương được tải sẵn phía sau.
+  const [receipt, setReceipt] = useState(null);
+
+  // Tăng lên sau khi mở khóa xong, để hiệu ứng tải chương chạy lại. Tải lại
+  // nguyên vẹn thay vì tự ghép nội dung vào trạng thái: máy chủ là bên quyết
+  // định ai đọc được gì, và một bản ghép ở trình duyệt là một bản sao của quyết
+  // định ấy có thể sai.
+  const [reloadKey, setReloadKey] = useState(0);
   const [autoContinue, setAutoContinue] = useState(
     () => localStorage.getItem(AUTO_CONTINUE_KEY) === "true",
   );
@@ -103,6 +120,12 @@ export default function ChapterPage() {
     setChapter(null);
     setLockError(null);
     setError(null);
+    setPurchase(null);
+    setPurchaseError(null);
+    // Nút mở khóa cố ý không tự tắt trạng thái chờ khi thành công: nó sống tới
+    // lúc chương tải xong. Đặt lại ở đây để nếu lần tải ấy vẫn bị từ chối thì
+    // màn hình mở khóa hiện ra với một cái nút bấm được, không phải nút quay mãi.
+    setPurchasing(false);
 
     chapterApi
       .detail(chapterId)
@@ -114,6 +137,17 @@ export default function ChapterPage() {
         // A locked chapter is an expected outcome, not a failure to report.
         if (err.isLocked) {
           setLockError(err);
+        } else if (err.isPurchaseRequired) {
+          // Chương bán lẻ: cũng là kết quả bình thường, và là kết quả duy nhất
+          // người đọc xử lý được ngay tại chỗ.
+          setPurchase({
+            coinPrice: Number(err.details?.coinPrice ?? 0),
+            balance: Number(err.details?.balance ?? 0),
+            shortfall: Math.max(
+              Number(err.details?.coinPrice ?? 0) - Number(err.details?.balance ?? 0),
+              0,
+            ),
+          });
         } else {
           setError(err.message);
         }
@@ -125,6 +159,61 @@ export default function ChapterPage() {
     return () => {
       cancelled = true;
     };
+  }, [chapterId, reloadKey]);
+
+  /**
+   * Trả Xu để mở chương, rồi tải lại chương như một lần mở bình thường.
+   *
+   * <p>Gọi trùng không tốn thêm Xu — máy chủ trả về ALREADY_OWNED thay vì trừ
+   * lần nữa — nên bấm hai lần hay trình duyệt tự gửi lại đều vô hại. Nút vẫn có
+   * trạng thái chờ, nhưng để người bấm biết máy đang làm việc, không phải để
+   * chặn lần bấm thứ hai.
+   */
+  const handlePurchase = useCallback(async () => {
+    setPurchasing(true);
+    setPurchaseError(null);
+    try {
+      const result = await chapterApi.purchase(chapterId);
+
+      /*
+       * Chỉ dựng biên nhận khi thật sự vừa trả tiền.
+       *
+       * Máy chủ trả về ALREADY_OWNED khi request bị gửi lại, và ALREADY_ACCESSIBLE
+       * khi người bấm vốn đã đọc được (VIP). Cả hai đều là thành công, nhưng
+       * không có đồng nào rời khỏi ví — dựng một tờ biên nhận "đã trừ 0 Xu" cho
+       * chúng là nói dối về một giao dịch chưa từng xảy ra.
+       */
+      if (result.outcome === "PURCHASED") {
+        setReceipt({ coinsSpent: result.coinsSpent, balance: result.balance });
+      }
+
+      // Không tự ghép nội dung vào trạng thái: hỏi lại máy chủ, vì đó mới là
+      // bên quyết định ai đọc được gì. Chạy ngay chứ không đợi người đọc bấm,
+      // để lúc họ bấm thì chương đã sẵn sàng.
+      setPurchase(null);
+      setReloadKey((value) => value + 1);
+    } catch (err) {
+      // Hết Xu giữa chừng (một tab khác vừa tiêu mất) trả về đúng giá và số dư
+      // mới, nên màn hình cập nhật lại thay vì chỉ báo lỗi.
+      if (err.isPurchaseRequired && err.details) {
+        const coinPrice = Number(err.details.coinPrice ?? 0);
+        const balance = Number(err.details.balance ?? 0);
+        setPurchase({ coinPrice, balance, shortfall: Math.max(coinPrice - balance, 0) });
+      }
+      setPurchaseError(err.message);
+      setPurchasing(false);
+    }
+  }, [chapterId]);
+
+  /*
+   * Biên nhận thuộc về đúng một lần mua, nên nó biến mất khi sang chương khác.
+   *
+   * Hiệu ứng riêng theo `chapterId` chứ không dọn chung với phần tải chương:
+   * phần ấy còn chạy lại theo `reloadKey`, mà chính lần chạy lại ấy là lần biên
+   * nhận cần ở lại trên màn hình.
+   */
+  useEffect(() => {
+    setReceipt(null);
   }, [chapterId]);
 
   useEffect(() => {
@@ -366,10 +455,50 @@ export default function ChapterPage() {
     }
   }, [audio, refreshTtsStatus]);
 
+  /*
+   * Biên nhận đứng trước cả nhánh "đang tải".
+   *
+   * Chương được tải lại ngay sau khi trả tiền, nên nếu để sau thì cái người đọc
+   * thấy đầu tiên sau cú bấm là một vòng quay — rồi thẳng vào chương, đúng cái
+   * im lặng vừa phải sửa. Đứng trước thì biên nhận hiện ra ngay, và việc tải
+   * diễn ra phía sau nó.
+   */
+  /*
+   * `!purchase && !error` không phải phòng xa suông: nếu lần tải lại sau khi trả
+   * tiền lại bị từ chối hoặc hỏng mạng, chương sẽ không bao giờ về, và một biên
+   * nhận có cái nút quay mãi là thứ tệ hơn hẳn không có biên nhận. Hai điều kiện
+   * ấy nhường màn hình lại cho nhánh biết cách nói chuyện gì đang xảy ra.
+   */
+  if (receipt && !purchase && !error) {
+    return (
+      <div className="container-narrow page">
+        <PurchaseReceipt
+          coinsSpent={receipt.coinsSpent}
+          balance={receipt.balance}
+          loading={loading || !chapter}
+          onContinue={() => setReceipt(null)}
+        />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="page">
         <Spinner label="Đang tải chương…" />
+      </div>
+    );
+  }
+
+  if (purchase) {
+    return (
+      <div className="container-narrow page">
+        <LockedGate
+          purchase={purchase}
+          onPurchase={handlePurchase}
+          purchasing={purchasing}
+          purchaseError={purchaseError}
+        />
       </div>
     );
   }

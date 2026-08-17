@@ -105,18 +105,36 @@ client.interceptors.response.use(
 );
 
 export class ApiError extends Error {
-  constructor({ status, code, message, requiredAccessLevel, fieldErrors }) {
+  constructor({ status, code, message, requiredAccessLevel, fieldErrors, details }) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.requiredAccessLevel = requiredAccessLevel ?? null;
     this.fieldErrors = fieldErrors ?? null;
+
+    /**
+     * Numbers the screen needs to render the refusal — the chapter's coin price
+     * and the reader's balance, for instance. Separate from `fieldErrors`, which
+     * is about a form the user filled in wrong.
+     */
+    this.details = details ?? null;
   }
 
-  /** True when the server refused because the chapter is locked. */
+  /** True when the server refused because the chapter is locked behind a rank. */
   get isLocked() {
     return this.status === 403 && this.requiredAccessLevel !== null;
+  }
+
+  /**
+   * True when the chapter is behind a coin price the reader can actually pay.
+   *
+   * A separate question from `isLocked`, and the difference matters on screen:
+   * a rank lock is a dead end that sends people to the upgrade page, while this
+   * one has a button right there.
+   */
+  get isPurchaseRequired() {
+    return this.status === 402;
   }
 }
 
@@ -129,6 +147,7 @@ function toApiError(error) {
       message: data?.message ?? "Đã có lỗi xảy ra. Vui lòng thử lại.",
       requiredAccessLevel: data?.requiredAccessLevel,
       fieldErrors: data?.fieldErrors,
+      details: data?.details,
     });
   }
 

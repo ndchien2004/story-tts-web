@@ -10,6 +10,9 @@ import java.time.Instant;
  *
  * @param locked        true nếu người dùng hiện tại KHÔNG đủ quyền → frontend hiện icon 🔒
  * @param requirementLabel nhãn tiếng Việt để hiện kèm icon, ví dụ "Yêu cầu VIP"
+ * @param purchasable   khóa này mở được bằng Xu → frontend hiện nút thay vì chỉ cái ổ khóa.
+ *                      Chỉ đúng khi {@code locked} cũng đúng.
+ * @param coinPrice     giá mở khóa; 0 nghĩa là chương không bán lẻ
  */
 public record ChapterSummaryDto(
         Long id,
@@ -19,6 +22,8 @@ public record ChapterSummaryDto(
         String accessLevel,
         String requirementLabel,
         boolean locked,
+        boolean purchasable,
+        long coinPrice,
         boolean hasAudio,
         long viewCount,
         Instant createdAt

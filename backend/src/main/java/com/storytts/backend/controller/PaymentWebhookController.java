@@ -1,7 +1,7 @@
 package com.storytts.backend.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.storytts.backend.service.VipOrderService;
+import com.storytts.backend.service.PaymentOrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +18,7 @@ import java.util.Map;
  *
  * <p>Endpoint này để mở ở tầng URL vì PayOS không mang theo JWT nào cả. Thứ
  * chặn người lạ là chữ ký HMAC trong body, được đối chiếu trong
- * {@code VipOrderService#handleWebhook} trước khi bất cứ điều gì được ghi.
+ * {@code PaymentOrderService#handleWebhook} trước khi bất cứ điều gì được ghi.
  *
  * <p>Luôn trả về HTTP 200, kể cả khi bỏ qua: PayOS coi mã lỗi là tín hiệu để
  * gửi lại, và gửi lại mãi một payload đã bị từ chối thì chẳng ích gì. Kết quả
@@ -31,7 +31,7 @@ import java.util.Map;
 @Tag(name = "Thanh toán", description = "Webhook PayOS")
 public class PaymentWebhookController {
 
-    private final VipOrderService orderService;
+    private final PaymentOrderService orderService;
 
     @PostMapping("/webhook")
     @Operation(summary = "PayOS gọi về khi một đơn đổi trạng thái")

@@ -1,9 +1,9 @@
 package com.storytts.backend.controller;
 
-import com.storytts.backend.dto.vip.VipOrderDto;
+import com.storytts.backend.dto.payment.PaymentOrderDto;
 import com.storytts.backend.dto.vip.VipPlanDto;
 import com.storytts.backend.dto.vip.VipStatusDto;
-import com.storytts.backend.service.VipOrderService;
+import com.storytts.backend.service.PaymentOrderService;
 import com.storytts.backend.service.VipPlanService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,7 +27,7 @@ import java.util.List;
 public class VipController {
 
     private final VipPlanService planService;
-    private final VipOrderService orderService;
+    private final PaymentOrderService orderService;
 
     @GetMapping("/plans")
     @Operation(summary = "Các gói VIP đang bán")
@@ -43,25 +43,25 @@ public class VipController {
 
     @GetMapping("/orders")
     @Operation(summary = "Các đơn nâng cấp gần đây của chính mình")
-    public List<VipOrderDto> myOrders() {
+    public List<PaymentOrderDto> myOrders() {
         return orderService.myOrders();
     }
 
     @PostMapping("/orders")
     @Operation(summary = "Tạo đơn và lấy link thanh toán PayOS")
-    public VipOrderDto createOrder(@RequestBody CreateOrderRequest request) {
-        return orderService.createOrder(request.planId());
+    public PaymentOrderDto createOrder(@RequestBody CreateOrderRequest request) {
+        return orderService.createVipOrder(request.planId());
     }
 
     @GetMapping("/orders/{orderCode}")
     @Operation(summary = "Tra cứu một đơn; đơn còn treo sẽ được hỏi lại cổng thanh toán")
-    public VipOrderDto checkOrder(@PathVariable Long orderCode) {
+    public PaymentOrderDto checkOrder(@PathVariable Long orderCode) {
         return orderService.checkMyOrder(orderCode);
     }
 
     @PostMapping("/orders/{orderCode}/cancel")
     @Operation(summary = "Hủy một đơn chưa thanh toán")
-    public VipOrderDto cancelOrder(@PathVariable Long orderCode) {
+    public PaymentOrderDto cancelOrder(@PathVariable Long orderCode) {
         return orderService.cancelMyOrder(orderCode);
     }
 

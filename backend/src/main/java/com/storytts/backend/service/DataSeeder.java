@@ -44,6 +44,7 @@ public class DataSeeder implements ApplicationRunner {
     private final ChapterRepository chapterRepository;
     private final RatingCommentRepository ratingCommentRepository;
     private final VipPlanRepository vipPlanRepository;
+    private final CoinPackageRepository coinPackageRepository;
     private final ViewEventRepository viewEventRepository;
     private final PasswordEncoder passwordEncoder;
     private final AdminProperties adminProperties;
@@ -71,7 +72,38 @@ public class DataSeeder implements ApplicationRunner {
         List<User> readers = seedReaders();
         seedDiscussion(readers);
         seedVipPlans();
+        seedCoinPackages();
         seedTraffic(readers);
+    }
+
+    /**
+     * Ba gói nạp mở hàng, để trang nạp Xu không trống trơn ở lần chạy đầu.
+     *
+     * <p>Cùng quy tắc với {@link #seedVipPlans()}: chỉ chạy khi bảng còn rỗng, vì
+     * giá là thứ Admin sẽ sửa và không có gì khó chịu bằng việc nó tự quay về mặc
+     * định sau mỗi lần khởi động lại.
+     *
+     * <p>Gói lớn có Xu tặng thêm — đó là toàn bộ lý do cột {@code bonusCoins} tồn
+     * tại, và để sẵn một ví dụ ở đây thì người đọc mã nguồn thấy ngay nó dùng để
+     * làm gì.
+     */
+    private void seedCoinPackages() {
+        if (coinPackageRepository.count() > 0) {
+            return;
+        }
+
+        coinPackageRepository.saveAll(List.of(
+                CoinPackage.builder().name("Gói 10.000đ").priceVnd(10_000).coins(100)
+                        .description("100 Xu, đủ mở vài chương.")
+                        .sortOrder(1).build(),
+                CoinPackage.builder().name("Gói 50.000đ").priceVnd(50_000).coins(500).bonusCoins(50)
+                        .description("500 Xu, tặng thêm 50 Xu.")
+                        .sortOrder(2).build(),
+                CoinPackage.builder().name("Gói 100.000đ").priceVnd(100_000).coins(1_000).bonusCoins(200)
+                        .description("1.000 Xu, tặng thêm 200 Xu — lợi nhất tính theo Xu.")
+                        .sortOrder(3).build()));
+
+        log.info("Đã tạo 3 gói nạp Xu mẫu");
     }
 
     /**

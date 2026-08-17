@@ -52,6 +52,27 @@ public class Chapter {
     @Builder.Default
     private AccessLevel accessLevel = AccessLevel.PUBLIC;
 
+    /**
+     * Giá mở chương bằng Xu. 0 nghĩa là không bán lẻ — đây là mặc định.
+     *
+     * <p>Cột này <b>không</b> thay thế {@link #accessLevel}; nó vuông góc với
+     * accessLevel, và đó là chủ ý. Hai cột trả lời hai câu khác nhau:
+     * accessLevel nói ai được phép nhìn tới chương, coinPrice nói mở nó tốn bao
+     * nhiêu. Trộn chúng vào một enum thì mỗi cách bán mới lại nhân đôi số giá trị
+     * (VIP, COIN, VIP_HOẶC_COIN, MEMBER_VÀ_COIN…).
+     *
+     * <p>Để rời nhau thì bốn trạng thái cần đến rơi ra tự nhiên:
+     * {@code PUBLIC+0} là đọc tự do, {@code MEMBER+0} cần đăng nhập,
+     * {@code VIP+0} là chỉ VIP (đúng hành vi cũ), và {@code VIP+50} là VIP đọc
+     * miễn phí còn người thường trả 50 Xu.
+     *
+     * <p>Mọi chương đã có đều mang giá 0, nên không chương nào đổi hành vi vì
+     * tính năng này. Xem {@code ChapterAccessService}.
+     */
+    @Column(name = "coin_price", nullable = false)
+    @Builder.Default
+    private long coinPrice = 0L;
+
     @Column(name = "view_count", nullable = false)
     @Builder.Default
     private long viewCount = 0L;

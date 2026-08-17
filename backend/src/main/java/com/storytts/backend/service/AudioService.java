@@ -28,7 +28,7 @@ import java.util.Set;
 /**
  * Serves and manages chapter audio.
  *
- * Every read path calls {@link AccessControlService#requireAccess(Chapter)}
+ * Every read path calls {@link ChapterAccessService#requireAccess(Chapter)}
  * first, so a locked chapter cannot be listened to even if the caller knows the
  * audio id.
  *
@@ -52,7 +52,7 @@ public class AudioService {
     private final AudioTranscriptRepository audioTranscriptRepository;
     private final TranscriptCodec transcriptCodec;
     private final ChapterService chapterService;
-    private final AccessControlService accessControlService;
+    private final ChapterAccessService chapterAccessService;
     private final StorageService storageService;
     private final ViewEventService viewEventService;
     private final CurrentUserService currentUserService;
@@ -81,7 +81,7 @@ public class AudioService {
     @Transactional
     public List<AudioInfoDto> listForChapter(Long chapterId) {
         Chapter chapter = chapterService.findDetailEntity(chapterId);
-        accessControlService.requireAccess(chapter);
+        chapterAccessService.requireAccess(chapter);
 
         // Một lượt nghe được tính ở đây chứ không ở endpoint stream: trình phát gọi
         // stream nhiều lần cho mỗi lần tua, còn danh sách track thì chỉ hỏi một lần
@@ -109,7 +109,7 @@ public class AudioService {
     @Transactional(readOnly = true)
     public AudioInfoDto trackStatus(Long chapterId, Long audioId) {
         Chapter chapter = chapterService.findDetailEntity(chapterId);
-        accessControlService.requireAccess(chapter);
+        chapterAccessService.requireAccess(chapter);
 
         AudioFile audio = audioFileRepository.findById(audioId)
                 .orElseThrow(() -> ResourceNotFoundException.of("file audio", audioId));
@@ -136,7 +136,7 @@ public class AudioService {
     @Transactional(readOnly = true)
     public ChapterTranscriptDto transcript(Long chapterId, Long audioId) {
         Chapter chapter = chapterService.findDetailEntity(chapterId);
-        accessControlService.requireAccess(chapter);
+        chapterAccessService.requireAccess(chapter);
 
         AudioFile audio = audioFileRepository.findById(audioId)
                 .orElseThrow(() -> ResourceNotFoundException.of("file audio", audioId));
@@ -169,7 +169,7 @@ public class AudioService {
     @Transactional(readOnly = true)
     public StreamHandle openForStreaming(Long chapterId, Long audioId) {
         Chapter chapter = chapterService.findDetailEntity(chapterId);
-        accessControlService.requireAccess(chapter);
+        chapterAccessService.requireAccess(chapter);
 
         AudioFile audio = audioFileRepository.findById(audioId)
                 .orElseThrow(() -> ResourceNotFoundException.of("file audio", audioId));

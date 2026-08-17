@@ -43,8 +43,45 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 request.getRequestURI(),
                 ex.getRequiredAccessLevel().name(),
+                null,
                 null);
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
+    /**
+     * Chương có giá Xu mà người đọc chưa mở → 402, kèm giá và số dư.
+     *
+     * <p>Mã riêng chứ không dùng chung 403 với {@code CHAPTER_LOCKED}: hai tình
+     * huống dẫn tới hai màn hình khác hẳn nhau. 403 là ngõ cụt; 402 có một nút bấm
+     * ngay tại chỗ, và câu trả lời mang theo đủ số liệu để dựng nút ấy.
+     */
+    @ExceptionHandler(ChapterPurchaseRequiredException.class)
+    public ResponseEntity<ApiErrorResponse> handlePurchaseRequired(ChapterPurchaseRequiredException ex,
+                                                                   HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
+                .body(ApiErrorResponse.withDetails(
+                        HttpStatus.PAYMENT_REQUIRED.value(),
+                        "CHAPTER_PURCHASE_REQUIRED",
+                        ex.getMessage(),
+                        request.getRequestURI(),
+                        Map.of("coinPrice", ex.getCoinPrice(),
+                                "balance", ex.getBalance(),
+                                "affordable", ex.affordable())));
+    }
+
+    /** Bấm mở khóa nhưng không đủ Xu → cũng là 402, cùng hình dạng dữ liệu. */
+    @ExceptionHandler(InsufficientCoinsException.class)
+    public ResponseEntity<ApiErrorResponse> handleInsufficientCoins(InsufficientCoinsException ex,
+                                                                     HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
+                .body(ApiErrorResponse.withDetails(
+                        HttpStatus.PAYMENT_REQUIRED.value(),
+                        "INSUFFICIENT_COINS",
+                        ex.getMessage(),
+                        request.getRequestURI(),
+                        Map.of("coinPrice", ex.getRequired(),
+                                "balance", ex.getBalance(),
+                                "affordable", false)));
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -115,7 +152,8 @@ public class GlobalExceptionHandler {
                 "Dữ liệu gửi lên không hợp lệ.",
                 request.getRequestURI(),
                 null,
-                fieldErrors);
+                fieldErrors,
+                null);
         return ResponseEntity.badRequest().body(body);
     }
 

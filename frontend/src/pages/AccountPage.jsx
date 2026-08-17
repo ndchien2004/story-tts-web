@@ -1,22 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { favoriteApi, progressApi, vipApi } from "../api/endpoints";
+import { favoriteApi, progressApi, vipApi, walletApi } from "../api/endpoints";
 import Avatar from "../components/Avatar";
 import AvatarUpload from "../components/AvatarUpload";
 import Pagination from "../components/Pagination";
 import StoryCard from "../components/StoryCard";
 import { useAuth } from "../context/auth-context";
-import { formatDate, formatDateTime, formatVnd } from "../utils/format";
+import { formatCoinDelta, formatCoins, formatDate, formatDateTime, formatVnd } from "../utils/format";
 import { Alert, Badge, Button, ButtonLink, EmptyState, Spinner } from "../components/ui";
 
 const TABS = [
   { id: "reading", label: "Đang đọc dở" },
   { id: "finished", label: "Đã đọc xong" },
   { id: "favorites", label: "Yêu thích" },
-  { id: "orders", label: "Đơn nâng cấp" },
+  { id: "wallet", label: "Lịch sử Xu" },
+  { id: "orders", label: "Đơn đã mua" },
 ];
 
 const FAVORITES_PAGE_SIZE = 12;
+const WALLET_PAGE_SIZE = 20;
 
 function formatWhen(value) {
   if (!value) return "";
@@ -50,6 +52,27 @@ export default function AccountPage() {
   const [favorites, setFavorites] = useState(null);
   const [favoritesError, setFavoritesError] = useState(null);
   const [loadingFavorites, setLoadingFavorites] = useState(true);
+
+  // Số dư nằm ở cột hồ sơ nên phải tải cùng trang, không đợi mở tab.
+  const [balance, setBalance] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    walletApi
+      .balance()
+      .then((data) => {
+        if (!cancelled) setBalance(data.balance);
+      })
+      // Ví hỏng không được làm hỏng cả trang tài khoản: chỗ số dư hiện dấu ba
+      // chấm, phần còn lại vẫn dùng bình thường.
+      .catch(() => {
+        if (!cancelled) setBalance(0);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +161,20 @@ export default function AccountPage() {
           </div>
         </dl>
 
+        {/* Ví đứng riêng khỏi bảng thông tin: số dư là thứ thay đổi và là thứ
+            người ta tới đây để xem, còn email với ngày tham gia thì không. */}
+        <div className="wallet-panel">
+          <div className="wallet-panel-head">
+            <span className="label">Ví Xu</span>
+            <strong className="wallet-balance tabular-num">
+              {balance === null ? "…" : formatCoins(balance)}
+            </strong>
+          </div>
+          <ButtonLink to="/nap-xu" size="sm" block>
+            Nạp Xu
+          </ButtonLink>
+        </div>
+
         {!isAdmin && !isVip && (
           <Alert tone="info">
             Tài khoản thường đọc được chương công khai và chương dành cho thành viên. Chương VIP cần
@@ -197,6 +234,8 @@ export default function AccountPage() {
             />
           )}
 
+          {tab === "wallet" && <WalletHistory balance={balance} />}
+
           {tab === "orders" && <OrderList />}
 
           {tab === "favorites" && (
@@ -238,6 +277,84 @@ const ORDER_TONE = {
   CANCELLED: "neutral",
   EXPIRED: "neutral",
 };
+
+/**
+ * Sổ cái Xu của chính người đọc.
+ *
+ * <p>Mỗi dòng nói số dư đi từ đâu sang đâu, không chỉ nói cộng hay trừ bao nhiêu.
+ * Đó là thứ khiến người dùng tự đối chiếu được khi thấy số dư lạ — và một câu hỏi
+ * tự trả lời được là một câu hỏi không đến hộp thư hỗ trợ.
+ */
+function WalletHistory({ balance }) {
+  const [page, setPage] = useState(0);
+  const [history, setHistory] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    walletApi
+      .transactions({ page, size: WALLET_PAGE_SIZE })
+      .then((data) => {
+        if (!cancelled) {
+          setHistory(data);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page]);
+
+  if (error) return <Alert tone="error">{error}</Alert>;
+  if (!history) return <Spinner label="Đang tải lịch sử Xu…" />;
+
+  if (history.content.length === 0) {
+    return (
+      <EmptyState title="Chưa có giao dịch Xu nào">
+        Xu dùng để mở khóa từng chương. <Link to="/nap-xu">Nạp Xu</Link> rồi mọi lần cộng trừ sẽ
+        được ghi lại đầy đủ ở đây.
+      </EmptyState>
+    );
+  }
+
+  return (
+    <div className="stack" style={{ gap: "var(--space-4)" }}>
+      <p className="muted">
+        Số dư hiện tại: <strong className="tabular-num">{formatCoins(balance ?? 0)}</strong>
+      </p>
+
+      <ul className="wallet-log">
+        {history.content.map((tx) => (
+          <li key={tx.id} className="wallet-log-row">
+            <div className="wallet-log-main">
+              <strong>{tx.description || tx.typeLabel}</strong>
+              <span className="muted">
+                {tx.typeLabel} · {formatDateTime(tx.createdAt)}
+              </span>
+            </div>
+
+            <div className="wallet-log-amounts">
+              <span
+                className={`wallet-log-delta tabular-num ${tx.amount < 0 ? "spend" : "earn"}`}
+              >
+                {formatCoinDelta(tx.amount)}
+              </span>
+              {/* Số dư sau giao dịch, để dò lại một chuỗi cộng trừ mà không phải
+                  tự cộng nhẩm từ đầu lịch sử. */}
+              <span className="muted tabular-num">còn {formatCoins(tx.balanceAfter)}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <Pagination page={history.page} totalPages={history.totalPages} onChange={setPage} />
+    </div>
+  );
+}
 
 /**
  * The reader's own VIP orders.
@@ -345,8 +462,14 @@ function OrderList() {
           <li key={order.orderCode} className="order-card">
             <div className="order-card-head">
               <div>
-                <strong>{order.planName}</strong>
-                <span className="muted"> · {order.months} tháng</span>
+                <strong>{order.itemName}</strong>
+                <span className="muted">
+                  {order.kind === "COIN_PACKAGE"
+                    ? ` · ${formatCoins(order.coinsGranted)}`
+                    : order.months
+                      ? ` · ${order.months} tháng`
+                      : ""}
+                </span>
               </div>
               <Badge tone={ORDER_TONE[order.status] ?? "neutral"}>{order.statusLabel}</Badge>
             </div>

@@ -9,7 +9,7 @@ import com.storytts.backend.exception.ChapterLockedException;
 import com.storytts.backend.exception.TtsException;
 import com.storytts.backend.exception.TtsQuotaExceededException;
 import com.storytts.backend.repository.AudioFileRepository;
-import com.storytts.backend.service.AccessControlService;
+import com.storytts.backend.service.ChapterAccessService;
 import com.storytts.backend.service.ChapterService;
 import com.storytts.backend.service.StorageService;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,7 +52,7 @@ class TtsServiceTest {
     @Mock
     private ChapterService chapterService;
     @Mock
-    private AccessControlService accessControlService;
+    private ChapterAccessService chapterAccessService;
     @Mock
     private AudioFileRepository audioFileRepository;
     @Mock
@@ -68,7 +68,7 @@ class TtsServiceTest {
     @BeforeEach
     void setUp() {
         properties = enabledProperties();
-        ttsService = new TtsService(chapterService, accessControlService, audioFileRepository,
+        ttsService = new TtsService(chapterService, chapterAccessService, audioFileRepository,
                 storageService, properties, ttsEngine, eventPublisher);
 
         when(ttsEngine.hasAnyProvider()).thenReturn(true);
@@ -88,7 +88,7 @@ class TtsServiceTest {
     @Test
     @DisplayName("Máy chủ tắt TTS → báo lỗi rõ ràng, không đụng tới cơ sở dữ liệu")
     void tatTtsThiBaoLoi() {
-        ttsService = new TtsService(chapterService, accessControlService, audioFileRepository,
+        ttsService = new TtsService(chapterService, chapterAccessService, audioFileRepository,
                 storageService, disabledProperties(), ttsEngine, eventPublisher);
 
         assertThatThrownBy(() -> ttsService.requestForChapter(CHAPTER_ID, null))
@@ -117,7 +117,7 @@ class TtsServiceTest {
     void chuongBiKhoaThiKhongTaoAudio() {
         when(chapterService.findDetailEntity(CHAPTER_ID)).thenReturn(chapter(AccessLevel.VIP));
         doThrow(new ChapterLockedException(AccessLevel.VIP, true))
-                .when(accessControlService).requireAccess(any(Chapter.class));
+                .when(chapterAccessService).requireAccess(any(Chapter.class));
 
         assertThatThrownBy(() -> ttsService.requestForChapter(CHAPTER_ID, null))
                 .isInstanceOf(ChapterLockedException.class);
@@ -132,7 +132,7 @@ class TtsServiceTest {
     @DisplayName("Quyền được kiểm TRƯỚC khi tra cache")
     void kiemQuyenTruocKhiTraCache() {
         doThrow(new ChapterLockedException(AccessLevel.MEMBER, false))
-                .when(accessControlService).requireAccess(any(Chapter.class));
+                .when(chapterAccessService).requireAccess(any(Chapter.class));
 
         assertThatThrownBy(() -> ttsService.requestForChapter(CHAPTER_ID, null))
                 .isInstanceOf(ChapterLockedException.class);
@@ -308,8 +308,8 @@ class TtsServiceTest {
 
         ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(VOICE, 0), budget);
 
-        InOrder order = inOrder(accessControlService, audioFileRepository, eventPublisher);
-        order.verify(accessControlService).requireAccess(any(Chapter.class));
+        InOrder order = inOrder(chapterAccessService, audioFileRepository, eventPublisher);
+        order.verify(chapterAccessService).requireAccess(any(Chapter.class));
         order.verify(audioFileRepository).findTtsCache(CHAPTER_ID, VOICE, 0, null);
         order.verify(audioFileRepository).save(any(AudioFile.class));
         order.verify(eventPublisher).publishEvent(any(TtsGenerationRequested.class));

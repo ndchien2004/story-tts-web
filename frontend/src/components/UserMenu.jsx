@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { walletApi } from "../api/endpoints";
 import { useAuth } from "../context/auth-context";
 import Avatar from "./Avatar";
 
@@ -46,6 +47,13 @@ const ConsoleIcon = () => (
   </svg>
 );
 
+const CoinIcon = () => (
+  <svg {...icon}>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M12 8.2v7.6M9.9 10.1h3.2a1.9 1.9 0 0 1 0 3.8H9.9" />
+  </svg>
+);
+
 const LogoutIcon = () => (
   <svg {...icon}>
     <path d="M14.5 8V5.8a1.8 1.8 0 0 0-1.8-1.8H6.3A1.8 1.8 0 0 0 4.5 5.8v12.4A1.8 1.8 0 0 0 6.3 20h6.4a1.8 1.8 0 0 0 1.8-1.8V16" />
@@ -68,9 +76,34 @@ const LogoutIcon = () => (
 export default function UserMenu({ onNavigate }) {
   const { user, isAdmin, isVip, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const [balance, setBalance] = useState(null);
   const containerRef = useRef(null);
   const triggerRef = useRef(null);
   const navigate = useNavigate();
+
+  /*
+   * Số dư chỉ được hỏi khi menu mở ra, và hỏi lại mỗi lần mở.
+   *
+   * Hỏi lúc dựng thanh điều hướng nghĩa là mỗi lần tải trang đều thêm một lượt
+   * gọi cho một con số phần lớn thời gian không ai nhìn. Hỏi lại mỗi lần mở thì
+   * con số luôn đúng ngay sau khi vừa mở khóa một chương ở tab khác.
+   */
+  useEffect(() => {
+    if (!open) return undefined;
+
+    let cancelled = false;
+    walletApi
+      .balance()
+      .then((data) => {
+        if (!cancelled) setBalance(data.balance);
+      })
+      // Ví hỏng thì menu vẫn phải mở được; chỉ là không có con số nào để hiện.
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -167,6 +200,18 @@ export default function UserMenu({ onNavigate }) {
           <Link to="/tu-truyen" className="user-menu-item" role="menuitem" onClick={close}>
             <ShelfIcon />
             Tủ truyện
+          </Link>
+
+          {/* Ví hiện cho mọi người, kể cả VIP: Xu không mất đi khi hết hạn VIP,
+              và người từng nạp có quyền xem lại số dư của mình bất cứ lúc nào. */}
+          <Link to="/nap-xu" className="user-menu-item" role="menuitem" onClick={close}>
+            <CoinIcon />
+            Ví Xu
+            {balance !== null && (
+              <span className="user-menu-balance tabular-num">
+                {balance.toLocaleString("vi-VN")}
+              </span>
+            )}
           </Link>
 
           {/* Hidden from admins and from anyone already VIP: neither has

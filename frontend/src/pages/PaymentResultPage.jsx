@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { vipApi } from "../api/endpoints";
 import { useAuth } from "../context/auth-context";
 import { Alert, Button, ButtonLink, Spinner } from "../components/ui";
-import { formatDate, formatVnd } from "../utils/format";
+import { formatCoins, formatDate, formatVnd } from "../utils/format";
 
 /** How many times to re-ask before letting the reader drive. */
 const MAX_POLLS = 5;
@@ -19,6 +19,11 @@ const POLL_MS = 2000;
  *
  * Payment confirmation normally arrives by webhook, which can land a moment
  * after the browser does, hence the short poll rather than a single check.
+ *
+ * <h3>Một trang cho cả hai thứ bán được</h3>
+ * Gói VIP và gói Xu đi qua cùng một cổng và cùng một bảng đơn, nên đường tra cứu
+ * cũng chung — {@code vipApi.checkOrder} nhận mọi mã đơn, không riêng đơn VIP.
+ * Trang này chỉ rẽ nhánh ở hai chỗ: câu nói khi thành công, và nút dẫn đi tiếp.
  */
 export default function PaymentResultPage() {
   const [params] = useSearchParams();
@@ -86,6 +91,10 @@ export default function PaymentResultPage() {
   const paid = order?.status === "PAID";
   const stillPending = order?.status === "PENDING";
 
+  // Cùng một đơn, cùng một cổng, khác thứ vừa mua — nên trang này chỉ rẽ nhánh ở
+  // câu nói kết quả và ở nút dẫn đi tiếp.
+  const isCoinOrder = order?.kind === "COIN_PACKAGE";
+
   return (
     <div className="container-narrow stack" style={{ gap: "var(--space-5)" }}>
       <header className="stack" style={{ gap: "var(--space-2)" }}>
@@ -112,7 +121,12 @@ export default function PaymentResultPage() {
           <div>
             <dt>Gói</dt>
             <dd>
-              {order.planName} · {order.months} tháng
+              {order.itemName}
+              {isCoinOrder
+                ? ` · ${formatCoins(order.coinsGranted)}`
+                : order.months
+                  ? ` · ${order.months} tháng`
+                  : ""}
             </dd>
           </div>
           <div>
@@ -126,7 +140,14 @@ export default function PaymentResultPage() {
         </dl>
       )}
 
-      {!polling && paid && (
+      {!polling && paid && isCoinOrder && (
+        <Alert tone="success">
+          Đã cộng <strong>{formatCoins(order.coinsGranted)}</strong> vào ví của bạn. Số Xu này dùng
+          để mở khóa từng chương và không có hạn sử dụng.
+        </Alert>
+      )}
+
+      {!polling && paid && !isCoinOrder && (
         <Alert tone="success">
           Tài khoản của bạn là VIP tới hết ngày <strong>{formatDate(order.vipUntilAfter)}</strong>.
           Mọi chương VIP đã mở khóa.
@@ -136,7 +157,7 @@ export default function PaymentResultPage() {
       {!polling && stillPending && !cancelled && (
         <Alert tone="warning">
           Ngân hàng có thể cần thêm một chút thời gian. Nếu bạn đã chuyển khoản, hãy bấm kiểm tra
-          lại sau ít phút — hạn VIP sẽ được cộng ngay khi tiền về.
+          lại sau ít phút — {isCoinOrder ? "Xu" : "hạn VIP"} sẽ được cộng ngay khi tiền về.
         </Alert>
       )}
 
@@ -174,7 +195,9 @@ export default function PaymentResultPage() {
         )}
 
         <ButtonLink to="/tai-khoan">Về trang tài khoản</ButtonLink>
-        {!paid && <ButtonLink to="/nang-cap">Xem lại bảng giá</ButtonLink>}
+        {!paid && (
+          <ButtonLink to={isCoinOrder ? "/nap-xu" : "/nang-cap"}>Xem lại bảng giá</ButtonLink>
+        )}
       </div>
     </div>
   );

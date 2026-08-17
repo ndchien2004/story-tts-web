@@ -6,6 +6,7 @@ import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
 import com.storytts.backend.domain.ReadingProgress;
 import com.storytts.backend.domain.Story;
+import com.storytts.backend.dto.chapter.ChapterAccessDto;
 import com.storytts.backend.dto.chapter.ChapterDetailDto;
 import com.storytts.backend.dto.chapter.ChapterRequest;
 import com.storytts.backend.dto.chapter.ChapterSummaryDto;
@@ -26,7 +27,7 @@ import java.util.Set;
 
 /**
  * Nghiệp vụ chương truyện.
- * Mọi đường vào nội dung chương đều gọi {@link AccessControlService} trước.
+ * Mọi đường vào nội dung chương đều gọi {@link ChapterAccessService} trước.
  */
 @Service
 @RequiredArgsConstructor
@@ -36,7 +37,7 @@ public class ChapterService {
     private final ChapterRepository chapterRepository;
     private final StoryRepository storyRepository;
     private final AudioFileRepository audioFileRepository;
-    private final AccessControlService accessControlService;
+    private final ChapterAccessService chapterAccessService;
 
     // Đọc thẳng repository chứ không qua ReadingProgressService: lớp đó đã phụ
     // thuộc vào ChapterService, gọi ngược lại sẽ thành vòng phụ thuộc bean.
@@ -61,7 +62,30 @@ public class ChapterService {
         List<Long> chapterIds = chapters.stream().map(Chapter::getId).toList();
         Set<Long> withAudio = new HashSet<>(audioFileRepository.findChapterIdsWithReadyAudio(chapterIds));
 
-        return chapters.stream().map(chapter -> toSummary(chapter, storyId, withAudio.contains(chapter.getId()))).toList();
+        // Một câu hỏi quyền cho cả danh sách. Hỏi từng dòng thì một truyện hai
+        // trăm chương là hai trăm câu truy vấn cho một lần mở trang.
+        Set<Long> owned = chapterAccessService.ownedAmong(chapterIds);
+
+        return chapters.stream()
+                .map(chapter -> toSummary(chapter, storyId,
+                        withAudio.contains(chapter.getId()), owned.contains(chapter.getId())))
+                .toList();
+    }
+
+    /**
+     * Quyền đọc một chương của người đang gọi, kèm giá và số dư.
+     *
+     * <p>Trang đọc hỏi cái này <i>trước</i> khi thử tải nội dung, để dựng đúng màn
+     * hình ngay từ đầu thay vì gọi vào đường đọc rồi đọc mã lỗi trả về.
+     */
+    @Transactional(readOnly = true)
+    public ChapterAccessDto accessInfo(Long chapterId) {
+        Chapter chapter = findDetailEntity(chapterId);
+        return ChapterAccessDto.of(
+                chapterId,
+                chapterAccessService.decide(chapter),
+                chapter.getCoinPrice(),
+                chapterAccessService.balanceOfCaller());
     }
 
     /**
@@ -74,7 +98,7 @@ public class ChapterService {
         Chapter chapter = findDetailEntity(chapterId);
 
         // >>> Chốt chặn quyền truy cập <<<
-        accessControlService.requireAccess(chapter);
+        chapterAccessService.requireAccess(chapter);
 
         Story story = chapter.getStory();
 
@@ -164,6 +188,8 @@ public class ChapterService {
             chapter.setChapterNumber(request.chapterNumber());
         }
 
+        requirePriceableLevel(request.accessLevel(), chapter.getCoinPrice());
+
         chapter.setTitle(request.title().trim());
         chapter.setContent(request.content());
         chapter.setAccessLevel(request.accessLevel());
@@ -184,6 +210,7 @@ public class ChapterService {
     @Transactional
     public ChapterSummaryDto changeAccessLevel(Long chapterId, AccessLevel accessLevel) {
         Chapter chapter = findDetailEntity(chapterId);
+        requirePriceableLevel(accessLevel, chapter.getCoinPrice());
         chapter.setAccessLevel(accessLevel);
         Chapter saved = chapterRepository.save(chapter);
         log.info("Admin đổi mức truy cập chương {} thành {}", chapterId, accessLevel);
@@ -211,11 +238,73 @@ public class ChapterService {
             throw new ResourceNotFoundException("Có chương trong danh sách không còn tồn tại.");
         }
 
-        chapters.forEach(chapter -> chapter.setAccessLevel(accessLevel));
+        chapters.forEach(chapter -> {
+            requirePriceableLevel(accessLevel, chapter.getCoinPrice());
+            chapter.setAccessLevel(accessLevel);
+        });
         chapterRepository.saveAll(chapters);
 
         log.info("Admin đổi mức truy cập {} chương thành {}", chapters.size(), accessLevel);
         return chapters.size();
+    }
+
+    /**
+     * Đặt giá Xu cho một chương. 0 nghĩa là ngừng bán lẻ.
+     *
+     * <p>Chương công khai không được phép có giá: {@code PUBLIC} nghĩa là ai cũng
+     * đọc được, kể cả khách chưa đăng nhập, nên một cái giá gắn lên đó là hai câu
+     * mâu thuẫn nhau trên cùng một chương. Chặn ở đây thay vì tự chọn một cách
+     * diễn giải — cách nào cũng sẽ làm ai đó ngạc nhiên.
+     */
+    @Transactional
+    public ChapterSummaryDto changeCoinPrice(Long chapterId, long coinPrice) {
+        Chapter chapter = findDetailEntity(chapterId);
+        requirePriceableLevel(chapter.getAccessLevel(), coinPrice);
+
+        chapter.setCoinPrice(coinPrice);
+        Chapter saved = chapterRepository.save(chapter);
+        log.info("Admin đặt giá chương {} thành {} Xu", chapterId, coinPrice);
+
+        boolean hasAudio = audioFileRepository.existsByChapterIdAndStatus(chapterId, AudioStatus.READY);
+        return toSummary(saved, chapter.getStory().getId(), hasAudio);
+    }
+
+    /**
+     * Đặt cùng một giá cho nhiều chương.
+     *
+     * <p>Một giao dịch duy nhất, cùng lý do với {@link #changeAccessLevelBulk}:
+     * đặt giá cho nửa danh sách rồi hỏng giữa chừng để lại một truyện có giá lẫn
+     * lộn mà nhìn vào không đoán được là cố ý hay do lỗi.
+     *
+     * @return số chương đã đổi
+     */
+    @Transactional
+    public int changeCoinPriceBulk(List<Long> chapterIds, long coinPrice) {
+        if (chapterIds == null || chapterIds.isEmpty()) {
+            throw new BadRequestException("Chưa chọn chương nào.");
+        }
+
+        List<Chapter> chapters = chapterRepository.findAllById(chapterIds);
+        if (chapters.size() != chapterIds.size()) {
+            throw new ResourceNotFoundException("Có chương trong danh sách không còn tồn tại.");
+        }
+
+        chapters.forEach(chapter -> {
+            requirePriceableLevel(chapter.getAccessLevel(), coinPrice);
+            chapter.setCoinPrice(coinPrice);
+        });
+        chapterRepository.saveAll(chapters);
+
+        log.info("Admin đặt giá {} chương thành {} Xu", chapters.size(), coinPrice);
+        return chapters.size();
+    }
+
+    private void requirePriceableLevel(AccessLevel level, long coinPrice) {
+        if (coinPrice > 0 && level == AccessLevel.PUBLIC) {
+            throw new BadRequestException(
+                    "Chương công khai không đặt giá Xu được. Hãy đổi mức khóa sang "
+                            + "“Yêu cầu đăng nhập” hoặc “VIP” trước khi đặt giá.");
+        }
     }
 
     // ==================== Hàm hỗ trợ ====================
@@ -226,8 +315,14 @@ public class ChapterService {
                 .orElseThrow(() -> ResourceNotFoundException.of("chương", chapterId));
     }
 
+    /** Dòng danh sách cho chương chưa cần biết tới quyền đã mua (chương mới tạo). */
     private ChapterSummaryDto toSummary(Chapter chapter, Long storyId, boolean hasAudio) {
-        boolean locked = !accessControlService.canAccess(chapter);
+        return toSummary(chapter, storyId, hasAudio, false);
+    }
+
+    private ChapterSummaryDto toSummary(Chapter chapter, Long storyId,
+                                        boolean hasAudio, boolean owned) {
+        ChapterAccessDecision decision = chapterAccessService.decide(chapter, owned);
         return new ChapterSummaryDto(
                 chapter.getId(),
                 storyId,
@@ -235,7 +330,9 @@ public class ChapterService {
                 chapter.getChapterNumber(),
                 chapter.getAccessLevel().name(),
                 chapter.getAccessLevel().getLabel(),
-                locked,
+                !decision.allowed(),
+                decision.purchasable(),
+                chapter.getCoinPrice(),
                 hasAudio,
                 chapter.getViewCount(),
                 chapter.getCreatedAt());

@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -61,8 +62,41 @@ public class AdminChapterController {
         return Map.of("updated", updated);
     }
 
+    /**
+     * Đặt giá Xu cho một chương.
+     *
+     * <p>Tách khỏi mức khóa vì hai thứ trả lời hai câu khác nhau — ai được nhìn
+     * tới chương, và mở nó tốn bao nhiêu. Đặt giá 0 là ngừng bán lẻ chương ấy;
+     * chương quay về đúng cách nó hoạt động trước khi có Xu.
+     */
+    @PatchMapping("/{id}/pricing")
+    @Operation(summary = "Đặt giá Xu cho một chương. 0 nghĩa là không bán lẻ.")
+    public ChapterSummaryDto changePricing(@PathVariable Long id,
+                                           @Valid @RequestBody PricingRequest request) {
+        return chapterService.changeCoinPrice(id, request.coinPrice());
+    }
+
+    /** Đặt cùng một giá cho nhiều chương — khóa nửa sau của một truyện dài chẳng hạn. */
+    @PatchMapping("/pricing")
+    @Operation(summary = "Đặt giá Xu cho nhiều chương cùng lúc")
+    public Map<String, Integer> changePricingBulk(@Valid @RequestBody BulkPricingRequest request) {
+        int updated = chapterService.changeCoinPriceBulk(request.chapterIds(), request.coinPrice());
+        return Map.of("updated", updated);
+    }
+
     public record AccessLevelRequest(
             @NotNull(message = "Vui lòng chọn mức truy cập") AccessLevel accessLevel) {
+    }
+
+    public record PricingRequest(
+            @NotNull(message = "Vui lòng nhập giá")
+            @PositiveOrZero(message = "Giá không được âm") Long coinPrice) {
+    }
+
+    public record BulkPricingRequest(
+            @NotEmpty(message = "Chưa chọn chương nào") List<Long> chapterIds,
+            @NotNull(message = "Vui lòng nhập giá")
+            @PositiveOrZero(message = "Giá không được âm") Long coinPrice) {
     }
 
     public record BulkAccessLevelRequest(

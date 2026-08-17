@@ -11,7 +11,7 @@ import com.storytts.backend.dto.audio.TtsRequest;
 import com.storytts.backend.dto.audio.VoiceOptionDto;
 import com.storytts.backend.exception.TtsException;
 import com.storytts.backend.repository.AudioFileRepository;
-import com.storytts.backend.service.AccessControlService;
+import com.storytts.backend.service.ChapterAccessService;
 import com.storytts.backend.service.ChapterService;
 import com.storytts.backend.service.StorageService;
 import lombok.RequiredArgsConstructor;
@@ -47,7 +47,7 @@ import java.util.List;
 public class TtsService {
 
     private final ChapterService chapterService;
-    private final AccessControlService accessControlService;
+    private final ChapterAccessService chapterAccessService;
     private final AudioFileRepository audioFileRepository;
     private final StorageService storageService;
     private final TtsProperties properties;
@@ -121,7 +121,7 @@ public class TtsService {
 
         // The same gate the reader and the audio stream go through, so synthesis
         // can never be used to reach a chapter the caller cannot open.
-        accessControlService.requireAccess(chapter);
+        chapterAccessService.requireAccess(chapter);
 
         String voice = resolveVoice(request == null ? null : request.voice());
         int speed = resolveSpeed(request == null ? null : request.speed());

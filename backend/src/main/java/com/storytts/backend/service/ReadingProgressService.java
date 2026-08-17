@@ -43,7 +43,7 @@ public class ReadingProgressService {
     private final ChapterRepository chapterRepository;
     private final StoryRepository storyRepository;
     private final ChapterService chapterService;
-    private final AccessControlService accessControlService;
+    private final ChapterAccessService chapterAccessService;
     private final CurrentUserService currentUserService;
     private final ViewEventService viewEventService;
 
@@ -57,7 +57,7 @@ public class ReadingProgressService {
     public ProgressDto save(Long chapterId, ProgressRequest request) {
         User user = currentUserService.requireCurrentUser();
         Chapter chapter = chapterService.findDetailEntity(chapterId);
-        accessControlService.requireAccess(chapter);
+        chapterAccessService.requireAccess(chapter);
 
         ReadingProgress progress = progressRepository
                 .findByUserIdAndChapterId(user.getId(), chapterId)
@@ -92,7 +92,7 @@ public class ReadingProgressService {
     public ProgressDto markCompleted(Long chapterId) {
         User user = currentUserService.requireCurrentUser();
         Chapter chapter = chapterService.findDetailEntity(chapterId);
-        accessControlService.requireAccess(chapter);
+        chapterAccessService.requireAccess(chapter);
 
         ReadingProgress progress = progressRepository
                 .findByUserIdAndChapterId(user.getId(), chapterId)

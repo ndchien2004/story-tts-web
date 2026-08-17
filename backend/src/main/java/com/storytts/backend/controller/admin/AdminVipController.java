@@ -1,11 +1,11 @@
 package com.storytts.backend.controller.admin;
 
-import com.storytts.backend.domain.VipOrderStatus;
+import com.storytts.backend.domain.PaymentOrderStatus;
 import com.storytts.backend.dto.common.PageResponse;
-import com.storytts.backend.dto.vip.VipOrderDto;
+import com.storytts.backend.dto.payment.PaymentOrderDto;
 import com.storytts.backend.dto.vip.VipPlanDto;
 import com.storytts.backend.dto.vip.VipPlanRequest;
-import com.storytts.backend.service.VipOrderService;
+import com.storytts.backend.service.PaymentOrderService;
 import com.storytts.backend.service.VipPlanService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,7 +30,7 @@ import java.util.List;
 public class AdminVipController {
 
     private final VipPlanService planService;
-    private final VipOrderService orderService;
+    private final PaymentOrderService orderService;
 
     /* ---------------------------- Gói ---------------------------- */
 
@@ -62,7 +62,7 @@ public class AdminVipController {
 
     @GetMapping("/orders")
     @Operation(summary = "Đơn nâng cấp của mọi thành viên, mới nhất trước")
-    public PageResponse<VipOrderDto> orders(@RequestParam(required = false) VipOrderStatus status,
+    public PageResponse<PaymentOrderDto> orders(@RequestParam(required = false) PaymentOrderStatus status,
                                             @RequestParam(defaultValue = "0") int page,
                                             @RequestParam(defaultValue = "20") int size) {
         return orderService.listAll(status, PageRequest.of(page, size));
@@ -70,7 +70,7 @@ public class AdminVipController {
 
     @PostMapping("/orders/{orderCode}/refresh")
     @Operation(summary = "Hỏi lại cổng thanh toán tình trạng của một đơn còn treo")
-    public VipOrderDto refresh(@PathVariable Long orderCode) {
+    public PaymentOrderDto refresh(@PathVariable Long orderCode) {
         return orderService.refresh(orderCode);
     }
 

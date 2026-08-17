@@ -58,7 +58,7 @@ class AudioOwnershipTest {
     @Mock
     private ChapterService chapterService;
     @Mock
-    private AccessControlService accessControlService;
+    private ChapterAccessService chapterAccessService;
     @Mock
     private StorageService storageService;
     @Mock
@@ -71,7 +71,7 @@ class AudioOwnershipTest {
     @BeforeEach
     void setUp() {
         audioService = new AudioService(audioFileRepository, audioTranscriptRepository,
-                transcriptCodec, chapterService, accessControlService, storageService,
+                transcriptCodec, chapterService, chapterAccessService, storageService,
                 viewEventService, currentUserService);
 
         when(chapterService.findDetailEntity(CHAPTER_ID)).thenReturn(chuong());

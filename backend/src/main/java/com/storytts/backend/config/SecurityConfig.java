@@ -98,10 +98,11 @@ public class SecurityConfig {
 
                         // --- Thanh toán ---
                         // PayOS gọi về không mang theo JWT nào; thứ chặn người lạ
-                        // là chữ ký HMAC trong body, đối chiếu ở VipOrderService.
+                        // là chữ ký HMAC trong body, đối chiếu ở PaymentOrderService.
                         .requestMatchers(HttpMethod.POST, "/api/payments/payos/webhook").permitAll()
                         // Bảng giá là thứ cần xem được trước khi có tài khoản.
                         .requestMatchers(HttpMethod.GET, "/api/vip/plans").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/wallet/packages").permitAll()
 
                         // --- Khu vực quản trị: chỉ Admin ---
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
@@ -156,7 +157,7 @@ public class SecurityConfig {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
         ApiErrorResponse body = new ApiErrorResponse(
-                Instant.now(), status, error, message, path, null, null);
+                Instant.now(), status, error, message, path, null, null, null);
         objectMapper.writeValue(response.getOutputStream(), body);
     }
 }

@@ -72,6 +72,24 @@ export const storyApi = {
 
 export const chapterApi = {
   detail: (id) => client.get(`/api/chapters/${id}`).then((r) => r.data),
+
+  /**
+   * Whether this reader may open the chapter, and if not, what it would take.
+   *
+   * Asked *before* the content call rather than instead of it. Reading the
+   * refusal off a failed `detail` would work, but it makes an error the normal
+   * path for a chapter that is simply for sale — and it cannot say how many Xu
+   * short the reader is, which is the one number the unlock screen needs.
+   */
+  access: (id) => client.get(`/api/chapters/${id}/access`).then((r) => r.data),
+
+  /**
+   * Spends Xu to open a chapter.
+   *
+   * Safe to call twice: the server answers ALREADY_OWNED rather than charging
+   * again, so a double click or a retried request costs nothing.
+   */
+  purchase: (id) => client.post(`/api/chapters/${id}/purchase`).then((r) => r.data),
 };
 
 /* ------------------------------------------------------------------ */
@@ -335,6 +353,56 @@ export const adminApi = {
   /** Asks the gateway what really happened to an order still sitting pending. */
   refreshVipOrder: (orderCode) =>
     client.post(`/api/admin/vip/orders/${orderCode}/refresh`).then((r) => r.data),
+
+  /* ---------------- Xu: gói nạp, giá chương, điều chỉnh số dư ---------------- */
+
+  /** Every package, including the ones no longer on sale. */
+  coinPackages: () => client.get("/api/admin/wallet/packages").then((r) => r.data),
+
+  createCoinPackage: (payload) =>
+    client.post("/api/admin/wallet/packages", payload).then((r) => r.data),
+
+  updateCoinPackage: (id, payload) =>
+    client.put(`/api/admin/wallet/packages/${id}`, payload).then((r) => r.data),
+
+  setCoinPackageActive: (id, active) =>
+    client.patch(`/api/admin/wallet/packages/${id}/active`, { active }).then((r) => r.data),
+
+  /** Giá mở khóa một chương. 0 nghĩa là không bán lẻ. */
+  setChapterPrice: (id, coinPrice) =>
+    client.patch(`/api/admin/chapters/${id}/pricing`, { coinPrice }).then((r) => r.data),
+
+  setChapterPriceBulk: (chapterIds, coinPrice) =>
+    client.patch("/api/admin/chapters/pricing", { chapterIds, coinPrice }).then((r) => r.data),
+
+  /** `amount` có dấu: dương là cộng, âm là trừ. Lý do đi vào sổ cái người dùng đọc được. */
+  adjustWallet: (userId, amount, reason) =>
+    client.post(`/api/admin/wallet/users/${userId}/adjust`, { amount, reason }).then((r) => r.data),
+};
+
+/* ------------------------------------------------------------------ */
+/* Ví Xu (reader side)                                                 */
+/* ------------------------------------------------------------------ */
+
+export const walletApi = {
+  /** Số dư hiện tại. Người chưa từng nạp có số dư 0, không phải lỗi. */
+  balance: () => client.get("/api/wallet").then((r) => r.data),
+
+  /** `params` nhận page và size. Mới nhất trước. */
+  transactions: (params) =>
+    client.get("/api/wallet/transactions", { params }).then((r) => r.data),
+
+  /** Công khai, cùng lý do với bảng giá VIP: giá là thứ người ta xem trước khi đăng ký. */
+  packages: () => client.get("/api/wallet/packages").then((r) => r.data),
+
+  /**
+   * Tạo đơn nạp Xu; `checkoutUrl` trong kết quả là nơi trình duyệt đi tiếp.
+   *
+   * Trả về cùng hình dạng đơn với `vipApi.createOrder`, nên trang kết quả thanh
+   * toán dùng chung được cho cả hai — nó chỉ cần đọc `kind` để biết vừa bán gì.
+   */
+  createOrder: (packageId) =>
+    client.post("/api/wallet/orders", { packageId }).then((r) => r.data),
 };
 
 /* ------------------------------------------------------------------ */

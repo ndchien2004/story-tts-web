@@ -17,6 +17,7 @@ const EMPTY_FORM = {
   content: "",
   chapterNumber: "",
   accessLevel: "PUBLIC",
+  coinPrice: "0",
 };
 
 /**
@@ -62,6 +63,7 @@ export default function AdminChapterFormPage() {
           content: chapter.content,
           chapterNumber: String(chapter.chapterNumber),
           accessLevel: chapter.accessLevel,
+          coinPrice: String(chapter.coinPrice ?? 0),
         };
         setForm(loaded);
         setSavedForm(loaded);
@@ -103,11 +105,24 @@ export default function AdminChapterFormPage() {
 
     if (isEdit) {
       await adminApi.updateChapter(chapterId, payload);
+
+      /*
+       * Giá đi bằng một lệnh gọi riêng, và chỉ khi nó thật sự đổi.
+       *
+       * Không phải để tiết kiệm một request: máy chủ từ chối giá dương trên
+       * chương công khai, nên gọi kèm mỗi lần lưu sẽ làm việc sửa tiêu đề một
+       * chương công khai hỏng vì một con số 0 không ai chạm vào. Đường ghi giá
+       * cũng cố ý tách khỏi ChapterRequest ở phía máy chủ, cùng lý do.
+       */
+      const price = Number(snapshot.coinPrice) || 0;
+      if (price !== (Number(savedForm.coinPrice) || 0)) {
+        await adminApi.setChapterPrice(chapterId, price);
+      }
     } else {
       await adminApi.createChapter(storyId, payload);
     }
     setSavedForm(snapshot);
-  }, [form, isEdit, chapterId, storyId]);
+  }, [form, savedForm, isEdit, chapterId, storyId]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -209,6 +224,32 @@ export default function AdminChapterFormPage() {
                   ))}
                 </Select>
               </Field>
+
+              {/* Giá là một trục riêng, không phải một mức nữa của ô trên: mức
+                  truy cập nói ai được nhìn tới chương, giá nói mở nó tốn bao
+                  nhiêu. Một chương VIP đặt giá nghĩa là VIP đọc miễn phí còn
+                  người thường trả Xu — thứ không diễn đạt được bằng một ô chọn. */}
+              {isEdit && (
+                <Field
+                  label="Giá mở khóa (Xu)"
+                  htmlFor="coinPrice"
+                  hint={
+                    form.accessLevel === "PUBLIC"
+                      ? "Chương công khai không đặt giá được — ai cũng đọc được rồi."
+                      : "0 = không bán lẻ. Người có VIP luôn đọc miễn phí."
+                  }
+                >
+                  <TextInput
+                    id="coinPrice"
+                    type="number"
+                    min="0"
+                    step="10"
+                    disabled={form.accessLevel === "PUBLIC"}
+                    value={form.coinPrice}
+                    onChange={(event) => updateField("coinPrice", event.target.value)}
+                  />
+                </Field>
+              )}
 
               <div className="row" style={{ gap: "var(--space-2)" }}>
                 <span className="admin-stat">

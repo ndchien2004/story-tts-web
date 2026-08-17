@@ -69,6 +69,15 @@ function CardIcon() {
   );
 }
 
+function CoinIcon() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8.2v7.6M9.9 10.1h3.2a1.9 1.9 0 0 1 0 3.8H9.9" />
+    </svg>
+  );
+}
+
 function MusicIcon() {
   return (
     <svg {...iconProps}>
@@ -179,6 +188,15 @@ const NAV_GROUPS = [
         label: "Gói VIP & thanh toán",
         Icon: CardIcon,
         isActive: (pathname) => pathname.startsWith("/admin/vip"),
+      },
+      // Tab riêng chứ không gộp vào mục VIP: hai thứ bán được khác nhau về bản
+      // chất — một cái bán thời gian, một cái bán lượt mở — và gộp lại thì mỗi
+      // lần sửa bảng giá phải đoán xem mình đang ở bảng nào.
+      {
+        to: "/admin/xu/goi",
+        label: "Gói nạp Xu",
+        Icon: CoinIcon,
+        isActive: (pathname) => pathname.startsWith("/admin/xu"),
       },
     ],
   },
