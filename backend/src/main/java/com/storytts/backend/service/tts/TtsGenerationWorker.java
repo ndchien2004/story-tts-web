@@ -57,19 +57,34 @@ public class TtsGenerationWorker {
         String fileName = null;
         try {
             // ---- Ngoài mọi giao dịch: chờ mạng và ghi đĩa ----
+            //
+            // Chữ đem đi đọc lấy từ sự kiện, không tra lại chương. Đó là ảnh chụp
+            // ứng với event.contentVersion(), và đọc lại ở đây sẽ làm hai thứ ấy
+            // lệch nhau — xem TtsGenerationRequested.
             SynthesisResult result = ttsEngine.synthesize(event.text(), event.voice(), event.speed());
             fileName = storageService.storeAudio(result.audio(), ".mp3");
 
-            // ---- Giao dịch ngắn thứ hai ----
-            if (!records.markReady(audioId, result, fileName)) {
-                // Hàng biến mất trong lúc dựng: file vừa ghi không còn ai trỏ tới.
-                log.warn("Audio row {} disappeared during synthesis; discarding the file", audioId);
-                storageService.deleteAudio(fileName);
-                return;
-            }
+            // ---- Giao dịch ngắn thứ hai: ghi kết quả, và so phiên bản lần cuối ----
+            TtsGenerationRecords.Outcome outcome =
+                    records.markReady(audioId, event.contentVersion(), result, fileName);
 
-            log.info("Synthesis finished for audio {} via {} ({} bytes, {} chữ có mốc thời gian)",
-                    audioId, result.providerId(), result.audio().length, result.words().size());
+            switch (outcome) {
+                case GONE -> {
+                    // Hàng biến mất trong lúc dựng: file vừa ghi không còn ai trỏ tới.
+                    log.warn("Audio row {} disappeared during synthesis; discarding the file", audioId);
+                    storageService.deleteAudio(fileName);
+                }
+                case STALE ->
+                    // Chương đã đổi trong lúc dựng. Bản này chưa từng được phát
+                    // cho ai — nó chưa bao giờ mang cờ READY — nên không có người
+                    // nghe dở nào để giữ file lại cho, và giữ nó cũng không giúp
+                    // dựng lại được gì: phiên bản là một con số tăng, nên nội dung
+                    // cũ sẽ không bao giờ mang lại số cũ. Xóa ngay.
+                    storageService.deleteAudio(fileName);
+                case READY -> log.info(
+                        "Synthesis finished for audio {} via {} ({} bytes, {} chữ có mốc thời gian)",
+                        audioId, result.providerId(), result.audio().length, result.words().size());
+            }
         } catch (TtsException ex) {
             log.warn("Synthesis failed for audio {}: {}", audioId, ex.getMessage());
             discard(fileName);

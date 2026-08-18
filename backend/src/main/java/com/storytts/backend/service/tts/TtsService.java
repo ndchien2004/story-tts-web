@@ -126,7 +126,19 @@ public class TtsService {
         String voice = resolveVoice(request == null ? null : request.voice());
         int speed = resolveSpeed(request == null ? null : request.speed());
 
-        String contentHash = hashContent(chapter.getContent());
+        // ---- Ảnh chụp, lấy trong cùng một lần đọc cơ sở dữ liệu ----
+        //
+        // Ba dòng này là điều kiện đúng đắn của cả lượt dựng. Nội dung và phiên
+        // bản của nó phải được lấy ra cùng một lúc, từ cùng một thực thể, rồi
+        // không đọc lại nữa: từ đây tới lúc luồng nền gọi nhà cung cấp có thể là
+        // hàng phút, và trong quãng ấy Admin có thể sửa chương bao nhiêu lần tùy ý.
+        //
+        // Đọc phiên bản ở một thời điểm khác với lúc đọc nội dung sẽ cho ra thứ
+        // tệ nhất có thể: một bản audio đọc chữ cũ nhưng mang nhãn phiên bản mới,
+        // tức là một bản sai *và* trông hợp lệ với mọi phép kiểm tra sau đó.
+        String content = chapter.getContent();
+        int contentVersion = chapter.getContentVersion();
+        String contentHash = hashContent(content);
 
         User requester = budget.requester();
         Long requesterId = requester == null ? null : requester.getId();
@@ -135,9 +147,14 @@ public class TtsService {
         // Trang đọc vốn đã ẩn nút trong trường hợp ấy; đây là chốt chặn cho
         // đường gọi thẳng vào API, và nó trả về bản sẵn có thay vì báo lỗi —
         // thứ người bấm muốn là được nghe, không phải một lời từ chối.
+        //
+        // "Đã lo rồi" phải tính cả phiên bản: một bản của quản trị đọc theo nội
+        // dung cũ thì không giúp gì cho người đang mở nội dung mới, và trả nó về
+        // ở đây là dựng lại đúng cái lỗi mà mọi thứ còn lại đang chặn.
         if (requesterId != null) {
             AudioFile fromAdmin = audioFileRepository.findAdminOwnedForChapter(chapterId).stream()
                     .filter(audio -> audio.getStatus() == AudioStatus.READY)
+                    .filter(audio -> Integer.valueOf(contentVersion).equals(audio.getContentVersion()))
                     .findFirst()
                     .orElse(null);
             if (fromAdmin != null) {
@@ -145,24 +162,30 @@ public class TtsService {
             }
         }
 
-        AudioFile cached = audioFileRepository.findTtsCache(chapterId, voice, speed, requesterId)
+        // Phiên bản nằm trong khóa tra cứu, nên thứ trả về ở đây chắc chắn đọc
+        // theo đúng nội dung vừa chụp. Không còn phép so hash nào sau lời gọi này
+        // — trước kia có, và nó chính là chỗ duy nhất nội dung cũ bị phát hiện.
+        AudioFile cached = audioFileRepository
+                .findTtsCache(chapterId, contentVersion, voice, speed, requesterId)
                 .orElse(null);
         if (cached != null) {
-            // Đang dựng dở: để nó chạy tiếp. Xóa hàng mà luồng nền đang ghi vào
-            // chỉ tạo ra một lần gọi API nữa và một bản ghi mồ côi.
+            // Đang dựng dở cho đúng phiên bản này: để nó chạy tiếp. Xóa hàng mà
+            // luồng nền đang ghi vào chỉ tạo ra một lần gọi API nữa và một bản
+            // ghi mồ côi. Đây cũng là thứ khiến bấm nút ba lần liên tiếp chỉ tốn
+            // một lượt — xem phần idempotency ở javadoc của lớp.
             if (cached.getStatus() == AudioStatus.PROCESSING) {
                 return AudioInfoDto.from(cached, chapterId);
             }
-            // Còn dùng được, và đọc đúng chữ đang có trong chương.
-            if (cached.getStatus() == AudioStatus.READY
-                    && contentHash.equals(cached.getContentHash())) {
+            if (cached.getStatus() == AudioStatus.READY) {
                 return AudioInfoDto.from(cached, chapterId);
             }
 
-            // Hoặc lần trước hỏng, hoặc nội dung chương đã đổi kể từ lúc dựng bản
-            // này — cả hai đều có nghĩa là bản cũ không dùng lại được.
-            log.info("Bỏ bản audio cũ của chương {} ({})", chapterId,
-                    cached.getStatus() == AudioStatus.FAILED ? "lần trước hỏng" : "nội dung đã đổi");
+            // Còn lại là FAILED: lần trước hỏng, và không có gì để giữ. Đây là
+            // trường hợp *duy nhất* còn xóa file ở đường này. Bản của phiên bản
+            // cũ không rơi vào đây nữa — chúng đã thành STALE ngay lúc Admin lưu
+            // chương, và bị dọn theo hạn lưu giữ chứ không bị giật khỏi tay người
+            // đang nghe dở. Xem AudioRetentionSweeper.
+            log.info("Dựng lại chương {} sau một lần hỏng", chapterId);
             storageService.deleteAudio(cached.getFilePath());
             audioFileRepository.delete(cached);
             audioFileRepository.flush();
@@ -179,14 +202,21 @@ public class TtsService {
                 .status(AudioStatus.PROCESSING)
                 .voice(voice)
                 .speed(speed)
+                .contentVersion(contentVersion)
                 .contentHash(contentHash)
                 .contentType("audio/mpeg")
                 .requestedBy(budget.requester())
                 .build());
 
-        log.info("Queued synthesis for chapter {} (voice={}, speed={})", chapterId, voice, speed);
+        log.info("Xếp hàng dựng audio chương {} phiên bản {} (giọng={}, tốc độ={})",
+                chapterId, contentVersion, voice, speed);
+
+        // Cả nội dung lẫn phiên bản của nó cùng đi theo sự kiện. Luồng nền không
+        // được phép đọc lại chương để lấy chữ — nếu nó làm vậy thì "phiên bản đã
+        // chụp" và "chữ đem đi đọc" là hai thứ khác nhau, và mọi phép so phiên
+        // bản sau đó đều so nhầm đối tượng.
         eventPublisher.publishEvent(
-                new TtsGenerationRequested(pending.getId(), chapter.getContent(), voice, speed));
+                new TtsGenerationRequested(pending.getId(), content, contentVersion, voice, speed));
 
         return AudioInfoDto.from(pending, chapterId);
     }

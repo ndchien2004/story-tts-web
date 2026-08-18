@@ -47,20 +47,80 @@ public class TtsGenerationRecords {
     }
 
     /**
-     * Ghi kết quả và bật cờ READY.
+     * Kết cục của một lượt dựng, quyết định ở giao dịch ngắn cuối cùng.
+     */
+    public enum Outcome {
+
+        /** Phiên bản còn khớp: bản audio này là bản hiện tại của chương. */
+        READY,
+
+        /**
+         * Chương đã đi tiếp trong lúc dựng. File nghe được, nhưng nó đọc nội dung
+         * cũ nên không bao giờ được phục vụ như audio hiện tại.
+         */
+        STALE,
+
+        /** Hàng đã bị xóa trong lúc dựng; không còn chỗ nào để ghi kết quả. */
+        GONE
+    }
+
+    /**
+     * Ghi kết quả, sau khi hỏi lại cơ sở dữ liệu một câu duy nhất:
+     * <b>chương này còn ở phiên bản mà lượt dựng đã chụp không?</b>
      *
-     * <p>Mốc thời gian được cất <b>trước</b> cờ READY và trong cùng giao dịch với
-     * nó: trang đọc thấy READY là đi hỏi mốc thời gian ngay, nên thứ tự này là thứ
-     * giữ cho nó không hỏi đúng vào lúc chưa có gì.
+     * <h3>Vì sao phải hỏi lần thứ hai</h3>
+     * Lần hỏi thứ nhất nằm ở {@code TtsService}, lúc người dùng bấm nút. Giữa hai
+     * lần ấy là lời gọi tới nhà cung cấp — hàng phút với một chương dài — và
+     * không có gì ngăn Admin lưu chương ba lần trong quãng đó. Chỉ kiểm ở đầu
+     * request là kiểm một sự thật đã hết hạn từ lâu trước khi nó được dùng tới.
      *
-     * @return false nếu bản ghi đã biến mất trong lúc dựng — bên gọi cần dọn file
-     *         vừa ghi, vì không còn hàng nào trỏ tới nó nữa
+     * <p>Lần hỏi này rơi vào đúng chỗ duy nhất còn kịp: cùng giao dịch với lệnh
+     * ghi, sau khi mọi thứ chậm chạp đã xong. Phiên bản đọc ra ở đây là phiên bản
+     * tại thời điểm ghi, nên hai câu "audio này hợp lệ" và "audio này được ghi là
+     * hợp lệ" không thể tách nhau ra được.
+     *
+     * <p><b>Không có đường nào để một lượt dựng cũ thắng.</b> Chương đi qua v7,
+     * v8, v9 trong lúc ba lượt dựng cùng chạy thì cả ba đều so với v9 lúc về
+     * đích, và cả ba đều thua nếu chúng không phải v9 — bất kể lượt nào về sau
+     * cùng. Thứ quyết định là phiên bản hiện tại của chương, không phải thứ tự
+     * hoàn thành.
+     *
+     * <p>Mốc thời gian chỉ được cất khi kết cục là READY, và được cất <b>trước</b>
+     * cờ READY trong cùng giao dịch: trang đọc thấy READY là đi hỏi mốc thời gian
+     * ngay, nên thứ tự này là thứ giữ cho nó không hỏi đúng vào lúc chưa có gì.
+     *
+     * @param generationVersion phiên bản nội dung đã chụp lúc bắt đầu, đi theo
+     *                          {@link TtsGenerationRequested} cùng chính đoạn chữ
+     *                          vừa được đọc thành tiếng
+     * @return xem {@link Outcome}; bên gọi dọn file với {@code GONE} và {@code STALE}
      */
     @Transactional
-    public boolean markReady(Long audioId, SynthesisResult result, String fileName) {
+    public Outcome markReady(Long audioId, int generationVersion,
+                             SynthesisResult result, String fileName) {
         AudioFile audio = audioFileRepository.findById(audioId).orElse(null);
         if (audio == null) {
-            return false;
+            return Outcome.GONE;
+        }
+
+        // Đọc trong giao dịch này, nên đây là phiên bản lúc ghi chứ không phải
+        // một con số nhớ từ lúc bắt đầu.
+        int currentVersion = audio.getChapter().getContentVersion();
+
+        if (currentVersion != generationVersion) {
+            log.info("Chương {} đã sang phiên bản {} trong lúc dựng bản {} (phiên bản {}); "
+                            + "bản này là lỗi thời",
+                    audio.getChapter().getId(), currentVersion, audioId, generationVersion);
+
+            // Ghi lại đúng những gì đã xảy ra: một bản dựng thành công, cho một
+            // phiên bản không còn là hiện tại. Cố ý không đặt filePath — bên gọi
+            // xóa file ngay, vì bản này chưa từng đến tai ai nên không có ai để
+            // giữ nó lại cho (khác với bản STALE do Admin sửa chương, thứ có thể
+            // đang phát dở trong tai nghe của một người nào đó).
+            audio.setStatus(AudioStatus.STALE);
+            audio.setProvider(result.providerId());
+            audio.setErrorMessage(null);
+            audioFileRepository.save(audio);
+            return Outcome.STALE;
         }
 
         audio.setFilePath(fileName);
@@ -71,7 +131,7 @@ public class TtsGenerationRecords {
         audio.setStatus(AudioStatus.READY);
         audio.setErrorMessage(null);
         audioFileRepository.save(audio);
-        return true;
+        return Outcome.READY;
     }
 
     /** Đánh dấu hỏng kèm lý do; bản ghi đã biến mất thì không còn gì để đánh dấu. */
