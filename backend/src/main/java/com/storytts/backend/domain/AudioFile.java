@@ -77,6 +77,27 @@ public class AudioFile {
     private String contentHash;
 
     /**
+     * Phiên bản nội dung chương mà bản audio này đọc theo.
+     *
+     * <p>Bản ghi được đóng dấu con số này <b>trước</b> lúc gọi nhà cung cấp, chứ
+     * không phải sau. Đó là điểm mấu chốt: nếu đọc phiên bản lúc dựng xong thì
+     * một chương bị sửa giữa chừng sẽ cho ra bản audio đọc nội dung cũ nhưng
+     * mang nhãn phiên bản mới — đúng cái sai mà toàn bộ cơ chế này sinh ra để
+     * chặn. Con số ghi ở đây trả lời "bản này đọc theo chữ nào", nên nó phải
+     * được lấy cùng lúc với chính những chữ ấy.
+     *
+     * <p>Khi dựng xong, con số này được đem so lại với phiên bản hiện tại của
+     * chương một lần nữa — xem {@code TtsGenerationRecords.markReady}. Bằng nhau
+     * thì READY, khác nhau thì {@link AudioStatus#STALE}.
+     *
+     * <p>Null nghĩa là "không biết bản này đọc theo nội dung nào": những bản dựng
+     * từ trước khi có cột này và không chứng minh được còn khớp (xem V8). Bản như
+     * vậy không bao giờ được coi là audio hiện tại của chương.
+     */
+    @Column(name = "content_version")
+    private Integer contentVersion;
+
+    /**
      * Which backend produced the audio.
      *
      * Recorded because a fallback means the result may not come from the

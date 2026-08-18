@@ -77,6 +77,46 @@ public class Chapter {
     @Builder.Default
     private long viewCount = 0L;
 
+    /**
+     * Phiên bản nghiệp vụ của {@link #content}, tăng đúng khi nội dung đổi.
+     *
+     * <p>Đây là <b>source of truth</b> để trả lời "bản audio này còn là bản hiện
+     * tại của chương không". Một bản audio ghi lại phiên bản nó được dựng từ đó;
+     * hai con số bằng nhau thì bản ấy hợp lệ, khác nhau thì không — không có
+     * đường thứ ba, và không có chuyện lấy tạm bản cũ cho người nghe.
+     *
+     * <p>Chỉ nội dung mới làm nó tăng. Sửa tiêu đề, đổi mức khóa, đặt giá Xu hay
+     * cộng lượt xem đều không: không thứ nào trong số đó đổi những chữ đem đi
+     * đọc, nên tăng phiên bản vì chúng chỉ có tác dụng vứt bỏ một bản audio còn
+     * dùng tốt. Xem {@code ChapterService.update}.
+     *
+     * <p>Không dùng {@link #updatedAt} cho việc này: cột ấy nhúc nhích theo mọi
+     * lần ghi, kể cả lần không đụng tới nội dung, và hai lần ghi trong cùng một
+     * mili giây thì không phân biệt được.
+     */
+    @Column(name = "content_version", nullable = false)
+    @Builder.Default
+    private int contentVersion = 1;
+
+    /**
+     * Cột optimistic locking của Hibernate — không phải phiên bản nội dung.
+     *
+     * <p>Hai Admin cùng bấm lưu một chương: cả hai đọc {@code contentVersion = 7},
+     * cả hai ghi 8, và kết quả là hai nội dung khác nhau cùng mang nhãn v8. Từ
+     * lúc ấy con số phiên bản không còn xác định được nội dung nữa, và mọi thứ
+     * dựng trên nó — bản audio nào còn hợp lệ, trình duyệt nào đang xem bản cũ —
+     * đều sai theo mà không có gì báo.
+     *
+     * <p>Cột này chặn đúng chỗ đó: lần ghi thứ hai thấy số phiên bản đã đổi và
+     * hỏng ngay tại cơ sở dữ liệu, thành một câu trả lời 409 rõ ràng thay vì một
+     * lần mất dữ liệu im lặng. Bên gọi không phải gửi gì thêm — xem
+     * {@code GlobalExceptionHandler}.
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private long version = 0L;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
