@@ -4,6 +4,7 @@ import Layout from "./components/Layout";
 import ReaderLayout from "./components/ReaderLayout";
 import { RequireAdmin, RequireAuth, RequireGuest } from "./components/RouteGuards";
 import RouteVeil from "./components/RouteVeil";
+import SessionGuard from "./components/SessionGuard";
 import AuthProvider from "./context/AuthProvider";
 import ThemeProvider from "./context/ThemeProvider";
 
@@ -43,6 +44,12 @@ export default function App() {
           {/* Outside <Routes> on purpose: it has to survive the route swap it
               is covering, and it spans all four layouts. */}
           <RouteVeil />
+
+          {/* Same reasoning, one step further: this one causes the navigation
+              it has to survive. It is also the only thing that reacts to a
+              session the server has ended, so it must sit above every route
+              rather than inside any of them. */}
+          <SessionGuard />
 
           <Routes>
             <Route element={<Layout />}>

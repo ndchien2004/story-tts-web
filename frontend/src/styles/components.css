@@ -536,6 +536,37 @@
   border-left-color: var(--line-strong);
 }
 
+/*
+ * Lời báo sau khi bị đăng xuất vì tài khoản bị khóa.
+ *
+ * Nằm trên cùng, trong dòng chảy của trang. Không dùng tấm phủ hay hộp thoại:
+ * việc đã xong rồi — người dùng đã bị đăng xuất và đã ở trang chủ — nên đây là
+ * một lời giải thích, không phải một câu hỏi cần trả lời. Bắt họ bấm "OK" để
+ * xác nhận một điều họ không chọn và không đổi được thì chỉ thêm một bước.
+ */
+.session-notice {
+  position: relative;
+  padding-top: var(--space-4);
+}
+
+.session-notice-close {
+  position: absolute;
+  top: var(--space-3);
+  right: 0;
+  padding: 0 var(--space-2);
+  font-size: 1.4rem;
+  line-height: 1;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.session-notice-close:hover {
+  opacity: 1;
+}
+
 /* ------------------------------------------------------------------ */
 /* Navbar                                                              */
 /* ------------------------------------------------------------------ */

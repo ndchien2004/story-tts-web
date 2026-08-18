@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authApi } from "../api/endpoints";
-import { getStoredToken, setStoredToken } from "../api/client";
+import { getStoredToken, isSessionTerminated, setStoredToken } from "../api/client";
 import { AuthContext } from "./auth-context";
 
 /**
@@ -24,7 +24,10 @@ export default function AuthProvider({ children }) {
     authApi
       .me()
       .then((data) => {
-        if (!cancelled) setUser(data);
+        // A reply that left before the account was locked can still arrive
+        // after. Letting it through would sign the user back in on the strength
+        // of an answer the server would no longer give.
+        if (!cancelled && !isSessionTerminated()) setUser(data);
       })
       .catch(() => {
         setStoredToken(null);
@@ -40,6 +43,9 @@ export default function AuthProvider({ children }) {
   }, []);
 
   const applySession = useCallback((session) => {
+    // Same guard, on the way in rather than out: a sign-in that was already in
+    // flight must not restore a session the server has since ended.
+    if (isSessionTerminated()) return null;
     setStoredToken(session.token);
     setUser(session.user);
     return session.user;
@@ -89,6 +95,7 @@ export default function AuthProvider({ children }) {
   const refresh = useCallback(async () => {
     if (!getStoredToken()) return null;
     const data = await authApi.me();
+    if (isSessionTerminated()) return null;
     setUser(data);
     return data;
   }, []);
