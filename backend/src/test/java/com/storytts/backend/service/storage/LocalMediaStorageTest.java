@@ -38,7 +38,10 @@ class LocalMediaStorageTest {
         storage = new LocalMediaStorage(new StorageProperties(
                 StorageProperties.StorageDriver.LOCAL,
                 thuMuc.resolve("audio").toString(),
-                thuMuc.resolve("bgm").toString()));
+                thuMuc.resolve("bgm").toString(),
+                // Hạn lưu giữ bản lỗi thời không liên quan gì tới lớp này; null
+                // để bộ khởi tạo rút gọn tự điền mặc định.
+                null));
     }
 
     @Test
