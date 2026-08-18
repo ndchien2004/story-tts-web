@@ -548,6 +548,24 @@
   border-bottom: var(--outline-width) solid var(--outline);
 }
 
+/*
+ * Màn hình đọc chương không có thanh điều hướng chung.
+ *
+ * Nó là một chế độ chứ không phải một trang: mọi chỗ người đọc muốn tới lúc ấy
+ * — danh sách chương, chương trước, chương sau — đều nằm trên thanh của riêng
+ * nó, còn logo với mấy link thể loại thì suốt buổi đọc không được bấm lần nào.
+ * Bốn phân chiều cao ấy đổi được thêm gần hai dòng chữ truyện.
+ *
+ * Viết bằng `:has()` chứ không bằng một cờ trong React, và đấy là chỗ hay: nó
+ * chỉ đúng khi `.reader` thật sự có trên màn hình. Trang chương còn ba nhánh
+ * khác — đang tải, chương bị khoá, chương phải trả Xu — và những nhánh ấy không
+ * dựng `.reader`, nên thanh điều hướng ở lại. Nếu ẩn theo route thì một chương
+ * bị khoá sẽ thành một ngõ cụt không có đường nào ra.
+ */
+body:has(.reader) .navbar {
+  display: none;
+}
+
 .navbar-inner {
   display: flex;
   align-items: center;
@@ -2198,47 +2216,83 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* Reader — two columns divided by one rule                            */
+/* Reader — three bands divided by two rules                           */
 /* ------------------------------------------------------------------ */
 
 /*
- * No gaps and no padding at the edges: the rules run the full height and the
- * full width, which is what makes the split read as a division of the page
- * rather than as two objects placed on it.
+ * No gaps and no padding at the edges: the rules run the full width, which is
+ * what makes the bands read as divisions of the page rather than as objects
+ * placed on it.
+ *
+ * Ba dải chồng lên nhau — chuyển chương, trang chữ, phần nghe — và chỉ dải
+ * giữa cuộn. Hai dải kia vì thế đứng nguyên một chỗ suốt buổi đọc: bấm "chương
+ * sau" hay bấm phát đều không phải cuộn đi tìm.
  */
 .reader {
   display: flex;
   flex-direction: column;
-  /* Exactly the space left under the sticky header — its bottom border
-     included — so the page itself never scrolls and only the panes do. */
-  height: calc(100vh - var(--navbar-height) - var(--outline-width));
-  height: calc(100dvh - var(--navbar-height) - var(--outline-width));
+  /* Trọn khung nhìn, không trừ đi gì cả: thanh điều hướng chung đã ẩn khi màn
+     hình này hiện ra, nên trên nó không còn dải nào để mà chừa chỗ. Trang tự nó
+     không bao giờ cuộn — chỉ dải giữa cuộn. */
+  height: 100vh;
+  height: 100dvh;
   gap: 0;
   padding-block: 0;
 }
 
+/*
+ * Bốn khối trên một hàng: đường ra, mình đang ở đâu, chuyển chương, và hai
+ * tuỳ chọn của riêng màn hình này.
+ *
+ * `flex-wrap` ở đây không phải để dùng trên màn hình rộng — trên ấy tất cả vừa
+ * một hàng. Nó là bản lề cho màn hình hẹp, chỗ khối chuyển chương xuống hẳn
+ * hàng thứ hai và ăn trọn chiều ngang.
+ */
 .reader-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3) var(--space-4);
   flex: 0 0 auto;
   padding-block: var(--space-3);
   border-bottom: var(--outline-width) solid var(--outline);
 }
 
-/* Chapter title sits between the two corner buttons and truncates rather
-   than pushing them out of their corners. */
-/* The story it belongs to sits above the chapter's own name, so the bar
-   answers "where am I" without a second header below it. */
+/*
+ * Mũi tên quay lại.
+ *
+ * Vuông và không viền, cùng cỡ với những nút chỉ có hình khác trên trang: nó là
+ * đường ra chứ không phải một lời mời, và một cái nút viền đậm ở góc trên bên
+ * trái sẽ tranh mất chỗ của tên chương ngay cạnh.
+ */
+.reader-back {
+  flex: 0 0 auto;
+  color: var(--ink-muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.reader-back:hover {
+  color: var(--ink);
+  background: var(--bg-alt);
+}
+
+.reader-back svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+/* Căn trái chứ không căn giữa: bên trái nó giờ chỉ còn một mũi tên, nên tên
+   truyện và tên chương nối liền vào đó thành một khối danh tính duy nhất — đọc
+   một mạch từ mép trái, thay vì trôi lơ lửng giữa hai cái nút.
+   Co lại và cắt bớt bằng dấu ba chấm, không đẩy những khối kia khỏi chỗ. */
 .reader-bar-title {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 0.15rem;
-  text-align: center;
+  gap: 0.1rem;
 }
 
 .reader-bar-story {
@@ -2259,13 +2313,32 @@
   color: var(--ink);
 }
 
-.reader-bar-title strong {
+/* Một `h1` thật chứ không phải chữ đậm: nó là tiêu đề của khối chữ bên dưới,
+   và khối ấy trỏ về đây bằng `aria-labelledby`. Cỡ chữ giữ nguyên như cũ — vai
+   trò của nó lên, còn chỗ nó chiếm trên thanh thì không. */
+.reader-bar-title h1 {
   max-width: 100%;
+  margin: 0;
   overflow: hidden;
   font-size: 1.05rem;
   font-weight: 600;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Chuyển chương, và hai tuỳ chọn — hai nhóm rời nhau, để trên màn hình hẹp
+   nhóm đầu xuống được hàng dưới mà nhóm sau ở lại. */
+.reader-bar-nav,
+.reader-bar-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+
+.reader-bar-tools {
+  gap: var(--space-3);
 }
 
 .reader-nav-btn svg {
@@ -2276,14 +2349,13 @@
 .reader-grid {
   flex: 1 1 auto;
   display: grid;
-  /* Wide enough for the transport controls to sit on one row. */
-  grid-template-columns: minmax(0, 1fr) 21rem;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0;
-  /* Without this the grid refuses to shrink and the panes never scroll. */
+  /* Without this the grid refuses to shrink and the pane never scrolls. */
   min-height: 0;
 }
 
-/* The panes are regions of the page, so they have no edges of their own. */
+/* The pane is a region of the page, so it has no edges of its own. */
 .reader-pane {
   display: flex;
   flex-direction: column;
@@ -2295,45 +2367,11 @@
   overflow: hidden;
 }
 
-/* The single rule that divides reading from listening. */
-.reader-aside {
-  border-left: var(--outline-width) solid var(--outline);
-}
-
-/*
- * A fixed height, not just padding: one header holds a label and the other a
- * label plus two buttons, and the two panes sit side by side — different
- * heights would leave their bottom rules out of line across the divider.
- */
-.reader-pane-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-height: 3.25rem;
-  padding: var(--space-2) var(--space-5);
-  background: transparent;
-  border-bottom: var(--outline-width) solid var(--outline);
-}
-
-.reader-pane-header h2 {
-  font-size: var(--label-size);
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-}
-
 .reader-pane-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: var(--space-6);
-}
-
-.reader-aside .reader-pane-body {
-  padding: var(--space-5);
 }
 
 .reader-content {
@@ -2356,15 +2394,25 @@
 }
 
 /*
- * Text size, in the corner of the text it changes.
+ * Text size.
  *
- * Sized to fit a pane header: a small-caps label and two square buttons, so it
- * takes a corner rather than a row of its own.
+ * <p>Nó từng nép ở góc trên trang chữ, trong một dải chỉ có nó và chữ "Nội
+ * dung". Bỏ dải ấy đi thì nó lên thanh trên — vẫn nhìn thấy được kết quả của cú
+ * bấm ngay khi bấm, mà không tốn một đường kẻ ngang nào cho riêng mình.
  */
 .reader-settings {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
+}
+
+/* Chữ "Cỡ chữ" nhường chỗ trước khi bất cứ cái nút nào phải nhường: hai cái nút
+   `A−` `A+` tự nói được việc của chúng, còn trên thanh này thì mỗi phân chiều
+   ngang đều có người tranh. */
+@media (max-width: 1150px) {
+  .reader-settings > .nb-label {
+    display: none;
+  }
 }
 
 .reader-settings-buttons {
@@ -2380,18 +2428,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-/*
- * Inside the listening column the same idea repeats: playback, the voice form
- * and the preferences are three blocks with a rule between them.
- */
-.reader-aside .reader-pane-body > .stack > * + * {
-  padding-top: var(--space-4);
-  border-top: var(--outline-width) solid var(--outline);
-}
-
-
-/* Below this width a fixed-height split stops making sense, so the page
-   returns to ordinary vertical flow and the dividing rule turns horizontal. */
+/* Below this width a fixed-height page stops making sense, so the reader
+   returns to ordinary vertical flow and only the listening dock stays put. */
 @media (max-width: 900px) {
   .reader {
     height: auto;
@@ -2401,30 +2439,50 @@
     padding-bottom: calc(var(--reader-dock-height) + env(safe-area-inset-bottom, 0px));
   }
 
-  .reader-grid {
-    grid-template-columns: minmax(0, 1fr);
+  /*
+   * Ở đây trang cuộn như mọi trang khác, nên thanh trên tự dán mình lên đỉnh —
+   * đúng cái việc thanh điều hướng chung vẫn làm trước khi nó nhường chỗ. Đường
+   * quay lại và hai nút chuyển chương vì thế không bao giờ phải cuộn đi tìm.
+   *
+   * Nền đặc chứ không trong suốt: chữ truyện chạy phía dưới nó.
+   */
+  .reader-bar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--bg);
   }
 
-  .reader-aside {
-    border-left: 0;
-    border-top: var(--outline-width) solid var(--outline);
+  /*
+   * Hai nút chuyển chương xuống hẳn hàng dưới và chia đôi chiều ngang.
+   *
+   * `order` để chúng đi sau khối tuỳ chọn, dù trong cây DOM chúng đứng trước —
+   * thứ tự trong DOM là thứ tự của bàn phím và trình đọc màn hình, và ở đó
+   * "chương trước / chương sau" đáng đứng trước "cỡ chữ / sáng tối".
+   *
+   * Chia đôi bằng `flex: 1` chứ không để chúng tự co: một cặp nút mà cái bên
+   * phải to hơn cái bên trái vì tên nó dài hơn một chữ là thứ nhìn ra ngay.
+   */
+  .reader-bar-nav {
+    order: 3;
+    flex: 1 0 100%;
   }
 
-  .reader-pane-body,
-  .reader-aside .reader-pane-body {
+  .reader-bar-nav .reader-nav-btn {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .reader-pane-body {
     padding-inline: 0;
     overflow-y: visible;
-  }
-
-  .reader-pane-header {
-    padding-inline: 0;
   }
 
   .reader-content {
     max-width: none;
   }
 
-  /* The player itself pins to the bottom of the viewport — see player.css. */
+  /* The dock itself pins to the bottom of the viewport — see player.css. */
 }
 
 /* Full-page gate rendered instead of chapter text when access is denied. */

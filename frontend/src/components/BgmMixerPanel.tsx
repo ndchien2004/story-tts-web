@@ -76,151 +76,166 @@ export default function BgmMixerPanel({ bgm, state }: BgmMixerPanelProps) {
   const seekProgress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="bgm-panel stack">
-      <div className="row-between">
-        <span className="nb-label">
-          <MusicIcon />
-          Nhạc nền
-        </span>
-
-        {state.bgm.status === "playing" && (
-          <span className="bgm-live" role="status">
-            đang phát
+    /*
+     * Hai cột chứ không một chồng dọc.
+     *
+     * Bảng này nằm trong phần mở ra của dải nghe, cạnh những khối chỉ cao chừng
+     * ba dòng; xếp dọc thì nó cao gấp đôi chúng, và cả tấm bảng phải mọc ra một
+     * thanh cuộn chỉ vì một khối. Cột trái là bản nhạc nào và nó đang ở đâu,
+     * cột phải là nghe nó ra sao — cùng một cách chia như mọi chỗ khác trong
+     * dải: chọn cái gì, rồi chỉnh cái đó thế nào.
+     */
+    <div className="bgm-panel">
+      <div className="bgm-panel-col">
+        <div className="row-between">
+          <span className="nb-label">
+            <MusicIcon />
+            Bản nhạc
           </span>
-        )}
-      </div>
 
-      {state.bgm.error && <Alert tone="error">{state.bgm.error}</Alert>}
+          {sounding && (
+            <span className="bgm-live" role="status">
+              đang phát
+            </span>
+          )}
+        </div>
 
-      <Select
-        aria-label="Chọn nhạc nền"
-        value={selected?.id ?? ""}
-        disabled={loading}
-        onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-          bgm.select(event.target.value || null)}
-      >
-        <option value="">Không có nhạc nền</option>
-        {tracks.map((track) => (
-          <option key={track.id} value={track.id}>
-            {track.origin === "local" ? `${track.title} (từ máy bạn)` : track.title}
-          </option>
-        ))}
-      </Select>
+        {state.bgm.error && <Alert tone="error">{state.bgm.error}</Alert>}
 
-      {/* Không có bản nào trong kho thì nói vì sao, và mời lối đi khác — một ô
-          chọn rỗng không giải thích gì là chỗ người ta tưởng trang bị hỏng. */}
-      {!loading && tracks.length === 0 && (
-        <p className="muted" style={{ fontSize: "0.85rem" }}>
-          Kho nhạc nền của trang đang trống. Bạn vẫn có thể mở một bản nhạc từ máy mình để nghe
-          cùng giọng đọc.
-        </p>
-      )}
-
-      {/*
-        Bộ nút của riêng bản nhạc: bật/tắt và tua, không đụng tới giọng đọc.
-
-        Trước đây nhạc nền không có nút nào cả — nó chạy khi giọng đọc chạy, và
-        cách duy nhất để tắt nó giữa chương là kéo âm lượng về 0 hoặc bỏ chọn cả
-        bản nhạc. Cả hai đều là xoá lựa chọn chứ không phải tắt tiếng, và cả hai
-        đều không có đường quay lại chỗ cũ trong bài.
-      */}
-      <div className="bgm-transport">
-        <Button
-          className="nb-icon-btn bgm-transport-play"
-          disabled={!hasTrack}
-          aria-label={sounding ? "Tạm dừng nhạc nền" : "Phát nhạc nền"}
-          title={sounding ? "Tạm dừng nhạc nền" : "Phát nhạc nền"}
-          onClick={bgm.toggle}
+        <Select
+          aria-label="Chọn nhạc nền"
+          value={selected?.id ?? ""}
+          disabled={loading}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) => bgm.select(event.target.value || null)}
         >
-          {sounding ? <PauseIcon /> : <PlayIcon />}
-        </Button>
+          <option value="">Không có nhạc nền</option>
+          {tracks.map((track) => (
+            <option key={track.id} value={track.id}>
+              {track.origin === "local" ? `${track.title} (từ máy bạn)` : track.title}
+            </option>
+          ))}
+        </Select>
 
-        <span className="nb-player-time">{formatTime(hasTrack ? currentTime : NaN)}</span>
+        {/* Không có bản nào trong kho thì nói vì sao, và mời lối đi khác — một ô
+            chọn rỗng không giải thích gì là chỗ người ta tưởng trang bị hỏng. */}
+        {!loading && tracks.length === 0 && (
+          <p className="muted bgm-note">
+            Kho nhạc nền của trang đang trống. Bạn vẫn có thể mở một bản nhạc từ máy mình để nghe
+            cùng giọng đọc.
+          </p>
+        )}
 
-        <input
-          className="nb-range"
-          type="range"
-          min={0}
-          max={seekMax}
-          step={0.1}
-          value={Math.min(currentTime, seekMax)}
-          disabled={!hasTrack || duration <= 0}
-          aria-label="Vị trí trong bản nhạc nền"
-          aria-valuetext={`${formatTime(currentTime)} trên ${formatTime(duration)}`}
-          style={{ "--range-fill": `${seekProgress}%` } as CSSProperties}
-          onChange={(event) => bgm.seek(Number(event.target.value))}
-        />
+        {/*
+          Bộ nút của riêng bản nhạc: bật/tắt và tua, không đụng tới giọng đọc.
 
-        <span className="nb-player-time">{formatTime(hasTrack ? duration : NaN)}</span>
+          Trước đây nhạc nền không có nút nào cả — nó chạy khi giọng đọc chạy, và
+          cách duy nhất để tắt nó giữa chương là kéo âm lượng về 0 hoặc bỏ chọn cả
+          bản nhạc. Cả hai đều là xoá lựa chọn chứ không phải tắt tiếng, và cả hai
+          đều không có đường quay lại chỗ cũ trong bài.
+        */}
+        <div className="bgm-transport">
+          <Button
+            className="nb-icon-btn bgm-transport-play"
+            disabled={!hasTrack}
+            aria-label={sounding ? "Tạm dừng nhạc nền" : "Phát nhạc nền"}
+            title={sounding ? "Tạm dừng nhạc nền" : "Phát nhạc nền"}
+            onClick={bgm.toggle}
+          >
+            {sounding ? <PauseIcon /> : <PlayIcon />}
+          </Button>
+
+          <span className="nb-player-time">{formatTime(hasTrack ? currentTime : NaN)}</span>
+
+          <input
+            className="nb-range"
+            type="range"
+            min={0}
+            max={seekMax}
+            step={0.1}
+            value={Math.min(currentTime, seekMax)}
+            disabled={!hasTrack || duration <= 0}
+            aria-label="Vị trí trong bản nhạc nền"
+            aria-valuetext={`${formatTime(currentTime)} trên ${formatTime(duration)}`}
+            style={{ "--range-fill": `${seekProgress}%` } as CSSProperties}
+            onChange={(event) => bgm.seek(Number(event.target.value))}
+          />
+
+          <span className="nb-player-time">{formatTime(hasTrack ? duration : NaN)}</span>
+        </div>
+
+        {/* Chỉ nói khi có gì đó để nói: mặc định là "theo giọng đọc", và nhắc lại
+            điều mặc định ở mỗi lần nhìn là tiếng ồn. */}
+        {hasTrack && intent !== "follow" && (
+          <p className="bgm-intent muted" role="status">
+            {intent === "pause"
+              ? "Bạn đã tắt nhạc nền. Chọn lại bản nhạc để nó chạy cùng giọng đọc như cũ."
+              : "Nhạc nền đang chạy riêng, không phụ thuộc giọng đọc."}
+          </p>
+        )}
+
+        <div>
+          <Button size="sm" onClick={() => fileRef.current?.click()}>
+            Mở nhạc từ máy bạn
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="audio/*"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) bgm.openLocalFile(file);
+              // Chọn lại đúng tệp vừa chọn cũng phải có tác dụng, mà trình duyệt
+              // chỉ bắn `change` khi giá trị đổi — nên xoá giá trị đi.
+              event.target.value = "";
+            }}
+          />
+        </div>
       </div>
 
-      {/* Chỉ nói khi có gì đó để nói: mặc định là "theo giọng đọc", và nhắc lại
-          điều mặc định ở mỗi lần nhìn là tiếng ồn. */}
-      {hasTrack && intent !== "follow" && (
-        <p className="bgm-intent muted" role="status">
-          {intent === "pause"
-            ? "Bạn đã tắt nhạc nền. Chọn lại bản nhạc để nó chạy cùng giọng đọc như cũ."
-            : "Nhạc nền đang chạy riêng, không phụ thuộc giọng đọc."}
+      <div className="bgm-panel-col">
+        <div className="bgm-volume">
+          <label className="nb-label" htmlFor="bgm-volume">
+            Âm lượng nhạc — {volumePercent}%
+          </label>
+          <input
+            id="bgm-volume"
+            className="nb-range"
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={state.bgm.volume}
+            aria-label="Âm lượng nhạc nền"
+            aria-valuetext={`${volumePercent} phần trăm`}
+            style={{ "--range-fill": `${volumePercent}%` } as CSSProperties}
+            onChange={(event) => bgm.setVolume(Number(event.target.value))}
+          />
+        </div>
+
+        <Switch
+          label="Nhường lời cho giọng đọc"
+          hint="Nhạc tự nhỏ lại khi có tiếng người, to lại ở khoảng nghỉ."
+          checked={state.bgm.duck}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => bgm.setDuck(event.target.checked)}
+        />
+
+        <Switch
+          label="Lặp lại bản nhạc"
+          hint="Hết bài thì quay lại từ đầu, để nhạc còn dài hơn chương."
+          checked={state.bgm.loop}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => bgm.setLoop(event.target.checked)}
+        />
+
+        {/* Rút còn một dòng. Câu dài trước đây kể lại đúng những gì bộ nút bên
+            trái và hai công tắc trên đã tự nói ra rồi; giữ lại phần duy nhất
+            không nhìn thấy được — cái nết mặc định — và phần ghi công bản nhạc,
+            thứ không phải của trang này để mà bỏ đi. */}
+        <p className="muted bgm-note">
+          Mặc định nhạc chạy và dừng theo giọng đọc.
+          {selected?.credit ? ` ${selected.credit}` : ""}
         </p>
-      )}
-
-      <div className="bgm-volume">
-        <label className="nb-label" htmlFor="bgm-volume">
-          Âm lượng nhạc — {volumePercent}%
-        </label>
-        <input
-          id="bgm-volume"
-          className="nb-range"
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={state.bgm.volume}
-          aria-label="Âm lượng nhạc nền"
-          aria-valuetext={`${volumePercent} phần trăm`}
-          style={{ "--range-fill": `${volumePercent}%` } as CSSProperties}
-          onChange={(event) => bgm.setVolume(Number(event.target.value))}
-        />
       </div>
-
-      <Switch
-        label="Nhường lời cho giọng đọc"
-        hint="Nhạc tự nhỏ lại khi có tiếng người, to lại ở khoảng nghỉ."
-        checked={state.bgm.duck}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => bgm.setDuck(event.target.checked)}
-      />
-
-      <Switch
-        label="Lặp lại bản nhạc"
-        hint="Hết bài thì quay lại từ đầu, để nhạc còn dài hơn chương."
-        checked={state.bgm.loop}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => bgm.setLoop(event.target.checked)}
-      />
-
-      <div>
-        <Button size="sm" onClick={() => fileRef.current?.click()}>
-          Mở nhạc từ máy bạn
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="audio/*"
-          hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) bgm.openLocalFile(file);
-            // Chọn lại đúng tệp vừa chọn cũng phải có tác dụng, mà trình duyệt
-            // chỉ bắn `change` khi giá trị đổi — nên xoá giá trị đi.
-            event.target.value = "";
-          }}
-        />
-      </div>
-
-      <p className="muted" style={{ fontSize: "0.82rem" }}>
-        Mặc định nhạc nền chạy cùng giọng đọc và dừng khi bạn tạm dừng; nút ở trên cho phép bật,
-        tắt và tua riêng bản nhạc.
-        {selected?.credit ? ` ${selected.credit}` : ""}
-      </p>
     </div>
   );
 }

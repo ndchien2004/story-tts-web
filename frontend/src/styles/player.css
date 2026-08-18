@@ -1,31 +1,22 @@
 /**
- * Audio transport.
+ * Phần nghe của trang đọc.
  *
- * The native `<audio controls>` widget is drawn by the browser and ignores the
- * theme entirely, so it read as a foreign object on the page. Here the element
- * is kept for playback only — hidden — and every control is rebuilt in the
- * app's own language: controls sitting straight on the page with no panel
- * around them, and a single filled button to start from.
+ * Thẻ `<audio controls>` của trình duyệt tự vẽ lấy và không nghe theo bộ màu
+ * nào của trang, nên nó luôn đọc như một vật thể lạ. Ở đây thẻ ấy chỉ còn để
+ * phát tiếng — nó bị giấu đi — còn mọi nút bấm đều được dựng lại bằng ngôn ngữ
+ * của trang: nút trần đặt thẳng lên nền, không hộp không viền, và đúng một hình
+ * tròn được tô đặc để mắt biết chỗ bắt đầu.
+ *
+ * Tệp này có hai phần: những mảnh điều khiển (thanh tua, bộ nút, tốc độ, âm
+ * lượng) và cái dải dưới đáy màn hình chứa chúng.
  */
 
-.nb-player {
-  /* Sized against its own box, not the viewport: the same player sits in the
-     narrow reading sidebar and in wider panels, and only its own width
-     decides whether the controls still fit on one row. */
-  container-type: inline-size;
+/* ------------------------------------------------------------------ */
+/* Thanh tua                                                           */
+/* ------------------------------------------------------------------ */
 
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-/* Elapsed time, scrubber and total on one line — the times flank the bar
-   instead of costing a row of their own. */
+/* Giờ đã trôi, thanh kéo và tổng thời lượng trên một dòng — hai con số đứng
+   hai bên thay vì chiếm thêm một dòng của riêng chúng. */
 .nb-player-seek {
   display: flex;
   align-items: center;
@@ -45,63 +36,61 @@
   color: var(--ink-muted);
 }
 
-/*
- * Transport on the left, speed and volume pushed to the right — on one line.
- *
- * The overlap this used to show in the reading sidebar was a near miss, not a
- * shortage: the column gives the player 18rem and the row wanted 18.2rem, so it
- * spilled by three pixels and the skip button landed on top of the speed
- * control. A pane scrollbar took the rest of the margin.
- *
- * Six controls do fit in 18rem — at the size six controls in a sidebar should
- * be. So the fix is the compact set further down, sized off the container, and
- * not a second line: a transport that reflows into two rows stops reading as a
- * transport. Wrapping survives only as a last resort, for a container too
- * narrow to hold the compact set either.
- */
-.nb-player-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
+/* ------------------------------------------------------------------ */
+/* Lùi — phát — tua                                                    */
+/* ------------------------------------------------------------------ */
 
-/* A group never breaks up internally: skip/play/skip belong together, and so
-   do speed and volume. */
+/* Một nhóm không bao giờ tách ra: lùi, phát và tua thuộc về nhau. */
 .nb-player-group {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   flex-wrap: nowrap;
   min-width: 0;
 }
 
-.nb-player-group-end {
-  margin-left: auto;
-}
-
-/* Primary play/pause control: the one filled shape in the column, so the eye
-   knows where to start. A circle, like every other control on the page. */
+/* Nút phát: hình duy nhất được tô đặc trong cả dải, nên mắt biết chỗ bắt đầu. */
 .nb-player-play {
   flex: 0 0 auto;
-  width: 2.6rem;
-  height: 2.6rem;
+  width: 2.3rem;
+  height: 2.3rem;
   padding: 0;
   border-radius: var(--radius-pill);
   box-shadow: none;
 }
 
 .nb-player-play svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+/* Hai nút mười giây: không viền, vì chúng là bè phụ của nút ở giữa. */
+.nb-player-skip {
+  width: 1.95rem;
+  height: 1.95rem;
+  color: var(--ink);
+  background: transparent;
+  border-color: transparent;
+}
+
+.nb-player-skip svg {
   width: 1.25rem;
   height: 1.25rem;
 }
 
+.nb-player-skip:hover:not(:disabled) {
+  background: var(--bg-alt);
+}
+
+/* ------------------------------------------------------------------ */
+/* Tốc độ đọc                                                          */
+/* ------------------------------------------------------------------ */
+
 /*
- * Playback rate.
+ * Con số hiện tại là cái nút; các lựa chọn chỉ chiếm chỗ khi danh sách mở ra.
  *
- * A native select spent most of its width on the dropdown arrow and pushed the
- * rest of the row out of shape, so the current rate is the button and the
- * choices only exist while the menu is open.
+ * Một ô chọn của trình duyệt tiêu gần hết chiều ngang cho cái mũi tên của nó,
+ * và trên một dải chỉ cao chừng bốn phân rưỡi thì chỗ ấy không có để mà tiêu.
  */
 .nb-rate {
   position: relative;
@@ -109,19 +98,20 @@
 }
 
 .nb-rate-btn {
-  min-width: 2.6rem;
-  height: 2.1rem;
-  padding: 0 0.4rem;
-  font-size: 0.82rem;
+  min-width: 2.5rem;
+  height: 1.95rem;
+  padding: 0 0.35rem;
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
 }
 
-/* Floats over the page, so it keeps an edge and an elevation. */
+/* Nổi lên trên trang, nên nó giữ một đường viền và một tầng bóng. Mở lên trên,
+   vì dưới cái nút này là mép dưới màn hình. */
 .nb-menu {
   position: absolute;
-  top: calc(100% + 6px);
   right: 0;
-  z-index: 30;
+  bottom: calc(100% + 6px);
+  z-index: 50;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -158,294 +148,507 @@
   background: var(--accent);
 }
 
+/* ------------------------------------------------------------------ */
+/* Âm lượng giọng đọc                                                  */
+/* ------------------------------------------------------------------ */
+
+.nb-player-volume-group {
+  gap: var(--space-2);
+}
+
 .nb-player-volume {
-  flex: 1 1 3.5rem;
-  min-width: 2rem;
-  max-width: 6rem;
-}
-
-/*
- * The compact set: the same six controls, sized for a sidebar.
- *
- * Driven by the player's own width rather than the viewport's, because the
- * thing that decides this is the box the player was put in — the same component
- * sits in the 21rem reading column and in a full-width admin panel, and only
- * the first one needs to tighten up.
- *
- * The arithmetic it is built to satisfy, at 18rem of content width:
- *
- *   skip 1.75 + gap .3 + play 2.1 + gap .3 + skip 1.75   = 6.2rem
- *   gap between the two groups                           = 0.4rem
- *   rate 2.6 + gap .3 + mute 1.75 + gap .3 + vol 1.75    = 6.7rem
- *   ------------------------------------------------------------
- *                                                          13.3rem
- *
- * The rate button is measured at its widest label — "1.25×", not "1×". Speed is
- * remembered between sessions now, so most readers meet this row with a label
- * wider than the one it used to be sized against.
- *
- * The set tightened once already and has now tightened again, for a reason that
- * has nothing to do with the row: the listening column gained a music panel and
- * two more switches, so it scrolls where it used to fit, and a scrollbar takes
- * about a rem off the width every control here is measured against. Nearly 4rem
- * of slack means the next thing to land in that column will not push the
- * transport apart again.
- *
- * Which is also why the row is not allowed to wrap at this size. A transport
- * that reflows into two rows stops reading as a transport, and the volume
- * slider — the one flexible thing in it — gives up width long before that
- * becomes necessary. Wrapping survives only below 15rem, where the arithmetic
- * genuinely runs out.
- */
-@container (max-width: 24rem) {
-  .nb-player-controls {
-    gap: 0.4rem;
-    flex-wrap: nowrap;
-  }
-
-  .nb-player-group {
-    gap: 0.3rem;
-  }
-
-  .nb-player-controls .nb-icon-btn {
-    width: 1.75rem;
-    height: 1.75rem;
-  }
-
-  .nb-player-controls .nb-icon-btn svg {
-    width: 0.85rem;
-    height: 0.85rem;
-  }
-
-  .nb-player-play {
-    width: 2.1rem;
-    height: 2.1rem;
-  }
-
-  .nb-player-play svg {
-    width: 1rem;
-    height: 1rem;
-  }
-
-  .nb-rate-btn {
-    min-width: 2.1rem;
-    height: 1.75rem;
-    padding: 0 0.3rem;
-    font-size: 0.74rem;
-  }
-
-  .nb-player-volume {
-    flex: 1 1 2.5rem;
-    min-width: 1.75rem;
-    max-width: 4rem;
-  }
-}
-
-/*
- * Genuinely too narrow for six controls on a line — a player dropped into a
- * column this thin has run out of arithmetic, so it is allowed the second row.
- * With the group wrapped, `margin-left: auto` would only strand it against the
- * right edge, so it starts from the left instead.
- */
-@container (max-width: 15rem) {
-  /* The tier above forbids wrapping; here it is the only way out. */
-  .nb-player-controls {
-    flex-wrap: wrap;
-  }
-
-  .nb-player-group-end {
-    margin-left: 0;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Docked player: the reading screen on a narrow viewport               */
-/* ------------------------------------------------------------------ */
-
-/*
- * On a wide screen the panel is just a panel: transport, then the track picker
- * and continuous listening under it. Nothing is folded away, so the button that
- * unfolds it is not drawn.
- */
-.reader-player {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-/* Ruled off from the transport, the way the listening column separates each of
-   its blocks. The panel used to inherit this from `.stack`; it carries its own
-   now that it is a box in its own right. */
-.reader-player-more {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding-top: var(--space-4);
-  border-top: var(--outline-width) solid var(--outline);
-}
-
-.reader-player-expand {
-  display: none;
-}
-
-/*
- * Below the reading screen's split breakpoint, the listening panel drops under
- * the chapter — and a chapter is long, so a player at the end of it is a player
- * you cannot reach while reading. Here it leaves the flow and pins itself to the
- * bottom of the viewport, the way a music app does.
- *
- * A phone gets the same controls a desktop does, just not all at once. What a
- * hand reaches for mid-chapter stays on the bar — the scrubber, play/pause, the
- * two skips and the volume. What gets set once and left alone — reading speed,
- * which recording, continuous listening — folds away behind the caret, because
- * a bar tall enough to hold everything is a bar that eats the chapter it is
- * meant to accompany.
- *
- * The markup does not change between the two: fixed positioning ignores where
- * an element sits in the document, and the fold is one class on the wrapper.
- */
-@media (max-width: 900px) {
-  .reader-player {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 40;
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-4);
-    /* The phone's own home bar sits below this on iOS. */
-    padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
-    background: var(--bg);
-    border-top: var(--outline-width) solid var(--outline);
-    /* An expanded bar on a short screen in landscape could otherwise grow past
-       the top of the viewport with no way back to the caret. */
-    max-height: 75vh;
-    overflow-y: auto;
-  }
-
-  /* The caret sits beside the transport rather than under it, so opening the
-     bar does not move the play button the thumb is already resting on. */
-  .reader-player-bar {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .reader-player-bar .nb-player {
-    flex: 1 1 auto;
-    min-width: 0;
-    gap: var(--space-2);
-  }
-
-  .reader-player-expand {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    width: 2.25rem;
-    height: 2.25rem;
-    padding: 0;
-    color: var(--ink-muted);
-    background: transparent;
-    border: var(--outline-width) solid var(--line-strong);
-    border-radius: var(--radius-pill);
-    cursor: pointer;
-    transition:
-      color var(--transition),
-      background var(--transition);
-  }
-
-  .reader-player-expand:hover {
-    color: var(--ink);
-    background: var(--bg-alt);
-  }
-
-  .reader-player-expand svg {
-    width: 1.1rem;
-    height: 1.1rem;
-  }
-
-  /*
-   * Folded away by default: reading speed, the recording picker and continuous
-   * listening. The caret brings all three back.
-   */
-  .reader-player .nb-rate,
-  .reader-player-more {
-    display: none;
-  }
-
-  .reader-player.is-expanded .nb-rate {
-    display: block;
-  }
-
-  .reader-player.is-expanded .reader-player-more {
-    display: flex;
-    padding-top: var(--space-3);
-  }
-
-  /* Volume keeps its place on the bar but gives up most of its width — the
-     slider only has to be draggable, not measured. */
-  .reader-player .nb-player-volume {
-    flex: 0 1 4.5rem;
-    min-width: 2.5rem;
-  }
-
-  /* The speed menu opens upward: below the bar is off-screen. */
-  .reader-player .nb-menu {
-    top: auto;
-    bottom: calc(100% + 6px);
-  }
-}
-
-/* Narrowest phones give up the total length first — the scrubber already shows
-   how far along the track is. */
-@media (max-width: 400px) {
-  .reader-player .nb-player-time:last-of-type {
-    display: none;
-  }
-
-  .reader-player .nb-player-volume {
-    flex: 0 1 3rem;
-    min-width: 2rem;
-  }
+  flex: 1 1 6rem;
+  min-width: 4rem;
+  max-width: 12rem;
 }
 
 /* Chính sách tự phát của trình duyệt, nói bằng một dòng chữ nhỏ thay vì một hộp
    báo lỗi: không có gì hỏng cả, chỉ là còn thiếu một cái bấm. */
 .nb-player-note {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   color: var(--ink-muted);
 }
 
-/* Empty state shown before any track exists for the chapter. */
-.nb-player-empty {
+/* ------------------------------------------------------------------ */
+/* Dải nghe dưới đáy trang đọc                                         */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Phần nghe từng là một cột riêng bên phải trang đọc, và cái giá của cột ấy là
+ * chiều ngang: 21rem bị lấy đi khỏi trang chữ suốt buổi đọc, để giữ sẵn những
+ * công tắc phần lớn thời gian không ai đụng tới.
+ *
+ * Dưới đáy thì ngược lại. Thu gọn, dải này chỉ cao chừng một nút bấm và chứa
+ * đúng những thứ tay với tới giữa chương; mọi tuỳ chọn khác nằm sau mũi tên bên
+ * phải. Không thứ gì mất đi trên đường chuyển chỗ — chỉ là thứ hiếm dùng thì
+ * phải bấm một lần mới thấy.
+ *
+ * Trên màn hình rộng, dải nằm trong dòng chảy bình thường, là con út của một
+ * khối cao đúng bằng màn hình: nó tự dính đáy mà không cần định vị cố định, và
+ * mở ra thì trang chữ co lại chứ không bị che mất phần dưới.
+ */
+.reader-dock {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+.reader-dock-bar {
+  display: grid;
+  /* Hai bên co giãn bằng nhau, nên bộ nút ở giữa nằm đúng giữa màn hình dù tên
+     truyện dài ngắn thế nào. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 44rem) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--reader-dock-height);
+  padding-block: 0.45rem;
+}
+
+/* ----- Bên trái: đang nghe cái gì ----- */
+
+.reader-dock-identity {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 0 0 0 var(--space-3);
-  font-size: 0.9rem;
-  color: var(--ink-muted);
-  background: transparent;
-  border: 0;
-  border-left: 2px solid var(--line-strong);
-  border-radius: 0;
+  min-width: 0;
 }
 
-.nb-player-empty svg {
+.reader-dock-mark {
+  display: grid;
+  place-items: center;
   flex: 0 0 auto;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.85rem;
+  height: 1.85rem;
+  color: var(--ink-muted);
+  background: var(--bg-alt);
+  border-radius: var(--radius-pill);
+}
+
+.reader-dock-mark svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.reader-dock-names {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.reader-dock-names strong {
+  overflow: hidden;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /*
- * `.stack` xếp dọc và kéo giãn con của nó, nên trong cột nghe hẹp cái nút này
- * chiếm trọn chiều ngang - trông như hành động chính của cả trang thay vì một
- * lựa chọn trong khung. Để nó tự lấy chiều rộng theo nội dung, giống nút đăng
- * nhập ở nhánh dành cho khách chưa đăng nhập ngay bên trên.
+ * Một dòng nói một việc mỗi lúc: bản audio đang nghe, hoặc còn mấy lượt tạo
+ * audio, hoặc vì sao cái nút kia đang mờ. Chỗ này tồn tại để lý do ấy đọc được
+ * mà không phải mở dải ra.
  */
-.nb-narration-request {
-  align-self: flex-start;
+.reader-dock-status {
+  overflow: hidden;
+  font-size: 0.74rem;
+  line-height: 1.3;
+  color: var(--ink-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-dock-status.is-error {
+  color: var(--danger);
+}
+
+/* ----- Ở giữa: bộ nút, hoặc lời mời dựng một bản ----- */
+
+.reader-dock-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.reader-dock-center .nb-player-seek {
+  width: 100%;
+}
+
+/* Thấp hơn mặc định: cái thanh chỉ cần đủ chỗ cho đường ray và cái núm, mà cả
+   hai đều nhỏ. Chiều cao thừa ở đây là chiều cao thừa của cả dải. */
+.reader-dock-center .nb-range {
+  height: 1rem;
+}
+
+/* Đang chờ dựng audio, hoặc chương không có gì để bấm: cùng một chỗ với bộ nút,
+   cùng một chiều cao, nên dải không giật lên giật xuống khi trạng thái đổi. */
+.reader-dock-waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.88rem;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.reader-dock-waiting svg {
+  flex: 0 0 auto;
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+/* ----- Bên phải: tải về, và mũi tên mở dải ----- */
+
+.reader-dock-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* Nút tắt tiếng mặc cùng bộ đồ với mấy nút cạnh nó, dù nó tới đây từ một tệp
+   khác và không mang sẵn class của dải. */
+.reader-dock-action,
+.reader-dock-volume .nb-player-mute {
+  flex: 0 0 auto;
+  width: 1.95rem;
+  height: 1.95rem;
+  color: var(--ink-muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.reader-dock-action:hover:not(:disabled),
+.reader-dock-volume .nb-player-mute:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--bg-alt);
+}
+
+.reader-dock-action svg,
+.reader-dock-volume .nb-player-mute svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+/*
+ * Nét nền luồn dưới gạch chéo của một nút đang tắt.
+ *
+ * Nó tô bằng đúng màu nền dải, dày hơn nét thật chừng gấp đôi, nên chỗ gạch
+ * chéo cắt qua mấy nét kia hở ra một sợi trống và mắt còn tách được hai lớp.
+ * Nút này đổi nền khi rê chuột vào, nên nét nền đổi theo — nếu không thì lúc
+ * ấy hiện ra một vệt sáng nằm giữa hình.
+ */
+.nb-slash-bed {
+  stroke: var(--bg);
+}
+
+.reader-dock-action:hover:not(:disabled) .nb-slash-bed {
+  stroke: var(--bg-alt);
+}
+
+/*
+ * Một cái nút đang bật.
+ *
+ * Nghe liên tục là thứ duy nhất trên dải này có trạng thái nhớ được giữa các
+ * chương, nên nó là thứ duy nhất cần nói ra mình đang bật hay tắt mà không cần
+ * ai rê chuột vào. Màu nhấn, không phải nền đặc: nút phát vẫn phải là hình đặc
+ * duy nhất trên dải.
+ */
+.reader-dock-action.is-on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.reader-dock-action.is-on:hover:not(:disabled) {
+  color: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+/*
+ * Âm lượng, gọn lại vừa một góc bên phải.
+ *
+ * Thanh kéo ở đây ngắn hơn hẳn bản trong bảng: nó chỉ cần đủ để vặn to nhỏ, mà
+ * chiều ngang chỗ này thì bộ nút ở giữa dải đang cần từng phân. Nút tắt tiếng
+ * bên cạnh vẫn là đường tắt cho việc hay làm nhất — im ngay lập tức rồi bật
+ * lại đúng mức cũ.
+ */
+.reader-dock-volume {
+  flex: 0 0 auto;
+  gap: var(--space-1);
+}
+
+.reader-dock-volume .nb-player-volume {
+  flex: 0 0 auto;
+  width: 4.5rem;
+  min-width: 0;
+  height: 1rem;
+}
+
+/*
+ * Thanh kéo rút đi trước cả những thứ khác, nút tắt tiếng ở lại.
+ *
+ * Ngưỡng này rộng hơn ngưỡng đổi bố cục của cả dải, và phải thế: bộ nút giữa
+ * dải giữ nguyên cỡ dù màn hình hẹp lại, nên góc phải là chỗ hết chỗ trước
+ * tiên — sáu thứ chen nhau ở đó trong khi giữa dải vẫn thênh thang.
+ *
+ * Bỏ thanh kéo chứ không bỏ nút tắt tiếng, vì hai cái không thay thế nhau
+ * được: máy nào cũng có sẵn cách vặn to nhỏ, nhưng "im ngay bây giờ rồi lát
+ * nữa bật lại đúng mức cũ" thì chỉ cái nút này làm được.
+ */
+@media (max-width: 1100px) {
+  .reader-dock-volume .nb-player-volume {
+    display: none;
+  }
+}
+
+/* ----- Phần mở ra ----- */
+
+/*
+ * Ngăn kéo: cái làm cho tấm bảng trượt ra thay vì hiện đánh phụp.
+ *
+ * Mẹo ở `grid-template-rows` chạy từ `0fr` tới `1fr`. Chuyển tiếp thẳng trên
+ * `height` thì không được, vì chiều cao lúc mở là `auto` — mà `auto` không
+ * phải một con số để trình duyệt nội suy, nên nó nhảy cái rụp. Còn ép một
+ * `max-height` đủ lớn thì tấm bảng cao bao nhiêu cũng chạy hết quãng đường ấy:
+ * bảng thấp thì đứng im mất nửa thời gian rồi mới bung, bảng cao thì hết giờ
+ * trước khi ra hết. Một hàng lưới `1fr` biết đúng chiều cao ruột của nó, nên
+ * quãng đường luôn vừa khít.
+ */
+.reader-dock-drawer {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dock-slide) var(--dock-ease);
+}
+
+.reader-dock-drawer.is-open {
+  grid-template-rows: 1fr;
+}
+
+/* Hàng lưới co lại thì ruột phải chịu bị cắt, chứ không đẩy ngược ra. `min-height`
+   phải nói rõ: mặc định của một ô lưới là `auto`, và `auto` không cho co xuống
+   dưới chiều cao ruột — đúng cái làm cả mẹo trên không nhúc nhích. */
+.reader-dock-drawer-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/*
+ * Nằm trên thanh chứ không dưới, nên cái nút phát mà ngón tay đang đặt lên
+ * không xê dịch một ly khi mũi tên được bấm.
+ *
+ * Xếp thành cột theo chiều ngang có sẵn: màn hình rộng bày cả bốn khối cạnh
+ * nhau, màn hình hẹp xếp chúng chồng lên nhau và cho phần mở ra tự cuộn.
+ */
+.reader-dock-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  align-items: start;
+  gap: var(--space-4) var(--space-5);
+  padding-block: var(--space-4);
+  border-bottom: var(--outline-width) solid var(--outline);
+
+  /* Lưới cuối cùng vẫn phải cuộn được, nhưng không phải để dùng: nó là cái đáy
+     cho một màn hình ngắn bất thường. Trên một màn hình bình thường thì khối
+     nhạc nền — khối cao nhất — đã tự chia đôi để cả bảng vừa một tầm nhìn. */
+  max-height: 60vh;
+  overflow-y: auto;
+
+  /* Ruột mờ dần và nhích lên theo ngăn kéo, nên lúc nó còn hé thì phần lộ ra
+     chưa rõ mặt chữ — mắt đọc ra "đang mở" thay vì đọc dở một dòng bị cắt
+     ngang. Nhanh hơn cú trượt, và đợi cú trượt đi được một quãng rồi mới vào. */
+  opacity: 0;
+  transform: translateY(0.5rem);
+  transition:
+    opacity calc(var(--dock-slide) * 0.6) var(--dock-ease),
+    transform calc(var(--dock-slide) * 0.6) var(--dock-ease);
+}
+
+.reader-dock-drawer.is-open .reader-dock-panel {
+  opacity: 1;
+  transform: none;
+  transition-delay: calc(var(--dock-slide) * 0.25);
+}
+
+.reader-dock-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* Khối rộng gấp đôi: dành cho thứ tự nó đã là hai cột. */
+.reader-dock-section.is-wide {
+  grid-column: span 2;
+}
+
+.reader-dock-section > h3 {
+  margin: 0;
+}
+
+.reader-dock-tracks {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.reader-dock-tracks .nb-select {
+  width: auto;
+  min-width: 9rem;
+}
+
+.reader-dock-note {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* Mũi tên lật nửa vòng cùng lúc với ngăn kéo, không sớm hơn: cái nút và cái nó
+   mở ra phải nói cùng một câu ở cùng một thời điểm. */
+.reader-dock-expand svg {
+  transition: transform var(--dock-slide) var(--dock-ease);
+}
+
+.reader-dock-expand[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+/* ------------------------------------------------------------------ */
+/* Dải nghe trên màn hình hẹp                                          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Dưới ngưỡng này trang đọc thôi chia khung cố định và trở về cuộn như mọi
+ * trang khác, nên dải mất chỗ dựa là cái khối cao bằng màn hình: nó tự dán mình
+ * vào đáy khung nhìn, như một ứng dụng nghe nhạc.
+ *
+ * Tên truyện nhường chỗ trước — trên một màn hình hẹp thì thứ duy nhất còn phải
+ * nằm trong tầm ngón tay là bộ nút và thanh tua.
+ */
+@media (max-width: 900px) {
+  /* Cao hơn bản màn hình rộng đúng một hàng: tên truyện không còn chỗ bên cạnh
+     bộ nút nên nó lên hàng trên. Trang chữ chừa đúng chỗ này ở dưới cùng, và
+     con số ở đây rộng tay hơn dải thật một chút — thiếu thì dòng cuối chương
+     nằm khuất dưới dải, thừa thì chỉ là một khoảng trắng ở cuối. */
+  :root {
+    --reader-dock-height: 7.25rem;
+  }
+
+  .reader-dock {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    padding-inline: var(--space-4);
+    /* Thanh home của chính cái điện thoại nằm dưới dải này trên iOS. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /*
+   * Tên truyện và hai nút bên phải chia nhau hàng trên; bộ nút và thanh tua
+   * chiếm trọn hàng dưới, nơi ngón tay cái với tới dễ nhất.
+   *
+   * Cả ba đều được chỉ đích danh hàng và cột. Để lưới tự xếp thì không được:
+   * khối ở giữa nằm giữa hai khối kia trong cây DOM và chiếm trọn chiều ngang,
+   * nên cái con trỏ xếp tự động đi qua nó rồi đẩy hai nút bên phải xuống hẳn
+   * một hàng thứ ba.
+   */
+  /*
+   * Hai hàng thì nội dung tự quyết chiều cao, nên bỏ mức sàn của bản màn hình
+   * rộng đi. Giữ lại thì thành một vòng luẩn quẩn: khoảng chừa dưới trang chữ
+   * đo theo cùng con số ấy, nên dải cứ cao đúng bằng khoảng nó được chừa, cộng
+   * thêm đường kẻ trên — và dòng cuối chương lúc nào cũng thiếu đúng một sợi.
+   */
+  .reader-dock-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+    min-height: 0;
+  }
+
+  .reader-dock-identity {
+    grid-area: 1 / 1;
+  }
+
+  .reader-dock-actions {
+    grid-area: 1 / 2;
+  }
+
+  .reader-dock-center {
+    grid-area: 2 / 1 / 3 / -1;
+    align-items: stretch;
+  }
+
+  .reader-dock-center .nb-player-group {
+    justify-content: center;
+  }
+
+  /* Bộ nút nhỏ lại một cỡ nữa: trên một màn hình cao bảy trăm điểm ảnh, mỗi
+     phần mười của dải này là một dòng chữ bị đẩy khỏi tầm mắt. */
+  .reader-dock .nb-player-play {
+    width: 2.1rem;
+    height: 2.1rem;
+  }
+
+  .reader-dock .nb-player-play svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+
+  .reader-dock .nb-player-skip {
+    width: 1.8rem;
+    height: 1.8rem;
+  }
+
+  .reader-dock .nb-player-skip svg {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  /* Bốn thứ chen nhau ở góc phải trên một màn hình hẹp, nên chúng khít lại. */
+  .reader-dock-actions {
+    gap: var(--space-1);
+  }
+
+  /*
+   * Một cột, và khối nhạc nền thôi đòi hai cột — ở đây chỉ có một cột để mà
+   * đòi. Bên trong nó vẫn tự chia đôi nếu còn đủ chiều ngang.
+   *
+   * Đây là chỗ duy nhất tấm bảng vẫn phải cuộn, và nó phải: trên một màn hình
+   * rộng 375 điểm ảnh, xếp kiểu gì thì chỗ trống cũng ít hơn chỗ cần — thử qua
+   * cả hai cột lẫn ép khối nhạc nền vào hai cột đều còn thiếu. Cắt bớt công tắc
+   * hay cắt bớt dòng giải thích thì vừa, nhưng vừa bằng cách bỏ mất thứ người
+   * ta mở tấm bảng ra để tìm. Nên thay vì cắt, cho nó cao thêm: bảy phần mười
+   * màn hình, đủ để phần phải cuộn chỉ còn là phần đuôi.
+   */
+  .reader-dock-panel {
+    grid-template-columns: minmax(0, 1fr);
+    max-height: 70vh;
+    padding-block: var(--space-4);
+  }
+
+  .reader-dock-section.is-wide {
+    grid-column: span 1;
+  }
+}
+
+/* Máy hẹp nhất bỏ tổng thời lượng trước — thanh tua đã nói được bản audio còn
+   bao nhiêu. */
+@media (max-width: 400px) {
+  .reader-dock .nb-player-time:last-of-type {
+    display: none;
+  }
+
+  .reader-dock-mark {
+    display: none;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -483,12 +686,12 @@
 .nb-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 0.8rem;
-  height: 0.8rem;
-  margin-top: -0.275rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-top: -0.25rem;
   background: var(--ink);
   border: none;
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   box-shadow: none;
 }
 
@@ -507,14 +710,76 @@
 }
 
 .nb-range::-moz-range-thumb {
-  width: 0.8rem;
-  height: 0.8rem;
+  width: 0.75rem;
+  height: 0.75rem;
   background: var(--ink);
   border: none;
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
 }
 
 .nb-range:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/* ------------------------------------------------------------------ */
+/* Cái núm của thanh tua: chỉ hiện khi có người định cầm tới nó         */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Lúc không ai đụng vào, thanh tua chỉ là một vạch — phần đã nghe đậm, phần
+ * còn lại nhạt. Đó là tất cả những gì nó cần nói khi người ta đang nghe: còn
+ * bao nhiêu nữa. Cái núm là một lời mời cầm lấy, mà lời mời thì chỉ nên xuất
+ * hiện khi có người sắp nhận.
+ *
+ * Chỉ áp cho thanh tua, không áp cho thanh âm lượng: âm lượng không có phần
+ * "đã nghe" để mà đọc, nên giấu núm đi là giấu luôn cái giá trị hiện tại.
+ *
+ * Núm mờ đi chứ không biến mất, và đường ray không đổi chiều cao: một cái vạch
+ * nảy lên nảy xuống theo con chuột còn phiền hơn cái núm nó định giấu.
+ */
+.nb-player-seek .nb-range::-webkit-slider-thumb,
+.bgm-transport .nb-range::-webkit-slider-thumb {
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.nb-player-seek .nb-range::-moz-range-thumb,
+.bgm-transport .nb-range::-moz-range-thumb {
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.reader-dock:hover .nb-player-seek .nb-range::-webkit-slider-thumb,
+.nb-player-seek .nb-range:hover::-webkit-slider-thumb,
+.nb-player-seek .nb-range:focus-visible::-webkit-slider-thumb,
+.nb-player-seek .nb-range:active::-webkit-slider-thumb,
+.bgm-transport .nb-range:hover::-webkit-slider-thumb,
+.bgm-transport .nb-range:focus-visible::-webkit-slider-thumb,
+.bgm-transport .nb-range:active::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+.reader-dock:hover .nb-player-seek .nb-range::-moz-range-thumb,
+.nb-player-seek .nb-range:hover::-moz-range-thumb,
+.nb-player-seek .nb-range:focus-visible::-moz-range-thumb,
+.nb-player-seek .nb-range:active::-moz-range-thumb,
+.bgm-transport .nb-range:hover::-moz-range-thumb,
+.bgm-transport .nb-range:focus-visible::-moz-range-thumb,
+.bgm-transport .nb-range:active::-moz-range-thumb {
+  opacity: 1;
+}
+
+/* Màn hình cảm ứng không có "rê chuột vào", nên ở đó cái núm không bao giờ
+   được mời ra. Cứ để nó ở đấy. */
+@media (hover: none) {
+  .nb-player-seek .nb-range::-webkit-slider-thumb,
+  .bgm-transport .nb-range::-webkit-slider-thumb {
+    opacity: 1;
+  }
+
+  .nb-player-seek .nb-range::-moz-range-thumb,
+  .bgm-transport .nb-range::-moz-range-thumb {
+    opacity: 1;
+  }
 }

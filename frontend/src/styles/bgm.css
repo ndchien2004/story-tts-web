@@ -1,10 +1,38 @@
 /**
- * Bảng chọn nhạc nền, trong cột nghe của trang đọc.
+ * Bảng chọn nhạc nền, trong phần mở ra của dải nghe.
  *
- * Không có hộp, không có viền: nó là một khối nữa trong cột ấy, và cột ấy đã tự
- * kẻ vạch giữa các khối của mình rồi. Thứ duy nhất ở đây cần định kiểu là những
- * mảnh không có sẵn trong bộ giao diện dùng chung.
+ * Không có hộp, không có viền: nó là một khối nữa trong bảng ấy, và bảng ấy đã
+ * tự kẻ vạch giữa các khối của mình rồi. Thứ duy nhất ở đây cần định kiểu là
+ * những mảnh không có sẵn trong bộ giao diện dùng chung.
  */
+
+/*
+ * Hai cột: chọn bản nhạc bên trái, nghe nó ra sao bên phải.
+ *
+ * Đây là khối cao nhất trong phần mở ra. Xếp dọc thì một mình nó quyết định
+ * chiều cao cả tấm bảng và bắt tấm bảng phải cuộn — mà nửa dưới của một tấm
+ * bảng phải cuộn thì coi như không có ai đọc. Chia đôi thì nó cao xấp xỉ những
+ * khối bên cạnh, và tấm bảng vừa đúng một màn hình.
+ */
+.bgm-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.bgm-panel-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.bgm-note {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
 
 .bgm-panel .nb-label {
   display: inline-flex;

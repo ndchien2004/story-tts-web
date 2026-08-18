@@ -134,15 +134,28 @@
   /* Height of the sticky header; the reader subtracts it from the viewport. */
   --navbar-height: 4rem;
 
-  /* Height the docked audio bar takes on a narrow reading screen, in its
-     collapsed state: a scrubber row plus a control row, and the padding around
-     them. The reading pane pads its bottom by this much, so the last lines of a
-     chapter can still be scrolled clear of the bar instead of sitting under it.
+  /* Height the listening dock takes in its collapsed state: the transport row,
+     the scrubber under it, and the padding around them. On a wide screen this
+     is simply how tall the band is; on a narrow one, where the dock leaves the
+     flow and pins itself to the bottom of the viewport, the reading pane pads
+     its bottom by this much so the last lines of a chapter can still be
+     scrolled clear of the bar instead of sitting under it — see the taller
+     value player.css sets there, where the title takes a row of its own.
      Generous rather than exact: an under-estimate hides text, an over-estimate
      only leaves a little space. The expanded state is deliberately not counted
      — it is a sheet the reader opened and will close again, not a permanent
      tenant of the bottom of the screen. */
-  --reader-dock-height: 6rem;
+  --reader-dock-height: 4.5rem;
+
+  /* Nhịp mở ra và cụp lại của phần mở rộng dưới dải nghe.
+     Dài hơn `--transition` gấp đôi, và có lý do: một cái nút đổi màu thì mắt
+     chỉ cần biết nó đã đổi, còn một tấm bảng đẩy cả trang chữ lên thì mắt phải
+     kịp bám theo xem cái gì vừa đi đâu. Dưới hai phần mười giây thì nó vẫn là
+     một cú giật; trên bốn phần mười thì thành ra chậm chạp.
+     Đường cong nhả nhanh ở cuối: tấm bảng bung ra dứt khoát rồi đậu lại nhẹ,
+     giống một ngăn kéo có gioăng hơn là một cái hộp bật lò xo. */
+  --dock-slide: 260ms;
+  --dock-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 
   /* Reader preferences, driven by the reader settings controls.
      Kept in step with DEFAULT_FONT_SIZE in ThemeProvider: this is the value on
@@ -203,5 +216,6 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --transition: 0ms;
+    --dock-slide: 0ms;
   }
 }

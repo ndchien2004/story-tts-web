@@ -10,10 +10,11 @@ import KaraokeText from "../components/KaraokeText";
 import LockedGate from "../components/LockedGate";
 import PurchaseReceipt from "../components/PurchaseReceipt";
 import ReaderSettings from "../components/ReaderSettings";
+import ThemeToggle from "../components/ThemeToggle";
 import { useAuth } from "../context/auth-context";
 import useChapterAudio from "../hooks/useChapterAudio";
 import useTtsStatus from "../hooks/useTtsStatus";
-import { Alert, Button, ChevronIcon, Spinner } from "../components/ui";
+import { Alert, Button, ButtonLink, ChevronIcon, Spinner } from "../components/ui";
 
 const AUTO_CONTINUE_KEY = "storytts.autoContinue";
 const KARAOKE_KEY = "storytts.karaoke.v1";
@@ -43,9 +44,10 @@ function readKaraokePreferences() {
 /**
  * Reading screen.
  *
- * The chapter text and the listening panel sit side by side and each scrolls on
- * its own, so the navigation stays pinned to the top corners no matter how long
- * the chapter is.
+ * Ba dải chồng lên nhau: thanh chuyển chương ở trên, trang chữ ở giữa và tự
+ * cuộn lấy, phần nghe là một dải thu gọn dưới đáy. Nhờ trang chữ cuộn trong
+ * lòng nó chứ không cuộn cả trang, hai dải kia đứng yên tại chỗ dù chương dài
+ * tới đâu — bấm "chương sau" hay bấm phát đều không phải cuộn đi tìm.
  *
  * <h3>Ai giữ tiếng</h3>
  * Không phải khối này, và cũng không phải trình phát. Tiếng do bộ trộn giữ —
@@ -526,15 +528,42 @@ export default function ChapterPage() {
 
   return (
     <div className="reader">
-      <div className="reader-bar">
-        <Button
-          className="reader-nav-btn"
-          disabled={!chapter.previousChapterId}
-          onClick={() => goToChapter(chapter.previousChapterId)}
+      {/*
+        Thanh trên duy nhất của màn hình đọc — nó vừa là thanh chuyển chương,
+        vừa thay chỗ cho thanh điều hướng chung của cả trang web, cái tự ẩn đi
+        khi màn hình này hiện ra (xem `body:has(.reader)` trong components.css).
+
+        Đọc truyện là một chế độ chứ không phải một trang. Việc của thanh điều
+        hướng chung là "đi chỗ khác trong web", mà đang đọc dở chương bốn mươi
+        bảy thì "chỗ khác" chỉ có ba nghĩa: về danh sách chương, chương trước,
+        chương sau — cả ba đều nằm ngay đây. Cái logo và mấy link thể loại suốt
+        buổi đọc không được bấm lần nào, trong khi chúng ăn mất một dải cao bốn
+        phân trên đầu mỗi trang chữ.
+
+        Danh tính nằm bên trái, chỗ mắt bắt đầu; điều khiển dồn sang phải.
+      */}
+      <header className="reader-bar">
+        {/*
+          Đường quay lại, và nó phải là một cái nút nhìn ra được.
+
+          Đường ấy vốn đã có: tên truyện ngay bên cạnh là một `Link` về đúng chỗ
+          này. Nhưng nó được tạo hình như một dòng chú thích — chữ nhỏ, in hoa,
+          màu nhạt, không gạch chân — nên mắt đọc nó là "đây là truyện gì" chứ
+          không phải "bấm vào đây để về". Cái mũi tên này không thêm chức năng
+          nào, nó chỉ làm chức năng sẵn có nhìn thấy được.
+
+          Về thẳng trang truyện chứ không lùi một bước trong lịch sử: có "nghe
+          liên tục", người đọc có thể đã trôi qua năm chương liền, và lùi một
+          bước sẽ ném họ về chương vừa nghe xong chứ không về danh sách chương.
+        */}
+        <ButtonLink
+          to={`/truyen/${chapter.storyId}`}
+          className="nb-icon-btn reader-back"
+          aria-label={`Quay lại danh sách chương của ${chapter.storyTitle}`}
+          title="Quay lại danh sách chương"
         >
           <ChevronIcon />
-          Chương trước
-        </Button>
+        </ButtonLink>
 
         {/* The story it belongs to sits above the chapter's own name, so the
             bar answers "where am I" without a second header below it. */}
@@ -542,29 +571,46 @@ export default function ChapterPage() {
           <Link to={`/truyen/${chapter.storyId}`} className="reader-bar-story">
             {chapter.storyTitle}
           </Link>
-          <strong>{chapter.title}</strong>
+          <h1 id="reader-chapter-title">{chapter.title}</h1>
         </div>
 
-        <Button
-          className="reader-nav-btn"
-          variant="primary"
-          disabled={!chapter.nextChapterId}
-          onClick={() => goToChapter(chapter.nextChapterId)}
-        >
-          Chương sau
-          <ChevronIcon right />
-        </Button>
-      </div>
+        <div className="reader-bar-nav">
+          <Button
+            className="reader-nav-btn"
+            disabled={!chapter.previousChapterId}
+            onClick={() => goToChapter(chapter.previousChapterId)}
+          >
+            <ChevronIcon />
+            Chương trước
+          </Button>
+
+          <Button
+            className="reader-nav-btn"
+            variant="primary"
+            disabled={!chapter.nextChapterId}
+            onClick={() => goToChapter(chapter.nextChapterId)}
+          >
+            Chương sau
+            <ChevronIcon right />
+          </Button>
+        </div>
+
+        {/* Hai thứ đi theo từ thanh điều hướng chung và từ đầu trang chữ về đây.
+            Cỡ chữ và sáng/tối đều là chuyện của riêng màn hình này, và cái thứ
+            hai là thứ người đọc ban đêm tìm đầu tiên — mất nó cùng với navbar
+            thì mất thật. */}
+        <div className="reader-bar-tools">
+          <ReaderSettings />
+          <ThemeToggle />
+        </div>
+      </header>
 
       <div className="reader-grid">
-        <section className="reader-pane">
-          {/* The size control sits in the corner of the text it changes, so
-              the result of a click is in view when you make it. */}
-          <header className="reader-pane-header">
-            <h2>Nội dung</h2>
-            <ReaderSettings />
-          </header>
-
+        {/* Tên chương trên thanh trên là tiêu đề của chính khối chữ này, nên nó
+            đứng tên cho khối luôn. Chỗ này từng có một dòng "Nội dung" làm việc
+            ấy, và đó là cả một dải ngang cao hơn ba phân để nói một điều mà bất
+            cứ ai nhìn vào trang chữ cũng đã biết. */}
+        <section className="reader-pane" aria-labelledby="reader-chapter-title">
           <div className="reader-pane-body scroll-area" ref={contentRef} onScroll={handleScroll}>
             <KaraokeText
               content={chapter.content ?? ""}
@@ -582,39 +628,36 @@ export default function ChapterPage() {
             )}
           </div>
         </section>
-
-        <aside className="reader-pane reader-aside">
-          <header className="reader-pane-header">
-            <h2>Nghe chương này</h2>
-          </header>
-
-          <div className="reader-pane-body scroll-area">
-            <AudioPlayer
-              audio={audio}
-              ttsStatus={ttsStatus}
-              isAuthenticated={isAuthenticated}
-              chapterLength={chapter.content?.length ?? 0}
-              autoContinue={autoContinue}
-              onToggleAutoContinue={() => setAutoContinue((value) => !value)}
-              hasNextChapter={Boolean(chapter.nextChapterId)}
-              engine={engine}
-              mixerState={mixerState}
-              bgm={bgm}
-              karaoke={{
-                available: karaokeAvailable,
-                enabled: karaokePreferences.enabled,
-                autoScroll: karaokePreferences.autoScroll,
-                loading: transcript.loading,
-                stale: transcript.stale,
-                onToggle: (enabled) =>
-                  setKaraokePreferences((current) => ({ ...current, enabled })),
-                onToggleAutoScroll: (autoScroll) =>
-                  setKaraokePreferences((current) => ({ ...current, autoScroll })),
-              }}
-            />
-          </div>
-        </aside>
       </div>
+
+      {/* Phần nghe không còn là một cột bên cạnh trang chữ mà là một dải dưới
+          đáy màn hình: thu gọn thì chỉ còn cái tay với tới giữa chương, mở ra
+          thì có đủ mọi tuỳ chọn. Xem AudioPlayer về chỗ nào chứa cái gì. */}
+      <AudioPlayer
+        audio={audio}
+        ttsStatus={ttsStatus}
+        isAuthenticated={isAuthenticated}
+        chapterLength={chapter.content?.length ?? 0}
+        storyTitle={chapter.storyTitle}
+        chapterTitle={chapter.title}
+        chapterId={chapterId}
+        autoContinue={autoContinue}
+        onToggleAutoContinue={() => setAutoContinue((value) => !value)}
+        hasNextChapter={Boolean(chapter.nextChapterId)}
+        engine={engine}
+        mixerState={mixerState}
+        bgm={bgm}
+        karaoke={{
+          available: karaokeAvailable,
+          enabled: karaokePreferences.enabled,
+          autoScroll: karaokePreferences.autoScroll,
+          loading: transcript.loading,
+          stale: transcript.stale,
+          onToggle: (enabled) => setKaraokePreferences((current) => ({ ...current, enabled })),
+          onToggleAutoScroll: (autoScroll) =>
+            setKaraokePreferences((current) => ({ ...current, autoScroll })),
+        }}
+      />
     </div>
   );
 }

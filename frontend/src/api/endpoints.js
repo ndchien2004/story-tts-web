@@ -132,6 +132,23 @@ export const audioApi = {
     client.get(`/api/chapters/${chapterId}/audio/${audioId}/transcript`).then((r) => r.data),
 
   /**
+   * Tải một bản audio về máy người nghe.
+   *
+   * Không phải một thẻ `<a download>` trỏ thẳng vào đường phát, dù đó là cách
+   * ngắn nhất: đường phát nằm ở tên miền của máy chủ API, mà thuộc tính
+   * `download` bị trình duyệt bỏ qua khi khác nguồn — bấm vào chỉ mở thêm một
+   * tab đang phát nhạc chứ không lưu gì cả. Lấy về thành blob thì tên file do
+   * trang đặt, và lời gọi vẫn mang token trong header như mọi lời gọi khác.
+   *
+   * <p>Không gửi header `Range`, nên máy chủ trả về trọn file trong một lần
+   * thay vì từng megabyte một như lúc phát.
+   */
+  download: (chapterId, audioId) =>
+    client
+      .get(`/api/chapters/${chapterId}/audio/${audioId}`, { responseType: "blob" })
+      .then((r) => r.data),
+
+  /**
    * Builds the URL for an `<audio>` element.
    *
    * The element cannot send an Authorization header, so the token travels as a
