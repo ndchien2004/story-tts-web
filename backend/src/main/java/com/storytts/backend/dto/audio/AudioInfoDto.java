@@ -26,6 +26,23 @@ import com.storytts.backend.domain.AudioStatus;
 public record AudioInfoDto(
         Long id,
         Long chapterId,
+
+        /**
+         * Phiên bản nội dung chương mà bản này đọc theo.
+         *
+         * <p>Trang đọc so nó với phiên bản của chương nó đang hiển thị. Bằng nhau
+         * là khớp; khác nhau nghĩa là bản này thuộc về một nội dung khác, và trang
+         * đọc biết điều đó mà không phải hỏi thêm máy chủ câu nào.
+         *
+         * <p>Máy chủ đã lọc theo phiên bản trước khi trả về, nên trong đường bình
+         * thường hai con số luôn bằng nhau. Trường này vẫn có mặt vì nó biến một
+         * bất biến ngầm thành thứ kiểm chứng được ở đầu bên kia — và vì một
+         * response về muộn của lần tải trước thì tự nó khai ra là đã cũ.
+         *
+         * <p>Null với những bản dựng từ trước khi có cột này.
+         */
+        Integer contentVersion,
+
         String source,
         String owner,
         String status,
@@ -55,6 +72,7 @@ public record AudioInfoDto(
         return new AudioInfoDto(
                 audio.getId(),
                 chapterId,
+                audio.getContentVersion(),
                 audio.getSource().name(),
                 audio.getRequestedBy() == null ? OWNER_LIBRARY : OWNER_SESSION,
                 audio.getStatus().name(),

@@ -60,6 +60,13 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
      * của màn hình này là tìm những chương còn thiếu audio, lọc sau khi phân trang sẽ ra
      * những trang vơi đầy thất thường và tổng số đếm sai.
      *
+     * <p><b>"Đã có audio" nghĩa là có bản READY đọc theo phiên bản nội dung hiện tại</b>
+     * — đúng cùng một định nghĩa với {@code AudioFileRepository.findChapterIdsWithReadyAudio},
+     * và hai chỗ phải nói cùng một câu. Nếu chỗ này còn tính cả bản của phiên bản
+     * cũ thì bộ lọc "còn thiếu audio" sẽ giấu đi đúng những chương vừa được sửa
+     * nội dung — tức là giấu đi đúng danh sách việc mà màn hình này sinh ra để
+     * đưa cho quản trị viên, ngay lúc nó dài ra.
+     *
      * @param withAudio null = không lọc, true = đã có audio, false = còn thiếu
      */
     @Query(value = """
@@ -70,11 +77,15 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
                    OR (:withAudio = TRUE AND EXISTS (
                         SELECT 1 FROM AudioFile a
                         WHERE a.chapter = c
-                          AND a.status = com.storytts.backend.domain.AudioStatus.READY))
+                          AND a.status = com.storytts.backend.domain.AudioStatus.READY
+                          AND a.contentVersion IS NOT NULL
+                          AND a.contentVersion = c.contentVersion))
                    OR (:withAudio = FALSE AND NOT EXISTS (
                         SELECT 1 FROM AudioFile a
                         WHERE a.chapter = c
-                          AND a.status = com.storytts.backend.domain.AudioStatus.READY)))
+                          AND a.status = com.storytts.backend.domain.AudioStatus.READY
+                          AND a.contentVersion IS NOT NULL
+                          AND a.contentVersion = c.contentVersion)))
             ORDER BY s.title ASC, c.chapterNumber ASC
             """,
             countQuery = """
@@ -84,11 +95,15 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
                            OR (:withAudio = TRUE AND EXISTS (
                                 SELECT 1 FROM AudioFile a
                                 WHERE a.chapter = c
-                                  AND a.status = com.storytts.backend.domain.AudioStatus.READY))
+                                  AND a.status = com.storytts.backend.domain.AudioStatus.READY
+                          AND a.contentVersion IS NOT NULL
+                          AND a.contentVersion = c.contentVersion))
                            OR (:withAudio = FALSE AND NOT EXISTS (
                                 SELECT 1 FROM AudioFile a
                                 WHERE a.chapter = c
-                                  AND a.status = com.storytts.backend.domain.AudioStatus.READY)))
+                                  AND a.status = com.storytts.backend.domain.AudioStatus.READY
+                          AND a.contentVersion IS NOT NULL
+                          AND a.contentVersion = c.contentVersion)))
                     """)
     org.springframework.data.domain.Page<Chapter> searchForAudioAdmin(
             @Param("storyId") Long storyId,

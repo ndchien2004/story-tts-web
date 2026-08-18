@@ -90,7 +90,25 @@ public class AudioService {
         }
     }
 
-    /** All usable tracks for a chapter, uploaded and generated alike. */
+    /**
+     * Những bản audio <b>hiện tại</b> của một chương — bản thu và bản máy đọc.
+     *
+     * <h3>Đây là chỗ bất biến của cả tính năng được thi hành</h3>
+     * Câu truy vấn chỉ trả về bản có {@code contentVersion} bằng phiên bản nội
+     * dung hiện tại của chương. Không khớp thì không nằm trong danh sách, và
+     * không có nhánh nào bên dưới lấy tạm một bản cũ khi danh sách rỗng.
+     *
+     * <p>Danh sách rỗng là một câu trả lời hợp lệ, không phải một lỗi cần chữa:
+     * nó nghĩa là "chương này chưa có audio cho nội dung hiện tại", và trang đọc
+     * mời người dùng dựng một bản. Trước đây chỗ này trả về mọi bản không hỏng,
+     * nên một chương vừa sửa vẫn đưa ra bản đọc theo chữ cũ — kể cả sau khi tải
+     * lại trang, vì tải lại chỉ hỏi lại đúng câu hỏi đã sai.
+     *
+     * <p>Bản đang PROCESSING vẫn có trong danh sách: "đang dựng" là trạng thái
+     * trang đọc cần hiển thị. Bản STALE và FAILED thì không, và chúng bị loại
+     * ngay trong câu truy vấn chứ không lọc lại ở đây — để không còn chỗ nào cho
+     * một lần quên lọc.
+     */
     @Transactional
     public List<AudioInfoDto> listForChapter(Long chapterId) {
         Chapter chapter = chapterService.findDetailEntity(chapterId);
@@ -102,8 +120,7 @@ public class AudioService {
         viewEventService.record(chapter.getStory().getId(), chapterId, ViewType.LISTEN);
 
         Long viewer = currentUserService.currentUserId().orElse(null);
-        return audioFileRepository.findVisibleForChapter(chapterId, viewer).stream()
-                .filter(audio -> audio.getStatus() != AudioStatus.FAILED)
+        return audioFileRepository.findCurrentForChapter(chapterId, viewer).stream()
                 .map(audio -> AudioInfoDto.from(audio, chapterId))
                 .toList();
     }
@@ -206,7 +223,26 @@ public class AudioService {
             throw new BadRequestException("File audio không thuộc chương này.");
         }
         requireOwnership(audio);
-        if (audio.getStatus() != AudioStatus.READY || audio.getFilePath() == null) {
+
+        // READY *hoặc* STALE, và chỗ này là ngoại lệ có chủ ý duy nhất với quy tắc
+        // "không phục vụ bản cũ".
+        //
+        // Quy tắc ấy nói về việc *chọn* bản nào là audio hiện tại của chương —
+        // câu hỏi mà listForChapter trả lời, và ở đó bản STALE không bao giờ lọt
+        // ra. Nhưng người đã bấm play từ mười phút trước thì đang ở giữa một đoạn
+        // nghe, và một chương bị sửa lúc ấy không phải lý do để cắt ngang họ: trình
+        // phát tua bằng HTTP Range, nên từ chối ở đây nghĩa là tiếng dừng bặt giữa
+        // câu, mất luôn vị trí đang nghe, vì một thay đổi họ chưa kịp biết.
+        //
+        // Thứ họ nhận thay vào đó là một lời báo trên màn hình kèm nút "Đọc nội
+        // dung mới", và quyền tự chọn lúc nào thì chuyển. Xem ChapterEventStream.
+        //
+        // Không có lỗ hổng quyền nào mở ra ở đây: cả hai lớp cửa phía trên vẫn
+        // đứng nguyên, nên bản STALE cũng chỉ tới được đúng những người lẽ ra
+        // nghe được nó.
+        boolean playable = audio.getStatus() == AudioStatus.READY
+                || audio.getStatus() == AudioStatus.STALE;
+        if (!playable || audio.getFilePath() == null) {
             throw new BadRequestException("File audio chưa sẵn sàng để phát.");
         }
 
@@ -299,11 +335,20 @@ public class AudioService {
                         audioFileRepository.delete(existing);
                     });
 
+            // Bản thu cũng gắn với một phiên bản nội dung, y như bản máy đọc.
+            //
+            // Giọng người đọc chính những chữ ấy, nên sửa chữ thì bản thu cũng
+            // lệch — không có gì ở đây làm nó miễn nhiễm. Miễn trừ bản thu khỏi
+            // quy tắc sẽ để lại đúng trạng thái mà cả tính năng này sinh ra để
+            // chặn, chỉ khác là lần này người nghe không thể tự dựng lại bản mới:
+            // họ phải chờ Admin thu lại. Nên nó phải hiện ra trong khu quản trị
+            // như một việc cần làm, thay vì phát tiếp một cách im lặng.
             AudioFile audio = AudioFile.builder()
                     .chapter(chapter)
                     .filePath(fileName)
                     .source(AudioSource.UPLOAD)
                     .status(AudioStatus.READY)
+                    .contentVersion(chapter.getContentVersion())
                     .contentType(contentType)
                     .fileSize(file.getSize())
                     .build();
