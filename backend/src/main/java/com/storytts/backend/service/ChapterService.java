@@ -1,6 +1,7 @@
 package com.storytts.backend.service;
 
 import com.storytts.backend.domain.AccessLevel;
+import com.storytts.backend.domain.AudioFile;
 import com.storytts.backend.domain.AudioSource;
 import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
@@ -16,13 +17,17 @@ import com.storytts.backend.repository.AudioFileRepository;
 import com.storytts.backend.repository.ChapterRepository;
 import com.storytts.backend.repository.ReadingProgressRepository;
 import com.storytts.backend.repository.StoryRepository;
+import com.storytts.backend.service.realtime.ChapterContentUpdated;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -43,6 +48,7 @@ public class ChapterService {
     // thuộc vào ChapterService, gọi ngược lại sẽ thành vòng phụ thuộc bean.
     private final ReadingProgressRepository progressRepository;
     private final CurrentUserService currentUserService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * Danh sách chương của một truyện.
@@ -113,18 +119,25 @@ public class ChapterService {
                 .findNext(story.getId(), chapter.getChapterNumber())
                 .map(Chapter::getId).orElse(null);
 
-        boolean hasUpload = audioFileRepository
-                .findFirstByChapterIdAndSourceAndStatus(chapterId, AudioSource.UPLOAD, AudioStatus.READY)
-                .isPresent();
-        boolean hasTts = audioFileRepository
-                .findFirstByChapterIdAndSourceAndStatus(chapterId, AudioSource.TTS, AudioStatus.READY)
-                .isPresent();
+        Long viewerId = currentUserService.currentUserId().orElse(null);
 
-        // Khách không sinh câu truy vấn nào — Optional rỗng là dừng ngay tại đây.
-        Integer audioPosition = currentUserService.currentUserId()
-                .flatMap(userId -> progressRepository.findByUserIdAndChapterId(userId, chapterId))
-                .map(ReadingProgress::getAudioPositionSeconds)
-                .orElse(null);
+        // Một câu truy vấn cho cả hai cờ, thay vì hai. Và câu ấy hỏi đúng thứ
+        // trang đọc cần biết: bản audio *của phiên bản nội dung đang trả về ngay
+        // dưới đây*. Hai lời gọi cũ chỉ hỏi "có bản READY nào không" — nên một
+        // chương vừa được sửa vẫn hứa hẹn có audio, rồi trang đọc mở ra và không
+        // tìm thấy gì để phát.
+        List<AudioFile> current = audioFileRepository.findCurrentForChapter(chapterId, viewerId);
+        boolean hasUpload = current.stream().anyMatch(
+                audio -> audio.getSource() == AudioSource.UPLOAD && audio.getStatus() == AudioStatus.READY);
+        boolean hasTts = current.stream().anyMatch(
+                audio -> audio.getSource() == AudioSource.TTS && audio.getStatus() == AudioStatus.READY);
+
+        // Khách không sinh câu truy vấn nào — id rỗng là dừng ngay tại đây.
+        Integer audioPosition = viewerId == null
+                ? null
+                : progressRepository.findByUserIdAndChapterId(viewerId, chapterId)
+                        .map(ReadingProgress::getAudioPositionSeconds)
+                        .orElse(null);
 
         return new ChapterDetailDto(
                 chapter.getId(),
@@ -132,6 +145,7 @@ public class ChapterService {
                 story.getTitle(),
                 chapter.getTitle(),
                 chapter.getContent(),
+                chapter.getContentVersion(),
                 chapter.getChapterNumber(),
                 chapter.getAccessLevel().name(),
                 chapter.getAccessLevel().getLabel(),
@@ -174,6 +188,28 @@ public class ChapterService {
         return toSummary(saved, storyId, false);
     }
 
+    /**
+     * Admin lưu một chương.
+     *
+     * <h3>Ba việc phải xảy ra cùng nhau, hoặc không việc nào cả</h3>
+     * Khi nội dung đổi: nội dung mới được ghi, phiên bản tăng, và mọi bản audio
+     * đọc theo nội dung cũ bị đánh dấu lỗi thời. Cả ba nằm trong một giao dịch,
+     * và đó là điều kiện để bất biến của cả tính năng đứng vững — hai trạng thái
+     * lửng lơ dưới đây đều là trạng thái hỏng:
+     *
+     * <pre>
+     *   nội dung mới + phiên bản cũ  → audio cũ trông như vẫn còn hợp lệ
+     *   nội dung cũ  + phiên bản mới → audio còn tốt bị vứt đi vô cớ
+     * </pre>
+     *
+     * <p>Giao dịch này vẫn ngắn: ba câu lệnh, không lời gọi mạng nào. Việc nặng
+     * (dựng lại audio) không xảy ra ở đây và cũng không được phép xảy ra ở đây.
+     *
+     * <h3>Chỉ nội dung mới làm phiên bản tăng</h3>
+     * Sửa tiêu đề hay đổi mức khóa thì những chữ đem đi đọc không đổi, nên bản
+     * audio đang có vẫn đọc đúng chương. Tăng phiên bản trong trường hợp ấy chỉ
+     * có tác dụng vứt một bản audio còn tốt và bắt hệ thống trả tiền dựng lại nó.
+     */
     @Transactional
     public ChapterSummaryDto update(Long chapterId, ChapterRequest request) {
         Chapter chapter = findDetailEntity(chapterId);
@@ -190,12 +226,31 @@ public class ChapterService {
 
         requirePriceableLevel(request.accessLevel(), chapter.getCoinPrice());
 
+        // So sánh trước khi ghi đè — sau đó thì không còn gì để so nữa.
+        boolean contentChanged = !Objects.equals(chapter.getContent(), request.content());
+
         chapter.setTitle(request.title().trim());
         chapter.setContent(request.content());
         chapter.setAccessLevel(request.accessLevel());
+        if (contentChanged) {
+            chapter.setContentVersion(chapter.getContentVersion() + 1);
+        }
 
         Chapter saved = chapterRepository.save(chapter);
-        boolean hasAudio = audioFileRepository.existsByChapterIdAndStatus(chapterId, AudioStatus.READY);
+
+        if (contentChanged) {
+            int superseded = audioFileRepository.markSupersededStale(
+                    chapterId, saved.getContentVersion(), Instant.now());
+            log.info("Chương {} lên phiên bản {}; {} bản audio thành lỗi thời",
+                    chapterId, saved.getContentVersion(), superseded);
+
+            // Người nhận đăng ký ở AFTER_COMMIT, nên phát ở đây là an toàn: giao
+            // dịch này hỏng thì không lời báo nào đi ra. Xem ChapterEventStream.
+            eventPublisher.publishEvent(
+                    new ChapterContentUpdated(chapterId, storyId, saved.getContentVersion()));
+        }
+
+        boolean hasAudio = audioFileRepository.hasCurrentReadyAudio(chapterId);
         return toSummary(saved, storyId, hasAudio);
     }
 
@@ -214,7 +269,7 @@ public class ChapterService {
         chapter.setAccessLevel(accessLevel);
         Chapter saved = chapterRepository.save(chapter);
         log.info("Admin đổi mức truy cập chương {} thành {}", chapterId, accessLevel);
-        boolean hasAudio = audioFileRepository.existsByChapterIdAndStatus(chapterId, AudioStatus.READY);
+        boolean hasAudio = audioFileRepository.hasCurrentReadyAudio(chapterId);
         return toSummary(saved, chapter.getStory().getId(), hasAudio);
     }
 
@@ -265,7 +320,7 @@ public class ChapterService {
         Chapter saved = chapterRepository.save(chapter);
         log.info("Admin đặt giá chương {} thành {} Xu", chapterId, coinPrice);
 
-        boolean hasAudio = audioFileRepository.existsByChapterIdAndStatus(chapterId, AudioStatus.READY);
+        boolean hasAudio = audioFileRepository.hasCurrentReadyAudio(chapterId);
         return toSummary(saved, chapter.getStory().getId(), hasAudio);
     }
 

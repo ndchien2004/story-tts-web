@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
@@ -94,6 +95,32 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleBadRequest(BadRequestException ex,
                                                              HttpServletRequest request) {
         return build(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage(), request);
+    }
+
+    /**
+     * Hai người cùng lưu một chương, và người sau thua.
+     *
+     * <p>Không có chốt này thì lần lưu thua cuộc vẫn báo thành công trong khi
+     * nội dung của nó biến mất — và tệ hơn: cả hai lần lưu đều tăng phiên bản
+     * nội dung lên cùng một con số, nên hai nội dung khác nhau cùng mang nhãn
+     * v8. Từ lúc ấy phiên bản không còn xác định được nội dung, và mọi kết luận
+     * dựng trên nó (bản audio nào còn hợp lệ, trình duyệt nào đang xem bản cũ)
+     * đều sai theo mà không có gì báo. Xem {@code Chapter.version}.
+     *
+     * <p>409 chứ không phải 500: đây không phải lỗi máy chủ mà là một câu trả
+     * lời có nghĩa — "có người vừa sửa trước bạn". Thông điệp nói thẳng việc cần
+     * làm, vì thứ duy nhất làm được ở đây là mở lại chương và soạn lại trên nền
+     * nội dung mới.
+     */
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiErrorResponse> handleOptimisticLock(
+            ObjectOptimisticLockingFailureException ex, HttpServletRequest request) {
+        log.warn("Ghi đè đồng thời bị chặn tại {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, "CONCURRENT_UPDATE",
+                "Có người khác vừa lưu chương này trong lúc bạn đang sửa. "
+                        + "Vui lòng mở lại chương để xem nội dung mới nhất rồi sửa lại — "
+                        + "lưu đè bây giờ sẽ xóa mất thay đổi của họ.",
+                request);
     }
 
     @ExceptionHandler(BadCredentialsException.class)

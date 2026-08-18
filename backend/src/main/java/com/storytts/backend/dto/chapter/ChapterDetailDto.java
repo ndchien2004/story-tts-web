@@ -12,6 +12,20 @@ public record ChapterDetailDto(
         String storyTitle,
         String title,
         String content,
+
+        /**
+         * Phiên bản của {@link #content} ngay trên đây.
+         *
+         * <p>Hai trường này luôn đi cùng nhau và luôn đọc ra từ cùng một lần đọc
+         * cơ sở dữ liệu, nên con số này mô tả đúng những chữ đang nằm trong response
+         * — không phải phiên bản mới nhất của chương ở một thời điểm nào khác.
+         *
+         * <p>Trang đọc giữ lại nó để làm ba việc: biết bản audio nào còn hợp lệ,
+         * nhận ra một thông báo cập nhật là mới hay là tiếng vọng của lần mình đã
+         * xử lý, và vứt bỏ response về muộn của một lần tải cũ.
+         */
+        int contentVersion,
+
         Integer chapterNumber,
         String accessLevel,
         String requirementLabel,
