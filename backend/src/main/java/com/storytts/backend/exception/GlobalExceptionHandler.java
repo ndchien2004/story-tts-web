@@ -123,6 +123,27 @@ public class GlobalExceptionHandler {
                 request);
     }
 
+    /**
+     * Tài khoản bị khóa, phát hiện ở một đường đi qua controller — trên thực tế
+     * là đăng nhập.
+     *
+     * <p>Mọi request đã mang token thì không tới được đây: chúng bị
+     * {@code JwtAuthenticationFilter} chặn từ tầng filter, trước khi có
+     * controller nào chạy. Cả hai chỗ trả về cùng một mã và cùng một câu, nên
+     * frontend chỉ cần biết một quy tắc duy nhất.
+     *
+     * <p>401 chứ không phải 400 như trước. Đây là câu trả lời về danh tính chứ
+     * không phải về dữ liệu gửi lên — người dùng gõ đúng mật khẩu, cái sai nằm ở
+     * trạng thái tài khoản. Và nó phải trùng mã trạng thái với đường filter, vì
+     * §30 của yêu cầu đòi mọi đường đều nói cùng một câu.
+     */
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<ApiErrorResponse> handleAccountLocked(AccountLockedException ex,
+                                                                HttpServletRequest request) {
+        log.info("Từ chối đăng nhập vào một tài khoản bị khóa tại {}", request.getRequestURI());
+        return build(HttpStatus.UNAUTHORIZED, AccountLockedException.CODE, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ApiErrorResponse> handleBadCredentials(BadCredentialsException ex,
                                                                  HttpServletRequest request) {

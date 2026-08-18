@@ -5,7 +5,7 @@ import com.storytts.backend.domain.Role;
 import com.storytts.backend.domain.User;
 import com.storytts.backend.dto.auth.AuthResponse;
 import com.storytts.backend.dto.auth.GoogleLoginRequest;
-import com.storytts.backend.exception.BadRequestException;
+import com.storytts.backend.exception.AccountLockedException;
 import com.storytts.backend.repository.UserRepository;
 import com.storytts.backend.security.GoogleIdTokenVerifier;
 import com.storytts.backend.security.GoogleIdTokenVerifier.GoogleAccount;
@@ -188,8 +188,12 @@ class AuthServiceGoogleTest {
         existing.setEnabled(false);
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(existing));
 
+        // Ngoại lệ riêng chứ không phải BadRequestException như trước: tài khoản
+        // bị khóa giờ trả về 401 kèm mã ACCOUNT_LOCKED, cùng một câu trả lời mà
+        // JwtAuthenticationFilter đưa ra — nhờ đó trình duyệt chỉ cần biết một
+        // quy tắc để đăng xuất, dù nó phát hiện ra ở đường nào.
         assertThatThrownBy(() -> authService.loginWithGoogle(new GoogleLoginRequest("id-token")))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(AccountLockedException.class)
                 .hasMessageContaining("bị khóa");
     }
 

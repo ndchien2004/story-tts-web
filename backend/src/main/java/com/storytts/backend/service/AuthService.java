@@ -8,6 +8,7 @@ import com.storytts.backend.dto.auth.AuthResponse;
 import com.storytts.backend.dto.auth.GoogleLoginRequest;
 import com.storytts.backend.dto.auth.LoginRequest;
 import com.storytts.backend.dto.auth.UserDto;
+import com.storytts.backend.exception.AccountLockedException;
 import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.repository.UserRepository;
 import com.storytts.backend.security.GoogleIdTokenVerifier;
@@ -73,7 +74,7 @@ public class AuthService {
             throw new BadCredentialsException("Sai thông tin đăng nhập");
         }
         if (!user.isEnabled()) {
-            throw new BadRequestException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.");
+            throw new AccountLockedException();
         }
         return issueSession(user);
     }
@@ -98,7 +99,7 @@ public class AuthService {
                 .orElseGet(() -> createFromGoogleAccount(account, email));
 
         if (!user.isEnabled()) {
-            throw new BadRequestException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.");
+            throw new AccountLockedException();
         }
         return issueSession(user);
     }
