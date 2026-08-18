@@ -90,6 +90,18 @@ export const chapterApi = {
    * again, so a double click or a retried request costs nothing.
    */
   purchase: (id) => client.post(`/api/chapters/${id}/purchase`).then((r) => r.data),
+
+  /**
+   * Absolute URL of the chapter's update stream, for `EventSource`.
+   *
+   * No token on it, and that is the reason it is a plain URL rather than a
+   * `client` call: `EventSource` cannot set an `Authorization` header, so an
+   * authenticated stream would mean putting the token in the query string —
+   * where it lands in access logs and browser history. The endpoint carries
+   * nothing private (a chapter id, a story id and a version number), so it does
+   * not need one. See `ChapterController.events`.
+   */
+  eventsUrl: (id) => new URL(`/api/chapters/${id}/events`, API_BASE_URL).toString(),
 };
 
 /* ------------------------------------------------------------------ */

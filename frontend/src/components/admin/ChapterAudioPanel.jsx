@@ -14,12 +14,16 @@ const SOURCE_LABEL = {
 const STATUS_TONE = {
   READY: "public",
   PROCESSING: "info",
+  // Cảnh báo chứ không phải lỗi: bản này vẫn nghe được, chỉ là nó đọc theo chữ
+  // đã bị sửa. Tô đỏ như FAILED sẽ nói rằng có gì đó hỏng, mà không có gì hỏng cả.
+  STALE: "warning",
   FAILED: "danger",
 };
 
 const STATUS_LABEL = {
   READY: "Dùng được",
   PROCESSING: "Đang tạo",
+  STALE: "Nội dung đã đổi",
   FAILED: "Hỏng",
 };
 

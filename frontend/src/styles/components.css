@@ -2346,6 +2346,35 @@ body:has(.reader) .navbar {
   height: 0.95rem;
 }
 
+/*
+ * Dòng báo chương vừa được cập nhật.
+ *
+ * Nằm trong dòng chảy của trang chứ không nổi đè lên chữ, và chiếm đúng chiều
+ * cao của chính nó. Đây là tin cần biết, không phải tin phải xử lý ngay: người
+ * đọc còn đang nghe dở một câu, và một tấm phủ giữa màn hình sẽ buộc họ dừng
+ * lại để bấm bỏ qua một thứ họ chưa muốn quyết.
+ *
+ * Không có `position: sticky`: trôi lên cùng trang là đúng, vì đọc tiếp một
+ * lúc rồi quên nó đi cũng là một lựa chọn hợp lệ — và nếu Admin sửa tiếp thì
+ * nó lại hiện ra.
+ */
+.reader-update-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--outline);
+
+  /* Cùng tông với các dải khác của màn hình đọc, không phải màu cảnh báo:
+     nội dung mới không phải là chuyện hỏng. */
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 0.94rem;
+  text-align: center;
+}
+
 .reader-grid {
   flex: 1 1 auto;
   display: grid;

@@ -33,8 +33,25 @@ function preferredTrack(ready) {
  *
  * `generating` covers the wait — the server queues the work and finishes it on
  * a background thread, so the only way to learn it landed is to keep asking.
+ *
+ * <h3>Everything here is scoped to one version of the text</h3>
+ * `contentVersion` is part of the identity of what this hook holds, not an
+ * extra detail about it: a track narrating the previous wording is not a track
+ * of this chapter as far as the reading page is concerned. So it sits in the
+ * dependency list beside `chapterId`, and moving to a new version clears the
+ * tracks exactly the way moving to a new chapter does.
+ *
+ * That is also what makes a late response harmless. Reloading after an edit
+ * leaves the previous request in flight; when it lands, its effect has already
+ * been torn down and its `cancelled` flag is set, so it cannot write over the
+ * newer state. The arriving tracks are checked against the version as well —
+ * the server has already filtered them, and this second look is what turns that
+ * promise into something the client can actually observe.
+ *
+ * @param contentVersion version of the text currently on screen; tracks
+ *                       belonging to any other version are not this chapter's
  */
-export default function useChapterAudio(chapterId, { enabled = true } = {}) {
+export default function useChapterAudio(chapterId, { enabled = true, contentVersion } = {}) {
   const [tracks, setTracks] = useState([]);
   const [activeTrack, setActiveTrack] = useState(null);
   const [loading, setLoading] = useState(enabled);
@@ -45,15 +62,29 @@ export default function useChapterAudio(chapterId, { enabled = true } = {}) {
   // start on its own — they pressed a button that means "play this".
   const [playWhenReady, setPlayWhenReady] = useState(false);
 
-  // Guards the poll loop: leaving the chapter must stop it.
+  // Guards the poll loop: leaving the chapter — or the chapter moving to a new
+  // version under the reader — must stop it.
   const cancelledRef = useRef(false);
+
+  /**
+   * Whether a track narrates the text currently on screen.
+   *
+   * A track with no version at all is one made before versions existed; the
+   * server does not serve those as current, and neither does this.
+   */
+  const belongsHere = useCallback(
+    (track) =>
+      contentVersion == null ||
+      (track?.contentVersion != null && track.contentVersion === contentVersion),
+    [contentVersion],
+  );
 
   useEffect(() => {
     cancelledRef.current = false;
     return () => {
       cancelledRef.current = true;
     };
-  }, [chapterId]);
+  }, [chapterId, contentVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +105,7 @@ export default function useChapterAudio(chapterId, { enabled = true } = {}) {
       .list(chapterId)
       .then((list) => {
         if (cancelled) return;
-        const ready = list.filter((track) => track.status === "READY");
+        const ready = list.filter((track) => track.status === "READY" && belongsHere(track));
         setTracks(ready);
         setActiveTrack(preferredTrack(ready));
       })
@@ -90,7 +121,10 @@ export default function useChapterAudio(chapterId, { enabled = true } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [chapterId, enabled]);
+    // contentVersion is in here on purpose: a new version is a new set of
+    // tracks, so this refetches and the in-flight response from the previous
+    // one lands with `cancelled` already set.
+  }, [belongsHere, chapterId, contentVersion, enabled]);
 
   const adopt = useCallback((track) => {
     setTracks((current) =>
@@ -138,7 +172,24 @@ export default function useChapterAudio(chapterId, { enabled = true } = {}) {
       }
 
       if (finished?.status !== "READY") {
+        // STALE lands here too: the chapter moved on while this was being made,
+        // so the track is finished but belongs to text nobody is reading any
+        // more. Saying so plainly beats a generic failure, because nothing went
+        // wrong and the next press will succeed.
+        if (finished?.status === "STALE") {
+          setError("Chương vừa được cập nhật trong lúc tạo audio, nên bản vừa tạo đọc theo "
+            + "nội dung cũ. Mời bạn tải nội dung mới rồi tạo lại.");
+          return false;
+        }
         setError(finished?.errorMessage ?? "Không tạo được audio cho chương này.");
+        return false;
+      }
+
+      // Ready, but for which text? A generation that started before an edit can
+      // still come back READY for the older version — adopting it would put the
+      // reader back in exactly the state all of this exists to prevent.
+      if (!belongsHere(finished)) {
+        setError("Chương vừa được cập nhật. Mời bạn tải nội dung mới rồi tạo lại audio.");
         return false;
       }
 
@@ -150,7 +201,7 @@ export default function useChapterAudio(chapterId, { enabled = true } = {}) {
     } finally {
       if (!cancelledRef.current) setGenerating(false);
     }
-  }, [adopt, chapterId]);
+  }, [adopt, belongsHere, chapterId]);
 
   const clearPlayWhenReady = useCallback(() => setPlayWhenReady(false), []);
 

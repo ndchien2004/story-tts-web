@@ -14,6 +14,7 @@ import StoryAssistant from "../components/StoryAssistant";
 import ThemeToggle from "../components/ThemeToggle";
 import { useAuth } from "../context/auth-context";
 import useChapterAudio from "../hooks/useChapterAudio";
+import useChapterUpdates from "../hooks/useChapterUpdates";
 import useTtsStatus from "../hooks/useTtsStatus";
 import { Alert, Button, ButtonLink, ChevronIcon, Spinner } from "../components/ui";
 
@@ -100,7 +101,20 @@ export default function ChapterPage() {
 
   // Audio is only fetched once the chapter itself proved readable, so a locked
   // chapter never triggers a second request that is bound to be refused.
-  const audio = useChapterAudio(chapterId, { enabled: Boolean(chapter) });
+  //
+  // The version travels with it: a track narrating the previous wording is not
+  // this chapter's audio, and the hook needs to know which wording is on screen
+  // to tell the difference.
+  const audio = useChapterAudio(chapterId, {
+    enabled: Boolean(chapter),
+    contentVersion: chapter?.contentVersion,
+  });
+
+  // Tells us the moment an admin rewrites the chapter under the reader.
+  const { staleVersion, dismiss: dismissUpdate } = useChapterUpdates(
+    chapter ? chapterId : null,
+    chapter?.contentVersion,
+  );
 
   // Refreshed after each generation, since producing one spends a daily go.
   const { status: ttsStatus, refresh: refreshTtsStatus } = useTtsStatus();
@@ -163,6 +177,25 @@ export default function ChapterPage() {
       cancelled = true;
     };
   }, [chapterId, reloadKey]);
+
+  /**
+   * Người đọc chọn chuyển sang nội dung mới.
+   *
+   * <p>Chỉ chạy khi họ bấm, và đó là toàn bộ điểm của nó. Tự tải lại giữa lúc
+   * người ta đang đọc dở là cướp mất đoạn văn dưới mắt họ; tự đổi audio giữa
+   * chừng là cắt ngang câu đang nghe và mất luôn vị trí. Cái giá của việc chờ
+   * là trong lúc ấy họ đọc bản cũ — nhưng họ biết là bản cũ, vì có một dòng
+   * ngay trên đầu nói thế.
+   *
+   * <p>Bấm rồi thì mọi thứ đi theo một cách tự nhiên chứ không phải nhờ dọn dẹp
+   * bằng tay: chương tải lại mang theo phiên bản mới, {@code useChapterAudio}
+   * thấy phiên bản đổi nên bỏ danh sách bản audio cũ và hỏi lại từ đầu, còn
+   * bản nào của phiên bản cũ thì máy chủ không trả về nữa.
+   */
+  const handleLoadNewVersion = useCallback(() => {
+    dismissUpdate();
+    setReloadKey((key) => key + 1);
+  }, [dismissUpdate]);
 
   /**
    * Trả Xu để mở chương, rồi tải lại chương như một lần mở bình thường.
@@ -605,6 +638,27 @@ export default function ChapterPage() {
           <ThemeToggle />
         </div>
       </header>
+
+      {/*
+        Chương đã đổi dưới tay người đang đọc.
+
+        Một dòng chữ và một cái nút, không hơn. Không tự tải lại, không dừng
+        audio đang phát, không nhảy về đầu chương — cả ba đều là lấy quyền quyết
+        định khỏi tay người đang dùng để đổi lấy một sự đúng đắn mà chính họ
+        chưa yêu cầu. Họ nghe nốt câu đang nghe, đọc nốt đoạn đang đọc, rồi bấm
+        khi nào thấy hợp.
+
+        Đặt ngay dưới thanh trên chứ không nổi đè lên chữ: đây là tin cần biết,
+        không phải tin phải xử lý ngay.
+      */}
+      {staleVersion !== null && (
+        <div className="reader-update-notice" role="status">
+          <span>Chương này vừa được cập nhật.</span>
+          <Button variant="primary" onClick={handleLoadNewVersion}>
+            Đọc nội dung mới
+          </Button>
+        </div>
+      )}
 
       <div className="reader-grid">
         {/* Tên chương trên thanh trên là tiêu đề của chính khối chữ này, nên nó
