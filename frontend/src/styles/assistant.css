@@ -1,0 +1,379 @@
+/* ------------------------------------------------------------------ */
+/* Trợ lý AI — hộp chat nhỏ ở góc dưới bên phải trang đọc              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Chỗ neo, và toàn bộ mẹo về vị trí nằm ở đây.
+ *
+ * Yêu cầu: hộp phải nằm ngay trên thanh nghe và không được chồng lên nó — mà
+ * thanh nghe cao thấp thay đổi, vì phần mở rộng của nó bung ra được.
+ *
+ * Cách hiển nhiên là đo chiều cao thanh nghe bằng ResizeObserver rồi trừ đi.
+ * Không cần: trên màn hình rộng, `.reader` là một cột co giãn gồm ba dải, và
+ * `.reader-grid` — dải giữa — kết thúc đúng ở chỗ thanh nghe bắt đầu. Neo vào
+ * đáy `.reader-grid` là tự nằm sát trên thanh nghe, và tự dịch lên khi thanh ấy
+ * cao lên. Không một dòng JavaScript nào biết tới chuyện này.
+ *
+ * `position: absolute` chứ không `fixed`: cần điểm quy chiếu là `.reader-grid`,
+ * mà `fixed` thì quy chiếu vào khung nhìn.
+ */
+.assistant-anchor {
+  position: absolute;
+  right: var(--space-5);
+  bottom: var(--space-4);
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+
+  /* Chỉ cái hộp bắt chuột, phần trống quanh nó thì không — nếu không thì cả
+     góc dưới bên phải trang chữ hoá ra không bôi đen được. */
+  pointer-events: none;
+}
+
+.assistant-anchor > * {
+  pointer-events: auto;
+}
+
+/* ----- Thu gọn: chỉ còn một nút ----- */
+
+/*
+ * Viên thuốc chứ không phải hình tròn có mỗi cái icon.
+ *
+ * Một ngôi sao lấp lánh trên nền tối không nói được nó làm gì; chữ "Hỏi AI" thì
+ * nói được, và tốn thêm đúng bốn phân chiều ngang ở một góc vốn đang trống.
+ */
+.assistant-fab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 2.4rem;
+  padding: 0 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--on-tint);
+  background: var(--accent);
+  border: var(--outline-width) solid var(--accent);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    transform var(--transition);
+}
+
+.assistant-fab:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  transform: translateY(-1px);
+}
+
+.assistant-fab svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+/* ----- Mở ra ----- */
+
+/*
+ * Hẹp và không cao.
+ *
+ * Đây là hộp phụ trên một trang mà việc chính là đọc chữ, nên nó không được
+ * quyền chiếm nửa màn hình. `max-height` tính theo `vh` để trên một màn hình
+ * thấp nó tự co lại thay vì thò ra ngoài khung nhìn.
+ */
+.assistant-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(22rem, calc(100vw - var(--space-5) * 2));
+  max-height: min(28rem, 60vh);
+  overflow: hidden;
+  background: var(--surface-raised);
+  border: var(--outline-width) solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  animation: assistant-rise 160ms ease-out;
+}
+
+/* Trồi lên từ phía cái nút vừa biến mất, nên mắt biết hộp này từ đâu ra. */
+@keyframes assistant-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+}
+
+.assistant-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.assistant-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.assistant-title svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--accent);
+}
+
+.assistant-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.assistant-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.assistant-icon-btn:hover {
+  color: var(--ink);
+  background: var(--bg-alt);
+}
+
+.assistant-icon-btn svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+/* ----- Cuộc trò chuyện ----- */
+
+.assistant-log {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.assistant-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 92%;
+}
+
+.assistant-turn.is-user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.assistant-turn.is-ai {
+  align-self: flex-start;
+}
+
+/*
+ * `pre-wrap` là một nửa của lời hứa "không Markdown".
+ *
+ * Nửa kia nằm trong chỉ thị hệ thống ở backend, chỗ bảo mô hình viết văn xuôi
+ * thuần. Ở đây thì xuống dòng của nó được giữ nguyên, và không có bộ dựng
+ * Markdown nào chạy — dựng HTML từ một chuỗi do mô hình sinh ra là mở một
+ * đường chèn mã mà không đổi lại được gì.
+ */
+.assistant-bubble {
+  margin: 0;
+  padding: var(--space-3) var(--space-3);
+  font-size: 0.87rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: var(--radius-sm);
+}
+
+.assistant-turn.is-user .assistant-bubble {
+  color: var(--on-tint);
+  background: var(--accent);
+}
+
+.assistant-turn.is-ai .assistant-bubble {
+  color: var(--ink);
+  background: var(--bg-alt);
+}
+
+.assistant-thinking {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink-muted);
+}
+
+.assistant-hint {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--ink-muted);
+}
+
+/* ----- Lúc chưa hỏi gì ----- */
+
+.assistant-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.assistant-greeting {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+
+.assistant-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Nhẹ hơn một cái nút thật: đây là gợi ý, không phải việc chính phải làm. */
+.assistant-quick-btn {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--bg-alt);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    border-color var(--transition);
+}
+
+.assistant-quick-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.assistant-quick-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ----- Chưa đăng nhập ----- */
+
+.assistant-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.assistant-gate p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+
+/* ----- Ô nhập ----- */
+
+.assistant-error {
+  flex: 0 0 auto;
+  padding: 0 var(--space-4) var(--space-2);
+}
+
+.assistant-compose {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+.assistant-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 2.25rem;
+  font-size: 0.87rem;
+}
+
+.assistant-send {
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+/* Một dòng nhỏ, và nó nói đúng hai điều người dùng cần biết trước khi gõ: còn
+   bao nhiêu lượt, và trợ lý này đang đọc cái gì. */
+.assistant-foot {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-3);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--ink-muted);
+}
+
+/* ------------------------------------------------------------------ */
+/* Màn hình hẹp                                                        */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Dưới ngưỡng này trang đọc thôi chia khung cố định và cuộn như mọi trang khác,
+ * nên `.reader-grid` không còn kết thúc ở chỗ thanh nghe bắt đầu — nó chạy dài
+ * theo cả chương. Mẹo neo ở trên hết tác dụng, và hộp chuyển sang `fixed`.
+ *
+ * Khoảng chừa dưới đáy là `--reader-dock-height`, đúng con số mà trang chữ đã
+ * chừa cho thanh nghe. Dùng lại nó thay vì gõ một số mới: một ngày nào đó thanh
+ * nghe cao lên, và chỉ có một chỗ phải sửa.
+ */
+@media (max-width: 900px) {
+  .assistant-anchor {
+    position: fixed;
+    right: var(--space-4);
+    left: auto;
+    bottom: calc(
+      var(--reader-dock-height) + var(--space-3) + env(safe-area-inset-bottom, 0px)
+    );
+    z-index: 35;
+  }
+
+  /*
+   * Rộng gần hết màn hình, nhưng vẫn chừa hai mép.
+   *
+   * Và thấp hơn hẳn bản màn hình rộng: trên điện thoại, phần trên hộp này là
+   * chỗ duy nhất còn nhìn thấy chương truyện, nên hộp lấy quá nửa màn hình là
+   * hộp che mất thứ nó đang nói về.
+   */
+  .assistant-panel {
+    width: calc(100vw - var(--space-4) * 2);
+    max-height: 55vh;
+  }
+}
+
+/* Người xin giảm chuyển động thì hộp hiện ra tại chỗ, không trồi lên. */
+@media (prefers-reduced-motion: reduce) {
+  .assistant-panel {
+    animation: none;
+  }
+
+  .assistant-fab:hover {
+    transform: none;
+  }
+}

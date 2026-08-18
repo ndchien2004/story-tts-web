@@ -8,6 +8,7 @@ import "./styles/components.css";
 import "./styles/player.css";
 import "./styles/bgm.css";
 import "./styles/karaoke.css";
+import "./styles/assistant.css";
 import "./styles/auth.css";
 import "./styles/admin.css";
 

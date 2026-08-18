@@ -138,6 +138,47 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_GATEWAY, "TTS_ERROR", ex.getMessage(), request);
     }
 
+    /**
+     * Hết lượt hỏi trợ lý trong ngày → 429, kèm {@code Retry-After} tính tới
+     * nửa đêm giờ Việt Nam — đúng lúc hạn mức được cấp lại.
+     */
+    @ExceptionHandler(AiQuotaExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleAiQuota(AiQuotaExceededException ex,
+                                                          HttpServletRequest request) {
+        log.info("Chặn hỏi trợ lý AI vì hết lượt ({}, hạn mức {}) tại {}",
+                ex.getScope(), ex.getLimit(), request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(secondsUntilQuotaReset()))
+                .body(ApiErrorResponse.of(HttpStatus.TOO_MANY_REQUESTS.value(),
+                        "AI_QUOTA_EXCEEDED", ex.getMessage(), request.getRequestURI()));
+    }
+
+    /**
+     * Trợ lý AI không trả lời được.
+     *
+     * <p>Hai mã trạng thái cho hai chuyện khác nhau, và giao diện đọc được sự
+     * khác nhau ấy: 503 là "chỗ này chưa mở" — nói xong là hết, đừng mời bấm
+     * lại; 502 là "hỏng lúc này" — có một nút thử lại là hợp lý.
+     *
+     * <p>Thông điệp trả về luôn là câu viết sẵn trong {@link AiAssistantException}.
+     * Nguyên văn lỗi của nhà cung cấp đã được ghi vào log ở tầng client và không
+     * đi ra ngoài: nó có thể mang theo địa chỉ nội bộ hoặc một phần khoá.
+     */
+    @ExceptionHandler(AiAssistantException.class)
+    public ResponseEntity<ApiErrorResponse> handleAiAssistant(AiAssistantException ex,
+                                                              HttpServletRequest request) {
+        boolean unavailable = ex.getKind() == AiAssistantException.Kind.UNAVAILABLE;
+        HttpStatus status = unavailable ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.BAD_GATEWAY;
+        String code = unavailable ? "AI_UNAVAILABLE" : "AI_ERROR";
+
+        if (unavailable) {
+            log.debug("Trợ lý AI chưa được cấu hình, từ chối tại {}", request.getRequestURI());
+        } else {
+            log.warn("Trợ lý AI hỏng tại {}: {}", request.getRequestURI(), ex.getMessage());
+        }
+        return build(status, code, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException ex,
                                                              HttpServletRequest request) {

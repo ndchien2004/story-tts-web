@@ -10,6 +10,7 @@ import KaraokeText from "../components/KaraokeText";
 import LockedGate from "../components/LockedGate";
 import PurchaseReceipt from "../components/PurchaseReceipt";
 import ReaderSettings from "../components/ReaderSettings";
+import StoryAssistant from "../components/StoryAssistant";
 import ThemeToggle from "../components/ThemeToggle";
 import { useAuth } from "../context/auth-context";
 import useChapterAudio from "../hooks/useChapterAudio";
@@ -628,6 +629,20 @@ export default function ChapterPage() {
             )}
           </div>
         </section>
+
+        {/*
+          Trợ lý AI, và nó nằm trong khối này chứ không cạnh AudioPlayer — đó
+          là cả cách nó biết chỗ để đứng.
+
+          Khối .reader-grid kết thúc đúng ở chỗ thanh nghe bắt đầu, nên một cái
+          hộp neo vào đáy nó tự nằm sát trên thanh ấy, và tự dịch lên khi thanh
+          ấy mở phần mở rộng ra. Đặt cạnh AudioPlayer thì phải đo chiều cao thanh
+          nghe bằng JavaScript mới làm được đúng việc ấy. Xem assistant.css.
+
+          Chỉ nhận chapterId: nội dung chương do máy chủ tự tra sau khi xét
+          quyền, nên hộp này không bao giờ cầm trong tay thứ nó hỏi về.
+        */}
+        <StoryAssistant chapterId={chapterId} isAuthenticated={isAuthenticated} />
       </div>
 
       {/* Phần nghe không còn là một cột bên cạnh trang chữ mà là một dải dưới

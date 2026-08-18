@@ -2353,6 +2353,17 @@ body:has(.reader) .navbar {
   gap: 0;
   /* Without this the grid refuses to shrink and the pane never scrolls. */
   min-height: 0;
+
+  /*
+   * Điểm quy chiếu cho hộp trợ lý AI, và đó là tất cả những gì hộp ấy cần để
+   * nằm đúng chỗ.
+   *
+   * Dải này kết thúc đúng ở chỗ thanh nghe bắt đầu — cả ba dải là con của một
+   * cột co giãn cao bằng màn hình. Nên một cái hộp neo vào đáy dải này tự nằm
+   * sát trên thanh nghe, và tự dịch lên khi thanh ấy mở phần mở rộng ra. Không
+   * cần đo chiều cao thanh nghe bằng JavaScript. Xem assistant.css.
+   */
+  position: relative;
 }
 
 /* The pane is a region of the page, so it has no edges of its own. */

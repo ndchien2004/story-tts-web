@@ -200,6 +200,38 @@ export const ttsApi = {
 };
 
 /* ------------------------------------------------------------------ */
+/* Trợ lý AI của trang đọc                                             */
+/* ------------------------------------------------------------------ */
+
+export const assistantApi = {
+  /**
+   * Trợ lý có dùng được trên máy chủ này không, và còn bao nhiêu lượt.
+   *
+   * Hỏi một lần khi mở chương. Máy chủ chưa có API key thì {@code enabled} là
+   * false và trang đọc không vẽ gì cả — cùng nếp với {@link ttsApi.status}:
+   * một cái nút chắc chắn sẽ lỗi thì đừng mời người ta bấm.
+   */
+  status: () => client.get("/api/ai/status").then((r) => r.data),
+
+  /**
+   * Hỏi trợ lý một câu về chương đang đọc.
+   *
+   * <p>Chỉ gửi lên `chapterId`, không bao giờ gửi nội dung chương — máy chủ tự
+   * tra nội dung sau khi xét quyền đọc. Đây không phải chuyện tiết kiệm băng
+   * thông mà là chuyện khoá cửa: nếu nội dung đi từ trình duyệt lên thì bất kỳ
+   * ai cũng dán được nội dung một chương chưa mua vào đó.
+   *
+   * <p>`history` là các lượt đã trao đổi trong đúng chương này, cũ trước mới
+   * sau. Máy chủ cắt bớt cho vừa ngân sách token, nên gửi dư không hỏng gì —
+   * nhưng cũng không cần gửi cả cuộc.
+   */
+  ask: ({ chapterId, message, history }) =>
+    client
+      .post("/api/ai/story-assistant", { chapterId, message, history })
+      .then((r) => r.data),
+};
+
+/* ------------------------------------------------------------------ */
 /* Reader interaction: favourites, progress, comments                  */
 /* ------------------------------------------------------------------ */
 

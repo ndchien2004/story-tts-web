@@ -126,6 +126,16 @@ public class SecurityConfig {
                         // audio là tiêu tiền, phải có danh tính mới tính hạn mức được.
                         .requestMatchers(HttpMethod.GET, "/api/tts/status").permitAll()
 
+                        // --- Trợ lý AI ---
+                        // Cùng một cách chia với "Nghe bằng AI", vì cùng một lý
+                        // do: trạng thái xem được khi chưa đăng nhập, để trang
+                        // đọc biết máy chủ này có bật trợ lý không mà quyết định
+                        // vẽ hay không vẽ cái nút. Còn POST /api/ai/story-assistant
+                        // cố ý vắng mặt ở đây: mỗi câu hỏi là một lần gọi API
+                        // tính tiền, và hạn mức mỗi ngày chỉ đếm được khi biết
+                        // là của ai.
+                        .requestMatchers(HttpMethod.GET, "/api/ai/status").permitAll()
+
                         .anyRequest().authenticated())
                 .authenticationProvider(authenticationProvider(passwordEncoder()))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
