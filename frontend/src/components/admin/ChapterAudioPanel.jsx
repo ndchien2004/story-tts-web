@@ -251,7 +251,11 @@ export default function ChapterAudioPanel({ chapterId, chapterTitle, dirty, onSa
           value={voice}
           onChange={(event) => setVoice(event.target.value)}
         >
-          <option value="">Giọng mặc định của máy chủ</option>
+          {/* Bỏ trống nghĩa là dùng ELEVENLABS_VOICE_ID trong .env. Nhãn nói rõ
+              là ".env" chứ không phải "của máy chủ" chung chung: trước kia mục
+              này rơi vào giọng đứng đầu danh sách nhà cung cấp, tức một giọng
+              không ai cấu hình và có thể đổi bất cứ lúc nào. */}
+          <option value="">Giọng mặc định trong .env</option>
           {voices.map((option) => (
             <option key={option.code} value={option.code}>
               {option.name}

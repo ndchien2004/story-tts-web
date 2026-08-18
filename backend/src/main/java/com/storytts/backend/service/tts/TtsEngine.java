@@ -68,6 +68,26 @@ public class TtsEngine {
     }
 
     /**
+     * Có nhà cung cấp nào nhận mã giọng này không.
+     *
+     * <p>Đây mới là phép thử đúng cho một mã giọng, chứ không phải "có nằm trong
+     * {@link #availableVoices()} hay không". Danh sách kia là một lần gọi mạng
+     * có thể hỏng, và khi nó hỏng thì mọi mã giọng đều trông như không hợp lệ.
+     */
+    public boolean supportsVoice(String voiceCode) {
+        return availableProviders().stream().anyMatch(provider -> provider.supportsVoice(voiceCode));
+    }
+
+    /** Giọng mặc định của nhà cung cấp đầu tiên còn dùng được; null nếu không có. */
+    public String defaultVoiceCode() {
+        return availableProviders().stream()
+                .map(TtsProvider::defaultVoiceCode)
+                .filter(code -> code != null && !code.isBlank())
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
      * Synthesises text, trying each configured provider until one succeeds.
      *
      * @throws TtsException if none succeed; the message names every attempt so

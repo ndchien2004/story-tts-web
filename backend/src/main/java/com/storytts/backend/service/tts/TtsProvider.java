@@ -29,6 +29,17 @@ public interface TtsProvider {
     boolean supportsVoice(String voiceCode);
 
     /**
+     * Giọng dùng khi lời gọi không chỉ định giọng nào.
+     *
+     * <p>Lấy từ cấu hình, không lấy từ {@link #voices()}: danh sách kia do nhà
+     * cung cấp trả về và thứ tự của nó không do ta định đoạt, nên lấy phần tử
+     * đầu làm mặc định tức là để giọng mặc định đổi theo ý người khác.
+     *
+     * @return null khi chưa cấu hình giọng mặc định nào
+     */
+    String defaultVoiceCode();
+
+    /**
      * Converts text to MP3 bytes.
      *
      * <p>Kèm theo mốc thời gian từng chữ nếu nhà cung cấp nói được — xem

@@ -192,21 +192,36 @@ public class TtsService {
     }
 
     /**
-     * Falls back to the first voice on offer when the request names none, so a
-     * caller that omits the field still gets a deterministic cache key.
+     * Mã giọng sẽ thật sự đem đi dựng, đồng thời là một phần khóa cache.
+     *
+     * <p>Phép thử ở đây là "có nhà cung cấp nào nhận mã này không", chứ không
+     * phải "mã này có nằm trong danh sách giọng không". Danh sách giọng là một
+     * lần gọi mạng tới nhà cung cấp; hỏng một lần là mọi mã giọng đều trông như
+     * không hợp lệ, và bản dựng ra sẽ mang một giọng khác hẳn giọng đã chọn.
+     *
+     * <p>Không khớp thì báo lỗi chứ không lặng lẽ thay giọng khác. Đổi thứ người
+     * dùng đã chọn mà không nói là kiểu hỏng khó truy nhất: người bấm nghe ra
+     * giọng lạ nhưng mọi màn hình đều báo thành công.
      */
     private String resolveVoice(String requested) {
-        List<VoiceOptionDto> voices = ttsEngine.availableVoices();
-
         if (requested != null && !requested.isBlank()) {
             String trimmed = requested.trim();
-            boolean known = voices.stream().anyMatch(voice -> voice.code().equalsIgnoreCase(trimmed));
-            if (known) {
+            if (ttsEngine.supportsVoice(trimmed)) {
                 return trimmed;
             }
+            throw new TtsException(
+                    "Giọng đọc \"%s\" không thuộc nhà cung cấp nào đang bật. "
+                            .formatted(trimmed)
+                            + "Vui lòng chọn lại giọng trong danh sách.");
         }
 
-        return voices.isEmpty() ? "default" : voices.getFirst().code();
+        String fallback = ttsEngine.defaultVoiceCode();
+        if (fallback == null) {
+            throw new TtsException(
+                    "Chưa cấu hình giọng đọc mặc định. "
+                            + "Vui lòng đặt ELEVENLABS_VOICE_ID trong file .env rồi khởi động lại máy chủ.");
+        }
+        return fallback;
     }
 
     /**

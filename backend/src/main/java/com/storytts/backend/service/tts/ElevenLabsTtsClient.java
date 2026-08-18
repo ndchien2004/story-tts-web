@@ -108,6 +108,15 @@ public class ElevenLabsTtsClient implements TtsProvider {
     }
 
     @Override
+    public String defaultVoiceCode() {
+        TtsProperties.ElevenLabs config = properties.elevenlabs();
+        if (config == null || config.voiceId() == null || config.voiceId().isBlank()) {
+            return null;
+        }
+        return VOICE_PREFIX + config.voiceId().trim();
+    }
+
+    @Override
     public List<VoiceOptionDto> voices() {
         if (!isConfigured()) {
             return List.of();
@@ -124,9 +133,15 @@ public class ElevenLabsTtsClient implements TtsProvider {
         } catch (Exception ex) {
             // Listing is a convenience; losing it must not stop synthesis, so
             // fall back to advertising just the configured default voice.
+            //
+            // Không ghi vào cache: danh sách dự phòng chỉ có một mục, và đóng
+            // băng nó nửa tiếng nghĩa là một lần gọi hỏng thoáng qua cũng đủ
+            // giấu hết giọng của tài khoản trong suốt nửa tiếng ấy. Hỏng thì
+            // lần sau hỏi lại.
             log.warn("ElevenLabs: could not list voices ({}), using the configured default",
                     ex.getMessage());
-            fetched = List.of(defaultVoiceOption());
+            VoiceOptionDto fallback = defaultVoiceOption();
+            return fallback == null ? List.of() : List.of(fallback);
         }
 
         voiceCache.set(new CachedVoices(fetched, Instant.now()));
@@ -323,11 +338,20 @@ public class ElevenLabsTtsClient implements TtsProvider {
         }
     }
 
-    /** Dịch mã lỗi HTTP thành câu người dùng đọc được, hoặc để yên nếu là 2xx. */
+    /**
+     * Dịch mã lỗi HTTP thành câu người dùng đọc được, hoặc để yên nếu là 2xx.
+     *
+     * <p>Luôn kèm câu giải thích của nhà cung cấp. ElevenLabs trả 401 cho nhiều
+     * chuyện khác hẳn nhau — key sai, key thiếu quyền, tài khoản bị khóa vì nghi
+     * dùng VPN — và chỉ phần {@code detail.message} mới phân biệt được. Gộp hết
+     * thành "key không hợp lệ" là đẩy người đọc log đi thay key, trong khi cái
+     * key ấy vẫn tốt nguyên.
+     */
     private void failOnError(HttpResponse<byte[]> response) {
         int status = response.statusCode();
         if (status == 401 || status == 403) {
-            throw new TtsException("API key của ElevenLabs không hợp lệ hoặc không đủ quyền.");
+            throw new TtsException("ElevenLabs từ chối yêu cầu (HTTP %d)%s."
+                    .formatted(status, describeError(response.body())));
         }
         if (status == 429) {
             throw new TtsException(
@@ -432,13 +456,28 @@ public class ElevenLabsTtsClient implements TtsProvider {
                     displayName()));
         }
 
-        return result.isEmpty() ? List.of(defaultVoiceOption()) : List.copyOf(result);
+        if (!result.isEmpty()) {
+            return List.copyOf(result);
+        }
+        VoiceOptionDto fallback = defaultVoiceOption();
+        return fallback == null ? List.of() : List.of(fallback);
     }
 
+    /**
+     * Mục dự phòng cho danh sách giọng: chính là giọng cấu hình trong .env.
+     *
+     * <p>Tên nói rõ đây là giọng nào để người chọn không tưởng đây là "giọng nào
+     * đó của máy chủ" — trước kia phần dựng lấy phần tử đầu của danh sách nhà
+     * cung cấp làm mặc định, nên cái nhãn "mặc định" từng trỏ vào một giọng
+     * không ai cấu hình cả.
+     */
     private VoiceOptionDto defaultVoiceOption() {
-        String voiceId = properties.elevenlabs().voiceId();
+        String code = defaultVoiceCode();
+        if (code == null) {
+            return null;
+        }
         return new VoiceOptionDto(
-                VOICE_PREFIX + voiceId, "Giọng mặc định", "—", "Đa ngôn ngữ", ID, displayName());
+                code, "Giọng mặc định (.env)", "—", "Đa ngôn ngữ", ID, displayName());
     }
 
     private String trimTrailingSlash(String value) {

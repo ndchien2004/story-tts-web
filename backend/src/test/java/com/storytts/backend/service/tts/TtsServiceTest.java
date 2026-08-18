@@ -74,6 +74,12 @@ class TtsServiceTest {
         when(ttsEngine.hasAnyProvider()).thenReturn(true);
         when(ttsEngine.availableVoices()).thenReturn(List.of(
                 new VoiceOptionDto(VOICE, "Giọng một", "Nữ", "Đa ngôn ngữ", "elevenlabs", "ElevenLabs")));
+
+        // Nhận mã giọng theo tiền tố, đúng như ElevenLabsTtsClient.supportsVoice —
+        // không dò trong danh sách giọng, vì danh sách ấy là một lần gọi mạng.
+        when(ttsEngine.supportsVoice(anyString()))
+                .thenAnswer(call -> call.getArgument(0, String.class).startsWith("el:"));
+        when(ttsEngine.defaultVoiceCode()).thenReturn(VOICE);
         when(chapterService.findDetailEntity(CHAPTER_ID)).thenReturn(chapter(AccessLevel.PUBLIC));
         when(audioFileRepository.findTtsCache(anyLong(), anyString(), any(), any())).thenReturn(Optional.empty());
         when(audioFileRepository.save(any(AudioFile.class))).thenAnswer(invocation -> {
@@ -226,6 +232,52 @@ class TtsServiceTest {
         verify(audioFileRepository).findTtsCache(CHAPTER_ID, "el:voice-hai", 0, null);
     }
 
+    @Test
+    @DisplayName("Liệt kê giọng hỏng vẫn giữ nguyên giọng đã chọn, không đổi sang giọng khác")
+    void lietKeGiongHongVanGiuGiongDaChon() {
+        // Đúng tình huống đã xảy ra thật: key thiếu quyền voices_read nên danh
+        // sách giọng rỗng. Trước đây chỗ này lặng lẽ đổi sang giọng khác, và
+        // chương được dựng bằng một giọng không ai chọn.
+        when(ttsEngine.availableVoices()).thenReturn(List.of());
+
+        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest("el:voice-hai", 0));
+
+        ArgumentCaptor<AudioFile> saved = ArgumentCaptor.forClass(AudioFile.class);
+        verify(audioFileRepository).save(saved.capture());
+        assertThat(saved.getValue().getVoice()).isEqualTo("el:voice-hai");
+    }
+
+    @Test
+    @DisplayName("Không nêu giọng → lấy giọng mặc định cấu hình, không lấy giọng đầu danh sách")
+    void khongNeuGiongThiLayGiongCauHinh() {
+        // Phần tử đầu của danh sách là do nhà cung cấp xếp, không phải do ta
+        // cấu hình; lấy nó làm mặc định là để giọng mặc định đổi theo ý họ.
+        when(ttsEngine.availableVoices()).thenReturn(List.of(
+                new VoiceOptionDto("el:dau-danh-sach", "Đứng đầu", "Nam", "Đa ngôn ngữ",
+                        "elevenlabs", "ElevenLabs"),
+                new VoiceOptionDto(VOICE, "Giọng một", "Nữ", "Đa ngôn ngữ", "elevenlabs", "ElevenLabs")));
+
+        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest(null, 0));
+
+        ArgumentCaptor<AudioFile> saved = ArgumentCaptor.forClass(AudioFile.class);
+        verify(audioFileRepository).save(saved.capture());
+        assertThat(saved.getValue().getVoice()).isEqualTo(VOICE);
+    }
+
+    @Test
+    @DisplayName("Giọng lạ → báo lỗi rõ, không lặng lẽ dựng bằng giọng khác")
+    void giongLaThiBaoLoi() {
+        when(ttsEngine.supportsVoice("kg:khong-ai-nhan")).thenReturn(false);
+
+        assertThatThrownBy(() ->
+                ttsService.requestForChapter(CHAPTER_ID, new TtsRequest("kg:khong-ai-nhan", 0)))
+                .isInstanceOf(TtsException.class)
+                .hasMessageContaining("kg:khong-ai-nhan");
+
+        verify(audioFileRepository, never()).save(any(AudioFile.class));
+        verify(eventPublisher, never()).publishEvent(any(TtsGenerationRequested.class));
+    }
+
     // ==================== Xếp hàng bất đồng bộ ====================
 
     @Test
@@ -259,13 +311,9 @@ class TtsServiceTest {
         verify(audioFileRepository).findTtsCache(CHAPTER_ID, VOICE, 3, null);
     }
 
-    @Test
-    @DisplayName("Giọng lạ bị bỏ qua, quay về giọng đầu tiên có thật")
-    void giongLaThiQuayVeMacDinh() {
-        ttsService.requestForChapter(CHAPTER_ID, new TtsRequest("giong-khong-ton-tai", 0));
-
-        verify(audioFileRepository).findTtsCache(CHAPTER_ID, VOICE, 0, null);
-    }
+    // Giọng lạ nay báo lỗi thay vì lặng lẽ quay về giọng khác — xem
+    // giongLaThiBaoLoi ở nhóm trên. Hành vi cũ ("bỏ qua, dùng giọng đầu danh
+    // sách") là thứ đã khiến chương được dựng bằng một giọng không ai chọn.
 
     // ==================== Ngân sách của người đọc ====================
     //
