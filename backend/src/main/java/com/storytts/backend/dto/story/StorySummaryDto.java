@@ -18,7 +18,13 @@ public record StorySummaryDto(
         String statusLabel,
         long viewCount,
         long chapterCount,
-        Instant createdAt
+        Instant createdAt,
+
+        /** {@code DRAFT} / {@code SCHEDULED} / {@code PUBLISHED} — xem {@code Publishable}. */
+        String publishState,
+
+        /** Giờ đăng; null là bản nháp, mốc tương lai là đang chờ tới giờ. */
+        Instant publishedAt
 ) {
 
     public static StorySummaryDto from(Story story, long chapterCount) {
@@ -33,6 +39,8 @@ public record StorySummaryDto(
                 story.getStatus().getLabel(),
                 story.getViewCount(),
                 chapterCount,
-                story.getCreatedAt());
+                story.getCreatedAt(),
+                story.publishState(),
+                story.getPublishedAt());
     }
 }

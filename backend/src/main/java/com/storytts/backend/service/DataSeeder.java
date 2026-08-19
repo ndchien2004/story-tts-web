@@ -242,6 +242,10 @@ public class DataSeeder implements ApplicationRunner {
                 .description(description)
                 .status(status)
                 .coverImage(null)
+                // Dữ liệu mẫu phải hiện ra ngay: null ở cột này nghĩa là bản
+                // nháp, và một lần chạy đầu tiên ra sáu truyện vô hình là cách
+                // tệ nhất để chào một người vừa clone kho mã.
+                .publishedAt(Instant.now())
                 .build());
 
         List<Chapter> chapters = new ArrayList<>();
@@ -265,6 +269,7 @@ public class DataSeeder implements ApplicationRunner {
                 .title(title)
                 .accessLevel(accessLevel)
                 .content(content)
+                .publishedAt(Instant.now())
                 .build();
     }
 

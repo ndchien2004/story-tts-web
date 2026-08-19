@@ -26,6 +26,18 @@ public record ChapterSummaryDto(
         long coinPrice,
         boolean hasAudio,
         long viewCount,
-        Instant createdAt
+        Instant createdAt,
+
+        /**
+         * {@code DRAFT} / {@code SCHEDULED} / {@code PUBLISHED}.
+         *
+         * <p>Với người đọc thường thì luôn là {@code PUBLISHED} — chương ở hai
+         * trạng thái kia không nằm trong danh sách họ nhận được. Trường này tồn
+         * tại cho khu quản trị, nơi cả ba đều hiện ra.
+         */
+        String publishState,
+
+        /** Giờ đăng; null là bản nháp, mốc tương lai là đang chờ tới giờ. */
+        Instant publishedAt
 ) {
 }

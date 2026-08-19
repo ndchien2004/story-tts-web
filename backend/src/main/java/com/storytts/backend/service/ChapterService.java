@@ -11,6 +11,7 @@ import com.storytts.backend.dto.chapter.ChapterAccessDto;
 import com.storytts.backend.dto.chapter.ChapterDetailDto;
 import com.storytts.backend.dto.chapter.ChapterRequest;
 import com.storytts.backend.dto.chapter.ChapterSummaryDto;
+import com.storytts.backend.dto.common.PageResponse;
 import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.ResourceNotFoundException;
 import com.storytts.backend.repository.AudioFileRepository;
@@ -21,6 +22,10 @@ import com.storytts.backend.service.realtime.ChapterContentUpdated;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,34 +53,60 @@ public class ChapterService {
     // thuộc vào ChapterService, gọi ngược lại sẽ thành vòng phụ thuộc bean.
     private final ReadingProgressRepository progressRepository;
     private final CurrentUserService currentUserService;
+    private final PublicationService publicationService;
     private final ApplicationEventPublisher eventPublisher;
 
+    /** Số chương mặc định mỗi trang — đủ rộng cho gần hết truyện, đủ hẹp cho truyện dài. */
+    public static final int DEFAULT_PAGE_SIZE = 100;
+
+    /** Trần cứng: một truyện 1.200 chương không được phép về trong một lần gọi. */
+    private static final int MAX_PAGE_SIZE = 200;
+
     /**
-     * Danh sách chương của một truyện.
-     * Ai cũng xem được danh sách, nhưng chương không đủ quyền sẽ có {@code locked = true}
-     * để frontend hiển thị icon 🔒 kèm mức yêu cầu.
+     * Một trang chương của một truyện.
+     *
+     * <p>Ai cũng xem được danh sách, nhưng chương không đủ quyền sẽ có
+     * {@code locked = true} để frontend hiển thị icon 🔒 kèm mức yêu cầu. Chương
+     * chưa đăng thì không có mặt ở đây — với người đọc thường, nó chưa tồn tại.
+     *
+     * @param keyword tìm trong tiêu đề, hoặc một con số để nhảy tới chương ấy
+     * @param asc     thứ tự chương; false là mới nhất trước
      */
     @Transactional(readOnly = true)
-    public List<ChapterSummaryDto> listByStory(Long storyId) {
+    public PageResponse<ChapterSummaryDto> listByStory(Long storyId, String keyword,
+                                                       boolean asc, int page, int size) {
         if (!storyRepository.existsById(storyId)) {
             throw ResourceNotFoundException.of("truyện", storyId);
         }
-        List<Chapter> chapters = chapterRepository.findByStoryIdOrderByChapterNumberAsc(storyId);
-        if (chapters.isEmpty()) {
-            return List.of();
+
+        // "Chương 47" và "47" đều phải dẫn tới chương 47. Tách con số ra thành
+        // một điều kiện riêng thay vì ép kiểu cột số sang chuỗi trong SQL: phép
+        // ép ấy khác nhau giữa các hệ cơ sở dữ liệu và không dùng được chỉ mục.
+        String trimmed = keyword == null ? "" : keyword.trim();
+        Integer number = trimmed.matches("\\d{1,9}") ? Integer.valueOf(trimmed) : null;
+
+        Pageable pageable = PageRequest.of(
+                Math.max(page, 0),
+                Math.min(Math.max(size, 1), MAX_PAGE_SIZE),
+                Sort.by(asc ? Sort.Direction.ASC : Sort.Direction.DESC, "chapterNumber"));
+
+        Page<Chapter> result = chapterRepository.findVisibleByStory(
+                storyId, publicationService.canSeeUnpublished(), Instant.now(),
+                number != null ? null : trimmed, number, pageable);
+
+        if (result.isEmpty()) {
+            return PageResponse.from(result, chapter -> toSummary(chapter, storyId, false, false));
         }
 
-        List<Long> chapterIds = chapters.stream().map(Chapter::getId).toList();
+        List<Long> chapterIds = result.getContent().stream().map(Chapter::getId).toList();
         Set<Long> withAudio = new HashSet<>(audioFileRepository.findChapterIdsWithReadyAudio(chapterIds));
 
-        // Một câu hỏi quyền cho cả danh sách. Hỏi từng dòng thì một truyện hai
-        // trăm chương là hai trăm câu truy vấn cho một lần mở trang.
+        // Một câu hỏi quyền cho cả trang. Hỏi từng dòng thì một trang trăm chương
+        // là một trăm câu truy vấn cho một lần mở trang.
         Set<Long> owned = chapterAccessService.ownedAmong(chapterIds);
 
-        return chapters.stream()
-                .map(chapter -> toSummary(chapter, storyId,
-                        withAudio.contains(chapter.getId()), owned.contains(chapter.getId())))
-                .toList();
+        return PageResponse.from(result, chapter -> toSummary(chapter, storyId,
+                withAudio.contains(chapter.getId()), owned.contains(chapter.getId())));
     }
 
     /**
@@ -112,11 +143,14 @@ public class ChapterService {
         // đọc hết chương và chuyển sang chương sau — xem
         // ReadingProgressService.markCompleted. Nhờ vậy F5 không còn cộng lượt,
         // và mỗi người chỉ được tính một lượt cho mỗi chương.
+        boolean seesDrafts = publicationService.canSeeUnpublished();
+        Instant now = Instant.now();
+
         Long previousId = chapterRepository
-                .findPrevious(story.getId(), chapter.getChapterNumber())
+                .findPrevious(story.getId(), chapter.getChapterNumber(), seesDrafts, now)
                 .map(Chapter::getId).orElse(null);
         Long nextId = chapterRepository
-                .findNext(story.getId(), chapter.getChapterNumber())
+                .findNext(story.getId(), chapter.getChapterNumber(), seesDrafts, now)
                 .map(Chapter::getId).orElse(null);
 
         Long viewerId = currentUserService.currentUserId().orElse(null);
@@ -155,7 +189,10 @@ public class ChapterService {
                 nextId,
                 hasUpload,
                 hasTts,
-                audioPosition);
+                audioPosition,
+                chapter.getCoinPrice(),
+                chapter.publishState(),
+                chapter.getPublishedAt());
     }
 
     // ==================== Phía Admin ====================
@@ -180,6 +217,10 @@ public class ChapterService {
                 .chapterNumber(number)
                 // Mức khóa chương do Admin quyết định.
                 .accessLevel(request.accessLevel())
+                // Không gửi gì về việc xuất bản thì chương lên ngay, đúng hành
+                // vi trước khi có bản nháp — một lời gọi API cũ không được phép
+                // lặng lẽ đổi nghĩa.
+                .publishedAt(request.resolvePublishedAt(null))
                 .build();
 
         Chapter saved = chapterRepository.save(chapter);
@@ -232,6 +273,7 @@ public class ChapterService {
         chapter.setTitle(request.title().trim());
         chapter.setContent(request.content());
         chapter.setAccessLevel(request.accessLevel());
+        chapter.setPublishedAt(request.resolvePublishedAt(chapter.getPublishedAt()));
         if (contentChanged) {
             chapter.setContentVersion(chapter.getContentVersion() + 1);
         }
@@ -364,10 +406,22 @@ public class ChapterService {
 
     // ==================== Hàm hỗ trợ ====================
 
+    /**
+     * Nạp một chương kèm truyện của nó, sau khi đã xét chương ấy có tồn tại với
+     * người đang gọi hay không.
+     *
+     * <p>Chỗ này là cửa vào chung của mọi đường chạm tới một chương cụ thể — đọc
+     * chữ, dựng audio, hỏi trợ lý, sửa ở khu quản trị. Nên phép kiểm "đã đăng
+     * chưa" đặt ở đây phủ được cả bốn mà không phải nhớ thêm ở đâu; nó lặp lại
+     * một lần nữa trong {@code ChapterAccessService.requireAccess} vì đường phát
+     * audio đi vào từ id của bản audio chứ không qua đây.
+     */
     @Transactional(readOnly = true)
     public Chapter findDetailEntity(Long chapterId) {
-        return chapterRepository.findDetailById(chapterId)
+        Chapter chapter = chapterRepository.findDetailById(chapterId)
                 .orElseThrow(() -> ResourceNotFoundException.of("chương", chapterId));
+        publicationService.requireChapterVisible(chapter);
+        return chapter;
     }
 
     /** Dòng danh sách cho chương chưa cần biết tới quyền đã mua (chương mới tạo). */
@@ -390,6 +444,29 @@ public class ChapterService {
                 chapter.getCoinPrice(),
                 hasAudio,
                 chapter.getViewCount(),
-                chapter.getCreatedAt());
+                chapter.getCreatedAt(),
+                chapter.publishState(),
+                chapter.getPublishedAt());
+    }
+
+    /**
+     * Đổi riêng tình trạng xuất bản của một chương.
+     *
+     * <p>Tách khỏi {@link #update}: gỡ một chương xuống hay dời lịch đăng không
+     * nên bắt người ta gửi lại toàn bộ nội dung chương — và với một chương dài
+     * thì việc gửi lại ấy còn có nguy cơ ghi đè bằng một bản đã cũ trong form.
+     */
+    @Transactional
+    public ChapterSummaryDto changePublication(Long chapterId, boolean draft, Instant publishedAt) {
+        Chapter chapter = findDetailEntity(chapterId);
+        chapter.setPublishedAt(
+                draft ? null : (publishedAt != null ? publishedAt : Instant.now()));
+
+        Chapter saved = chapterRepository.save(chapter);
+        log.info("Admin đặt chương {} sang trạng thái {} (mốc {})",
+                chapterId, saved.publishState(), saved.getPublishedAt());
+
+        boolean hasAudio = audioFileRepository.hasCurrentReadyAudio(chapterId);
+        return toSummary(saved, chapter.getStory().getId(), hasAudio);
     }
 }

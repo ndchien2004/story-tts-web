@@ -25,7 +25,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Chapter {
+public class Chapter implements Publishable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -122,6 +122,18 @@ public class Chapter {
 
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    /**
+     * Mốc xuất bản — null là bản nháp, tương lai là hẹn giờ. Xem {@link Publishable}.
+     *
+     * <p>Vuông góc với {@link #accessLevel} và {@link #coinPrice}, cùng một lý lẽ
+     * đã dùng cho hai cột kia: chúng trả lời ba câu khác nhau — chương này <i>đã
+     * có mặt chưa</i>, <i>ai được nhìn tới</i>, và <i>mở nó tốn bao nhiêu</i>.
+     * Gộp "nháp" thành một mức khóa thứ tư sẽ khiến mọi chương nháp mất luôn mức
+     * khóa mà quản trị viên đã đặt cho nó lúc đăng.
+     */
+    @Column(name = "published_at")
+    private Instant publishedAt;
 
     @OneToMany(mappedBy = "chapter", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default

@@ -67,7 +67,17 @@ export const storyApi = {
     client.get("/api/stories/top-listened", { params }).then((r) => r.data),
 
   detail: (id) => client.get(`/api/stories/${id}`).then((r) => r.data),
-  chapters: (id) => client.get(`/api/stories/${id}/chapters`).then((r) => r.data),
+  /**
+   * One page of a story's chapters.
+   *
+   * Paged rather than whole: `detail` already carries the first page, and a
+   * thousand-chapter translation used to arrive in a single response — a few
+   * hundred KB of JSON on every visit to the story page.
+   *
+   * `q` searches chapter titles, or jumps straight to a number when it is one.
+   */
+  chapters: (id, params) =>
+    client.get(`/api/stories/${id}/chapters`, { params }).then((r) => r.data),
 };
 
 export const chapterApi = {

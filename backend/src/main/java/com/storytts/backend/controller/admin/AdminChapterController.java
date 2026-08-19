@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -84,8 +85,32 @@ public class AdminChapterController {
         return Map.of("updated", updated);
     }
 
+    /**
+     * Đăng, gỡ xuống, hoặc hẹn giờ đăng một chương.
+     *
+     * <p>Tách khỏi {@link #update}: dời lịch không nên bắt gửi lại toàn bộ nội
+     * dung chương — và với một chương dài thì việc gửi lại ấy còn có nguy cơ ghi
+     * đè bằng một bản đã cũ đang mở trong form của một tab khác.
+     */
+    @PatchMapping("/{id}/publication")
+    @Operation(summary = "Đăng / gỡ xuống / hẹn giờ đăng một chương",
+            description = "draft=true là gỡ về bản nháp. Còn lại: publishedAt bỏ trống là "
+                    + "đăng ngay, mốc ở tương lai là hẹn giờ — tới giờ chương tự hiện, "
+                    + "không có tác vụ nền nào phải chạy.")
+    public ChapterSummaryDto changePublication(@PathVariable Long id,
+                                               @Valid @RequestBody PublicationRequest request) {
+        return chapterService.changePublication(id, request.draft(), request.publishedAt());
+    }
+
     public record AccessLevelRequest(
             @NotNull(message = "Vui lòng chọn mức truy cập") AccessLevel accessLevel) {
+    }
+
+    /**
+     * @param draft       true là gỡ về bản nháp; khi ấy {@code publishedAt} bị bỏ qua
+     * @param publishedAt bỏ trống là đăng ngay; mốc ở tương lai là hẹn giờ
+     */
+    public record PublicationRequest(boolean draft, Instant publishedAt) {
     }
 
     public record PricingRequest(

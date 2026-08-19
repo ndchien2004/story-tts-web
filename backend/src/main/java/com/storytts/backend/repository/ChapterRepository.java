@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -22,22 +23,88 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
     @Query("SELECT c FROM Chapter c JOIN FETCH c.story WHERE c.id = :id")
     Optional<Chapter> findDetailById(@Param("id") Long id);
 
-    /** Chương kế tiếp — phục vụ nút "chương sau" và chế độ nghe liên tục. */
+    /**
+     * Một trang chương của một truyện, chỉ gồm những chương người gọi được thấy.
+     *
+     * <h3>Vì sao có phân trang</h3>
+     * Trang chi tiết truyện từng trả về <b>toàn bộ</b> chương trong một lần. Với
+     * sáu truyện mẫu bốn chương thì không ai thấy gì; với một truyện dịch 1.200
+     * chương — đúng hình dạng nội dung mà trang này nhắm tới — đó là vài trăm KB
+     * JSON cho mỗi lần mở trang, cộng hai truy vấn phụ ("chương nào đã có audio",
+     * "chương nào đã mua") chạy trên đúng tập ấy.
+     *
+     * <h3>Vì sao lọc ngay trong SQL chứ không lọc sau khi lấy trang về</h3>
+     * Lọc sau phân trang cho ra những trang vơi đầy thất thường và một tổng số
+     * đếm sai — trang đầu còn 8 dòng, trang sau còn 20, mà thanh phân trang vẫn
+     * hứa hẹn theo con số cũ.
+     *
+     * <p>{@code includeUnpublished} là quyền của người gọi, do service quyết
+     * định; truyền xuống dưới dạng tham số thay vì viết hai câu truy vấn, để hai
+     * bản không bao giờ lệch nhau về những mệnh đề còn lại.
+     *
+     * @param keyword tìm trong tiêu đề chương; null hoặc rỗng là không lọc
+     * @param number  số hiệu chương chính xác; dành cho ô "nhảy tới chương…"
+     */
+    @Query("""
+            SELECT c FROM Chapter c
+            WHERE c.story.id = :storyId
+              AND (:includeUnpublished = TRUE
+                   OR (c.publishedAt IS NOT NULL AND c.publishedAt <= :now))
+              AND (:keyword IS NULL OR :keyword = ''
+                   OR LOWER(c.title) LIKE LOWER(CONCAT('%', :keyword, '%')))
+              AND (:number IS NULL OR c.chapterNumber = :number)
+            """)
+    org.springframework.data.domain.Page<Chapter> findVisibleByStory(
+            @Param("storyId") Long storyId,
+            @Param("includeUnpublished") boolean includeUnpublished,
+            @Param("now") Instant now,
+            @Param("keyword") String keyword,
+            @Param("number") Integer number,
+            org.springframework.data.domain.Pageable pageable);
+
+    /** Số chương người gọi được thấy — con số hiện trên thẻ truyện. */
+    @Query("""
+            SELECT COUNT(c) FROM Chapter c
+            WHERE c.story.id = :storyId
+              AND (:includeUnpublished = TRUE
+                   OR (c.publishedAt IS NOT NULL AND c.publishedAt <= :now))
+            """)
+    long countVisibleByStory(@Param("storyId") Long storyId,
+                             @Param("includeUnpublished") boolean includeUnpublished,
+                             @Param("now") Instant now);
+
+    /**
+     * Chương kế tiếp — phục vụ nút "chương sau" và chế độ nghe liên tục.
+     *
+     * <p>Bỏ qua chương chưa đăng, và điều đó là bắt buộc chứ không phải cho
+     * gọn: nút "chương sau" trỏ tới một bản nháp sẽ đưa người đọc thẳng vào một
+     * trang 404, ngay giữa lúc họ đang nghe liên tục.
+     */
     @Query("""
             SELECT c FROM Chapter c
             WHERE c.story.id = :storyId AND c.chapterNumber > :currentNumber
+              AND (:includeUnpublished = TRUE
+                   OR (c.publishedAt IS NOT NULL AND c.publishedAt <= :now))
             ORDER BY c.chapterNumber ASC
             LIMIT 1
             """)
-    Optional<Chapter> findNext(@Param("storyId") Long storyId, @Param("currentNumber") Integer currentNumber);
+    Optional<Chapter> findNext(@Param("storyId") Long storyId,
+                               @Param("currentNumber") Integer currentNumber,
+                               @Param("includeUnpublished") boolean includeUnpublished,
+                               @Param("now") Instant now);
 
     @Query("""
             SELECT c FROM Chapter c
             WHERE c.story.id = :storyId AND c.chapterNumber < :currentNumber
+              AND (:includeUnpublished = TRUE
+                   OR (c.publishedAt IS NOT NULL AND c.publishedAt <= :now))
             ORDER BY c.chapterNumber DESC
             LIMIT 1
             """)
-    Optional<Chapter> findPrevious(@Param("storyId") Long storyId, @Param("currentNumber") Integer currentNumber);
+    Optional<Chapter> findPrevious(@Param("storyId") Long storyId,
+                                   @Param("currentNumber") Integer currentNumber,
+                                   @Param("includeUnpublished") boolean includeUnpublished,
+                                   @Param("now") Instant now);
 
     @Query("SELECT COALESCE(MAX(c.chapterNumber), 0) FROM Chapter c WHERE c.story.id = :storyId")
     Integer findMaxChapterNumber(@Param("storyId") Long storyId);

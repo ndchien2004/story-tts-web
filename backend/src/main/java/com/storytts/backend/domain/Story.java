@@ -22,7 +22,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Story {
+public class Story implements Publishable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -62,6 +62,15 @@ public class Story {
 
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    /**
+     * Mốc xuất bản — null là bản nháp, tương lai là hẹn giờ. Xem {@link Publishable}.
+     *
+     * <p>Truyện chưa đăng thì mọi chương của nó cũng không hiện ra, kể cả chương
+     * đã tự đăng: một chương lẻ không mở được nếu không có trang truyện dẫn tới.
+     */
+    @Column(name = "published_at")
+    private Instant publishedAt;
 
     @OneToMany(mappedBy = "story", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("chapterNumber ASC")

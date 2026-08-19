@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { adminApi, storyApi } from "../../api/endpoints";
 import { pollUntilSettled } from "../../utils/poll";
+import { formatDateTime } from "../../utils/format";
 import AdminPage from "./AdminPage";
 import { useAdminToast } from "../../context/admin-toast-context";
 import AudioPreview from "../../components/admin/AudioPreview";
 import AudioUploadButton from "../../components/AudioUploadButton";
 import ConfirmDialog from "../../components/ConfirmDialog";
+import Pagination from "../../components/Pagination";
 import {
   Alert,
   Badge,
@@ -107,6 +109,15 @@ const MAX_BATCH = 20;
 const AUDIO_STATUS_PAGE_SIZE = 100;
 
 /**
+ * Số chương mỗi trang ở khu quản trị — trần cứng của máy chủ.
+ *
+ * Rộng gấp đôi trang người đọc vì mọi thao tác hàng loạt ở đây làm trên những
+ * dòng đang thấy: trang càng hẹp thì một lần đặt giá cho nửa sau của truyện
+ * càng phải lặp lại nhiều lượt.
+ */
+const CHAPTER_PAGE_SIZE = 200;
+
+/**
  * Audio status for every chapter of a story, however long the story is.
  *
  * Paged rather than fetched in one go because the endpoint refuses to return
@@ -151,6 +162,8 @@ export default function AdminChaptersPage() {
 
   const [story, setStory] = useState(null);
   const [chapters, setChapters] = useState([]);
+  /** Thông tin trang hiện tại: tổng số chương, số trang, đang ở trang mấy. */
+  const [page, setPage] = useState(null);
   const [audioStatus, setAudioStatus] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -189,25 +202,39 @@ export default function AdminChaptersPage() {
     };
   }, []);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      storyApi.detail(storyId),
-      // Losing the status only costs the badges; the chapter list itself is
-      // still worth showing, so this failure is swallowed rather than raised.
-      fetchAudioStatus(storyId).catch(() => []),
-    ])
-      .then(([detail, audioRows]) => {
-        setStory(detail.story);
-        setChapters(detail.chapters);
-        setAudioStatus(Object.fromEntries(audioRows.map((row) => [row.chapterId, row])));
-        setError(null);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [storyId]);
+  /*
+   * Chương về theo trang, không còn về cả nghìn dòng một lượt.
+   *
+   * Trang chi tiết truyện chỉ còn dùng để lấy phần thông tin truyện; danh sách
+   * chương đi bằng đường riêng vì khu quản trị cần trang rộng hơn hẳn trang
+   * người đọc — mọi thao tác hàng loạt ở dưới đều làm trên những dòng đang thấy.
+   */
+  const load = useCallback(
+    (nextPage = 0) => {
+      setLoading(true);
+      Promise.all([
+        storyApi.detail(storyId),
+        storyApi.chapters(storyId, { page: nextPage, size: CHAPTER_PAGE_SIZE }),
+        // Losing the status only costs the badges; the chapter list itself is
+        // still worth showing, so this failure is swallowed rather than raised.
+        fetchAudioStatus(storyId).catch(() => []),
+      ])
+        .then(([detail, chapterPage, audioRows]) => {
+          setStory(detail.story);
+          setChapters(chapterPage.content);
+          setPage(chapterPage);
+          setAudioStatus(Object.fromEntries(audioRows.map((row) => [row.chapterId, row])));
+          setError(null);
+        })
+        .catch((err) => setError(err.message))
+        .finally(() => setLoading(false));
+    },
+    [storyId],
+  );
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    load(0);
+  }, [load]);
 
   // The voice list comes from whichever provider is configured, so it cannot be
   // hard-coded. No provider means no list, and the selector stays hidden.
@@ -735,7 +762,19 @@ export default function AdminChaptersPage() {
                           />
                         </td>
                         <td>{chapter.chapterNumber}</td>
-                        <td className="admin-cell-main">{chapter.title}</td>
+                        <td className="admin-cell-main">
+                          {chapter.title}
+                          {/* Chỉ nói khi có gì để nói: chương đã đăng là trạng
+                              thái thường, và một cái nhãn trên mọi dòng chỉ làm
+                              hai dòng đáng chú ý kia khó thấy hơn. */}
+                          {chapter.publishState !== "PUBLISHED" && (
+                            <Badge tone={chapter.publishState === "DRAFT" ? "neutral" : "info"}>
+                              {chapter.publishState === "DRAFT"
+                                ? "Nháp"
+                                : `Hẹn ${formatDateTime(chapter.publishedAt)}`}
+                            </Badge>
+                          )}
+                        </td>
                         <td>
                           {/* The select both states the current level and
                               changes it, so no badge repeats it beside. */}
@@ -839,10 +878,32 @@ export default function AdminChaptersPage() {
 
           <div className="admin-panel-foot">
             <span className="muted" style={{ fontSize: "0.85rem", fontWeight: 500 }}>
-              Hiển thị {visibleChapters.length}/{chapters.length} chương · {audioCount} chương có
-              audio
+              {/* Nói rõ hai con số là hai phạm vi khác nhau: bộ lọc chạy trên
+                  trang đang mở, còn tổng số là của cả truyện. Không nói ra thì
+                  "12/200" trên một truyện 1.200 chương là một con số sai. */}
+              Hiển thị {visibleChapters.length}/{chapters.length} chương trong trang
+              {page && page.totalElements > chapters.length
+                ? ` · tổng ${page.totalElements} chương`
+                : ""}{" "}
+              · {audioCount} chương có audio
             </span>
           </div>
+
+          {page && page.totalPages > 1 && (
+            <div className="admin-panel-foot">
+              <Pagination
+                page={page.page}
+                totalPages={page.totalPages}
+                onChange={(next) => {
+                  // Bỏ phần đang chọn khi sang trang: những dòng ấy không còn
+                  // trên màn hình, mà mọi thao tác hàng loạt ở đây đều nói về
+                  // "những dòng đang thấy".
+                  setSelected([]);
+                  load(next);
+                }}
+              />
+            </div>
+          )}
         </section>
       </div>
 

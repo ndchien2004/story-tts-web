@@ -1410,6 +1410,30 @@ body:has(.reader) .navbar {
   white-space: nowrap;
 }
 
+/*
+ * Thanh tìm chương, chỉ hiện với truyện dài hơn một trang.
+ *
+ * Ô tìm chiếm hết phần còn lại và nút giữ nguyên bề ngang của nó: nhãn nút đổi
+ * giữa "Cũ nhất trước" và "Mới nhất trước", và một cái nút co giãn theo chữ sẽ
+ * làm ô tìm bên cạnh nhảy mỗi lần bấm.
+ */
+.chapter-toolbar {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.chapter-toolbar > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chapter-toolbar > :last-child {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 /* ------------------------------------------------------------------ */
 /* Story detail                                                        */
 /* ------------------------------------------------------------------ */

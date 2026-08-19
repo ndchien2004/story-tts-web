@@ -4,6 +4,10 @@ import { adminApi } from "../../api/endpoints";
 import AdminPage from "./AdminPage";
 import { useAdminToast } from "../../context/admin-toast-context";
 import ChapterAudioPanel from "../../components/admin/ChapterAudioPanel";
+import PublishControl, {
+  publishFormFrom,
+  publishPayload,
+} from "../../components/admin/PublishControl";
 import { Alert, Button, Field, Select, Spinner, TextArea, TextInput } from "../../components/ui";
 
 const ACCESS_LEVELS = [
@@ -18,6 +22,10 @@ const EMPTY_FORM = {
   chapterNumber: "",
   accessLevel: "PUBLIC",
   coinPrice: "0",
+  // Chương mới mặc định lên ngay, đúng hành vi trước khi có bản nháp: người vào
+  // đây để đăng một chương, còn giữ lại làm nháp là một lựa chọn phải nói ra.
+  publishState: "PUBLISHED",
+  publishAt: "",
 };
 
 /**
@@ -64,6 +72,7 @@ export default function AdminChapterFormPage() {
           chapterNumber: String(chapter.chapterNumber),
           accessLevel: chapter.accessLevel,
           coinPrice: String(chapter.coinPrice ?? 0),
+          ...publishFormFrom(chapter.publishState, chapter.publishedAt),
         };
         setForm(loaded);
         setSavedForm(loaded);
@@ -101,6 +110,7 @@ export default function AdminChapterFormPage() {
       // Left blank on create, the server assigns the next free number.
       chapterNumber: snapshot.chapterNumber ? Number(snapshot.chapterNumber) : undefined,
       accessLevel: snapshot.accessLevel,
+      ...publishPayload(snapshot),
     };
 
     if (isEdit) {
@@ -206,6 +216,17 @@ export default function AdminChapterFormPage() {
                   onChange={(event) => updateField("chapterNumber", event.target.value)}
                 />
               </Field>
+
+              {/* Tình trạng đứng trước mức truy cập vì nó trả lời câu hỏi đứng
+                  trước: chương này đã có mặt chưa. Mức truy cập chỉ có nghĩa
+                  với một chương đã có mặt. */}
+              <PublishControl
+                state={form.publishState}
+                at={form.publishAt}
+                onChange={(state, at) =>
+                  setForm((current) => ({ ...current, publishState: state, publishAt: at }))
+                }
+              />
 
               <Field
                 label="Mức truy cập"

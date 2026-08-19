@@ -44,7 +44,7 @@ import static org.mockito.Mockito.when;
  */
 @DataJpaTest
 @Import({ChapterEntitlementStore.class, ChapterAccessService.class, AccessControlService.class,
-        WalletService.class, ChapterService.class})
+        WalletService.class, ChapterService.class, PublicationService.class})
 class ChapterPurchaseJpaTest {
 
     private static final long PRICE = 50L;
@@ -81,7 +81,8 @@ class ChapterPurchaseJpaTest {
 
     @BeforeEach
     void setUp() {
-        Story story = storyRepository.save(Story.builder().title("Truyện thử").build());
+        Story story = storyRepository.save(Story.builder().title("Truyện thử")
+                .publishedAt(java.time.Instant.now().minusSeconds(60)).build());
         chapterId = chapterRepository.save(Chapter.builder()
                 .story(story)
                 .title("Chương có giá")
@@ -89,6 +90,7 @@ class ChapterPurchaseJpaTest {
                 .chapterNumber(1)
                 .accessLevel(AccessLevel.MEMBER)
                 .coinPrice(PRICE)
+                .publishedAt(java.time.Instant.now().minusSeconds(60))
                 .build()).getId();
 
         userId = userRepository.save(User.builder()

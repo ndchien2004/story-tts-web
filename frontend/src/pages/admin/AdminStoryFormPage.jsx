@@ -3,6 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { adminApi, catalogApi, storyApi } from "../../api/endpoints";
 import AdminPage from "./AdminPage";
 import { useAdminToast } from "../../context/admin-toast-context";
+import PublishControl, {
+  publishFormFrom,
+  publishPayload,
+} from "../../components/admin/PublishControl";
 import { Alert, Button, Field, Select, Spinner, TextArea, TextInput } from "../../components/ui";
 
 const EMPTY_FORM = {
@@ -14,6 +18,8 @@ const EMPTY_FORM = {
   coverImage: "",
   description: "",
   status: "ONGOING",
+  publishState: "PUBLISHED",
+  publishAt: "",
 };
 
 /** Create and edit form for a story. Editing is keyed off the `:storyId` param. */
@@ -58,6 +64,7 @@ export default function AdminStoryFormPage() {
           coverImage: story.coverImage ?? "",
           description: story.description ?? "",
           status: story.status,
+          ...publishFormFrom(story.publishState, story.publishedAt),
         });
       })
       .catch((err) => setError(err.message))
@@ -85,6 +92,7 @@ export default function AdminStoryFormPage() {
       coverImage: form.coverImage || undefined,
       description: form.description || undefined,
       status: form.status,
+      ...publishPayload(form),
     };
 
     try {
@@ -204,6 +212,18 @@ export default function AdminStoryFormPage() {
                   />
                 </Field>
               )}
+
+              {/* "Trạng thái" bên dưới nói về mạch truyện (đang ra / hoàn
+                  thành); ô này nói về việc nó đã hiện ra với người đọc chưa. Hai
+                  câu khác nhau, nên hai ô khác nhau. */}
+              <PublishControl
+                state={form.publishState}
+                at={form.publishAt}
+                hint="Gỡ truyện xuống thì mọi chương của nó cũng biến mất khỏi trang người đọc."
+                onChange={(state, at) =>
+                  setForm((current) => ({ ...current, publishState: state, publishAt: at }))
+                }
+              />
 
               <Field label="Trạng thái" htmlFor="status">
                 <Select

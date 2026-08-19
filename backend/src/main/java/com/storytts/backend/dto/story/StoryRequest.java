@@ -4,6 +4,8 @@ import com.storytts.backend.domain.StoryStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import java.time.Instant;
+
 /** Dữ liệu Admin gửi lên khi tạo/sửa truyện. */
 public record StoryRequest(
 
@@ -25,6 +27,23 @@ public record StoryRequest(
 
         String description,
 
-        StoryStatus status
+        StoryStatus status,
+
+        /** Giữ truyện ở dạng bản nháp: chỉ quản trị viên thấy, kể cả chương đã đăng. */
+        boolean draft,
+
+        /** Giờ đăng khi không phải nháp; bỏ trống là đăng ngay (hoặc giữ giờ cũ). */
+        Instant publishedAt
 ) {
+
+    /** Xem {@link com.storytts.backend.dto.chapter.ChapterRequest#resolvePublishedAt}. */
+    public Instant resolvePublishedAt(Instant current) {
+        if (draft) {
+            return null;
+        }
+        if (publishedAt != null) {
+            return publishedAt;
+        }
+        return current != null ? current : Instant.now();
+    }
 }

@@ -144,6 +144,14 @@ export default function AdminStoriesPage() {
                       <Badge tone={story.status === "COMPLETED" ? "public" : "neutral"}>
                         {story.statusLabel}
                       </Badge>
+                      {/* Truyện chưa đăng thì cả mục lục của nó không ai thấy,
+                          nên đây là thứ phải nhìn ra ngay từ danh sách chứ
+                          không phải mở form mới biết. */}
+                      {story.publishState !== "PUBLISHED" && (
+                        <Badge tone={story.publishState === "DRAFT" ? "neutral" : "info"}>
+                          {story.publishState === "DRAFT" ? "Nháp" : "Hẹn giờ"}
+                        </Badge>
+                      )}
                     </td>
                     <td>{story.chapterCount}</td>
                     <td className="admin-cell-actions">

@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -28,10 +29,14 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
                    OR LOWER(a.name) LIKE LOWER(CONCAT('%', :keyword, '%')))
               AND (:genreId IS NULL OR g.id = :genreId)
               AND (:status IS NULL OR s.status = :status)
+              AND (:includeUnpublished = TRUE
+                   OR (s.publishedAt IS NOT NULL AND s.publishedAt <= :now))
             """)
     Page<Story> search(@Param("keyword") String keyword,
                        @Param("genreId") Long genreId,
                        @Param("status") StoryStatus status,
+                       @Param("includeUnpublished") boolean includeUnpublished,
+                       @Param("now") Instant now,
                        Pageable pageable);
 
     @Query("SELECT s FROM Story s LEFT JOIN FETCH s.author LEFT JOIN FETCH s.genre WHERE s.id = :id")
@@ -64,10 +69,12 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
             SELECT s FROM Story s
             WHERE s.genre.id IN :genreIds
               AND s.id NOT IN :excludedStoryIds
+              AND s.publishedAt IS NOT NULL AND s.publishedAt <= :now
             ORDER BY s.viewCount DESC, s.createdAt DESC
             """)
     List<Story> findRecommendations(@Param("genreIds") Collection<Long> genreIds,
                                     @Param("excludedStoryIds") Collection<Long> excludedStoryIds,
+                                    @Param("now") Instant now,
                                     Pageable pageable);
 
     @Modifying

@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 
 /**
  * Ghi một gói nội dung vào cơ sở dữ liệu, mỗi chương là một giao dịch riêng.
@@ -87,7 +88,13 @@ public class ContentImporter {
                 : validator.parseEnum(StoryStatus.class, book.status(), "status");
 
         Story story = storyRepository.findFirstByTitle(book.title().trim())
-                .orElseGet(() -> Story.builder().title(book.title().trim()).build());
+                .orElseGet(() -> Story.builder()
+                        .title(book.title().trim())
+                        // Truyện nhập vào là truyện để đọc, nên nó lên ngay. Chỉ đặt
+                        // lúc tạo mới: một truyện đang là bản nháp không được lặng lẽ
+                        // lên sóng chỉ vì có người chạy lại lệnh nhập nội dung.
+                        .publishedAt(Instant.now())
+                        .build());
 
         story.setAuthor(author);
         story.setGenre(genre);
@@ -130,6 +137,7 @@ public class ContentImporter {
                             ? AccessLevel.PUBLIC
                             : validator.parseEnum(AccessLevel.class, source.accessLevel(), "accessLevel"))
                     .coinPrice(source.coinPrice() == null ? 0L : source.coinPrice())
+                    .publishedAt(Instant.now())
                     .build();
             chapterRepository.save(chapter);
             return ChapterOutcome.CREATED;

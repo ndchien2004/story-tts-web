@@ -56,7 +56,8 @@ class ChapterAccessServiceTest {
     void setUp() {
         service = new ChapterAccessService(
                 new AccessControlService(currentUserService),
-                entitlementRepository, walletRepository, currentUserService);
+                entitlementRepository, walletRepository, currentUserService,
+                new PublicationService(currentUserService));
         asGuest();
     }
 
@@ -201,6 +202,14 @@ class ChapterAccessServiceTest {
                 .coinPrice(price)
                 .title("Chương thử")
                 .chapterNumber(1)
+                // Đã đăng: bài kiểm này nói về quyền đọc, không về việc xuất bản.
+                .publishedAt(java.time.Instant.now().minusSeconds(60))
+                // Chương chỉ hiện khi truyện chứa nó cũng đã hiện — xem
+                // PublicationService.requireChapterVisible.
+                .story(com.storytts.backend.domain.Story.builder()
+                        .id(1L)
+                        .publishedAt(java.time.Instant.now().minusSeconds(60))
+                        .build())
                 .build();
     }
 

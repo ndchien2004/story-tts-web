@@ -49,7 +49,7 @@ import static org.mockito.Mockito.when;
 @DataJpaTest
 // ObjectMapper đi kèm vì TranscriptCodec cần nó, mà @DataJpaTest chỉ dựng phần
 // bền vững của ứng dụng nên không có sẵn bean ấy.
-@Import({ChapterService.class, AiUsageService.class,
+@Import({ChapterService.class, PublicationService.class, AiUsageService.class,
         TtsGenerationRecords.class, TranscriptCodec.class,
         com.fasterxml.jackson.databind.ObjectMapper.class})
 class ContentAudioVersioningJpaTest {
@@ -80,13 +80,15 @@ class ContentAudioVersioningJpaTest {
 
     @BeforeEach
     void setUp() {
-        Story story = storyRepository.save(Story.builder().title("Truyện thử").build());
+        Story story = storyRepository.save(Story.builder().title("Truyện thử")
+                .publishedAt(java.time.Instant.now().minusSeconds(60)).build());
         chapterId = chapterRepository.save(Chapter.builder()
                 .story(story)
                 .title("Chương 1")
                 .content(NOI_DUNG_GOC)
                 .chapterNumber(1)
                 .accessLevel(AccessLevel.PUBLIC)
+                .publishedAt(java.time.Instant.now().minusSeconds(60))
                 .build()).getId();
 
         // Quyền đọc không phải thứ đang kiểm; mọi chương đều mở, để phần được
@@ -214,7 +216,7 @@ class ContentAudioVersioningJpaTest {
         flushAndClear();
 
         chapterService.update(chapterId, new ChapterRequest(
-                "Tiêu đề hoàn toàn mới", NOI_DUNG_GOC, 1, AccessLevel.VIP));
+                "Tiêu đề hoàn toàn mới", NOI_DUNG_GOC, 1, AccessLevel.VIP, false, null));
         flushAndClear();
 
         assertThat(phienBanChuong()).isEqualTo(1);
@@ -333,7 +335,7 @@ class ContentAudioVersioningJpaTest {
     }
 
     private static ChapterRequest suaNoiDung(String noiDung) {
-        return new ChapterRequest("Chương 1", noiDung, 1, AccessLevel.PUBLIC);
+        return new ChapterRequest("Chương 1", noiDung, 1, AccessLevel.PUBLIC, false, null);
     }
 
     /** Đúng câu hỏi mà trang đọc hỏi: "audio hiện tại của chương này là gì". */

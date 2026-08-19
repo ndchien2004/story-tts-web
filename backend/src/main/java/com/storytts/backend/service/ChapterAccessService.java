@@ -57,6 +57,7 @@ public class ChapterAccessService {
     private final ChapterEntitlementRepository entitlementRepository;
     private final WalletRepository walletRepository;
     private final CurrentUserService currentUserService;
+    private final PublicationService publicationService;
 
     /**
      * Xét quyền và trả về cả lý do.
@@ -139,6 +140,12 @@ public class ChapterAccessService {
      * @throws ChapterPurchaseRequiredException 402 — mua được bằng Xu
      */
     public void requireAccess(Chapter chapter) {
+        // Trước cả câu hỏi quyền: thứ chưa đăng thì coi như chưa tồn tại. Đặt ở
+        // đây vì đây là cửa mà *mọi* đường vào nội dung chương đều đi qua — đọc
+        // chữ, phát audio, dựng audio, hỏi trợ lý. Một bản nháp lọt ra qua đường
+        // phát audio cũng là một bản nháp đã công bố.
+        publicationService.requireChapterVisible(chapter);
+
         ChapterAccessDecision decision = decide(chapter);
         if (decision.allowed()) {
             return;

@@ -47,6 +47,21 @@ public record ChapterDetailDto(
          * <p>Null với Khách và với người chưa từng nghe chương này — để trình phát
          * phân biệt được "chưa nghe" với "đã nghe và đang ở giây 0".
          */
-        Integer audioPositionSeconds
+        Integer audioPositionSeconds,
+
+        /**
+         * Giá mở khóa bằng Xu; 0 nghĩa là không bán lẻ.
+         *
+         * <p>Có mặt ở đây vì form sửa chương của khu quản trị đọc nó ra để điền
+         * vào ô giá — trước đây trường này vắng mặt, nên ô ấy luôn hiện 0 dù
+         * chương đang có giá.
+         */
+        long coinPrice,
+
+        /** {@code DRAFT} / {@code SCHEDULED} / {@code PUBLISHED}. */
+        String publishState,
+
+        /** Giờ đăng; null là bản nháp, mốc tương lai là đang chờ tới giờ. */
+        Instant publishedAt
 ) {
 }

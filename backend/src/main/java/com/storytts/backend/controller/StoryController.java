@@ -53,9 +53,23 @@ public class StoryController {
         return storyService.getDetail(id);
     }
 
+    /**
+     * Danh sách chương của một truyện, có phân trang và tìm kiếm.
+     *
+     * <p>Trang chi tiết truyện đã kèm sẵn trang đầu; đường này phục vụ những
+     * trang sau, ô tìm chương, và nút đảo thứ tự. Truyện dài nghìn chương là lý
+     * do nó tồn tại — trước đây cả nghìn dòng ấy về trong một lần gọi.
+     */
     @GetMapping("/{id}/chapters")
-    @Operation(summary = "Chỉ lấy danh sách chương của một truyện")
-    public List<ChapterSummaryDto> chapters(@PathVariable Long id) {
-        return chapterService.listByStory(id);
+    @Operation(summary = "Danh sách chương của một truyện (phân trang, tìm theo tên hoặc số chương)",
+            description = "q nhận tên chương hoặc một con số để nhảy tới đúng chương ấy. "
+                    + "order=asc (mặc định) hoặc desc. Chương chưa đăng chỉ hiện với quản trị viên.")
+    public PageResponse<ChapterSummaryDto> chapters(
+            @PathVariable Long id,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "asc") String order,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        return chapterService.listByStory(id, q, !"desc".equalsIgnoreCase(order), page, size);
     }
 }

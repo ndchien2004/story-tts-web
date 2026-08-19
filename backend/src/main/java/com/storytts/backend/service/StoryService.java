@@ -11,6 +11,7 @@ import com.storytts.backend.dto.story.StoryRequest;
 import com.storytts.backend.dto.story.StorySummaryDto;
 import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.ResourceNotFoundException;
+import com.storytts.backend.repository.AudioFileRepository;
 import com.storytts.backend.repository.ChapterRepository;
 import com.storytts.backend.repository.ReadingProgressRepository;
 import com.storytts.backend.repository.StoryRepository;
@@ -46,12 +47,14 @@ public class StoryService {
 
     private final StoryRepository storyRepository;
     private final ChapterRepository chapterRepository;
+    private final AudioFileRepository audioFileRepository;
     private final ViewEventRepository viewEventRepository;
     // Repository chứ không phải ReadingProgressService: chỗ này chỉ cần hai truy vấn
     // đọc thuần, mà service kia lại gọi ngược sang đây khi dựng trang chi tiết truyện.
     private final ReadingProgressRepository progressRepository;
     private final CurrentUserService currentUserService;
     private final ChapterService chapterService;
+    private final PublicationService publicationService;
     private final GenreService genreService;
     private final AuthorService authorService;
     private final RatingCommentService ratingCommentService;
@@ -72,7 +75,8 @@ public class StoryService {
                 resolveSort(sort));
 
         Page<Story> result = storyRepository.search(
-                keyword == null ? null : keyword.trim(), genreId, status, pageable);
+                keyword == null ? null : keyword.trim(), genreId, status,
+                publicationService.canSeeUnpublished(), Instant.now(), pageable);
 
         Map<Long, Long> chapterCounts = countChapters(result.getContent());
         return PageResponse.from(result,
@@ -107,8 +111,11 @@ public class StoryService {
             readStoryIds.add(-1L);
         }
 
+        // Gợi ý không bao giờ kèm bản nháp, kể cả cho quản trị viên: đây là một
+        // dải trên trang chủ, không phải một màn hình quản trị.
         List<Story> stories = storyRepository.findRecommendations(
-                genreIds, readStoryIds, PageRequest.of(0, Math.min(Math.max(limit, 1), 12)));
+                genreIds, readStoryIds, Instant.now(),
+                PageRequest.of(0, Math.min(Math.max(limit, 1), 12)));
 
         Map<Long, Long> chapterCounts = countChapters(stories);
         return stories.stream()
@@ -128,6 +135,7 @@ public class StoryService {
     public StoryDetailDto getDetail(Long storyId) {
         Story story = storyRepository.findDetailById(storyId)
                 .orElseThrow(() -> ResourceNotFoundException.of("truyện", storyId));
+        publicationService.requireVisible(story, "truyện", storyId);
 
         // Mở trang truyện không còn tính là một lượt xem. Bấm F5 mười lần từng
         // cộng mười lượt, nên con số đó không nói được truyện nào thật sự có
@@ -136,15 +144,19 @@ public class StoryService {
         // đã đọc: khi họ đọc xong một chương và chuyển sang chương tiếp theo.
         // Xem ReadingProgressService.markCompleted.
 
-        List<ChapterSummaryDto> chapters = chapterService.listByStory(storyId);
-        long chapterCount = chapters.size();
+        // Trang đầu của danh sách chương, không phải toàn bộ. Một truyện dịch
+        // 1.200 chương từng về trong một lần gọi ở đây; các trang sau lấy qua
+        // GET /api/stories/{id}/chapters, đường vốn đã có sẵn.
+        PageResponse<ChapterSummaryDto> chapters = chapterService.listByStory(
+                storyId, null, true, 0, ChapterService.DEFAULT_PAGE_SIZE);
 
         return new StoryDetailDto(
-                StorySummaryDto.from(story, chapterCount),
+                StorySummaryDto.from(story, chapters.totalElements()),
                 chapters,
                 ratingCommentService.summary(storyId),
                 favoriteService.status(storyId),
                 List.copyOf(readingProgressService.completedChapterIds(storyId)),
+                audioFileRepository.countChaptersWithReadyAudio(storyId),
                 readingProgressService.resumeChapterId(storyId).orElse(null));
     }
 
@@ -164,6 +176,7 @@ public class StoryService {
                 .coverImage(blankToNull(request.coverImage()))
                 .description(request.description())
                 .status(request.status() == null ? StoryStatus.ONGOING : request.status())
+                .publishedAt(request.resolvePublishedAt(null))
                 .build();
         applyAuthorAndGenre(story, request);
         return StorySummaryDto.from(storyRepository.save(story), 0L);
@@ -178,8 +191,28 @@ public class StoryService {
         if (request.status() != null) {
             story.setStatus(request.status());
         }
+        story.setPublishedAt(request.resolvePublishedAt(story.getPublishedAt()));
         applyAuthorAndGenre(story, request);
         Story saved = storyRepository.save(story);
+        return StorySummaryDto.from(saved, chapterRepository.countByStoryId(storyId));
+    }
+
+    /**
+     * Đổi riêng tình trạng xuất bản của một truyện.
+     *
+     * <p>Gỡ cả truyện xuống là một thao tác nặng — mọi chương của nó biến mất
+     * theo, kể cả chương đã đăng — nên nó có đường riêng thay vì nấp trong form
+     * sửa truyện, nơi người ta dễ bấm nhầm khi đang định sửa cái mô tả.
+     */
+    @Transactional
+    public StorySummaryDto changePublication(Long storyId, boolean draft, Instant publishedAt) {
+        Story story = findEntity(storyId);
+        story.setPublishedAt(draft ? null : (publishedAt != null ? publishedAt : Instant.now()));
+
+        Story saved = storyRepository.save(story);
+        log.info("Admin đặt truyện {} sang trạng thái {} (mốc {})",
+                storyId, saved.publishState(), saved.getPublishedAt());
+
         return StorySummaryDto.from(saved, chapterRepository.countByStoryId(storyId));
     }
 
@@ -261,9 +294,16 @@ public class StoryService {
 
         // Một lượt truy vấn cho cả trang xếp hạng. findAllById trả về theo thứ tự của cơ sở
         // dữ liệu, nên phải xếp lại theo listenCounts — nó mới là thứ tự đúng.
+        // Truyện vừa bị gỡ xuống thì rơi khỏi bảng xếp hạng, dù lượt nghe cũ vẫn
+        // nằm trong lịch sử. Lọc ở đây chứ không trong truy vấn đếm: bảng
+        // view_events không biết gì về việc xuất bản, và ràng buộc hai thứ ấy vào
+        // nhau sẽ khiến mọi câu thống kê phải mang theo một phép nối chỉ để bỏ
+        // vài dòng.
         Map<Long, Story> stories = new HashMap<>();
         for (Story story : storyRepository.findAllWithRelationsByIds(listenCounts.keySet())) {
-            stories.put(story.getId(), story);
+            if (story.isPublished()) {
+                stories.put(story.getId(), story);
+            }
         }
 
         Map<Long, Long> chapterCounts = countChapters(List.copyOf(stories.values()));

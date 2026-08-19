@@ -177,6 +177,29 @@ public interface AudioFileRepository extends JpaRepository<AudioFile, Long> {
     boolean hasCurrentReadyAudio(@Param("chapterId") Long chapterId);
 
     /**
+     * Số chương của một truyện đang có audio nghe được.
+     *
+     * <p>Một câu đếm cho cả trang chi tiết truyện. Trước đây con số này được suy
+     * ra bằng cách đếm cờ {@code hasAudio} trên danh sách chương đã tải về —
+     * đúng khi cả danh sách cùng về một lần, nhưng danh sách ấy giờ được phân
+     * trang, và "12 trong 100 chương đầu" không phải câu người đọc muốn nghe.
+     *
+     * <p>Chỉ tính bản của khu quản trị: bản người đọc tự dựng là việc riêng của
+     * họ, và một con số thay đổi theo người đang xem thì không nói lên điều gì
+     * về truyện.
+     */
+    @Query("""
+            SELECT COUNT(DISTINCT a.chapter.id) FROM AudioFile a
+            WHERE a.chapter.story.id = :storyId
+              AND a.requestedBy IS NULL
+              AND a.status = com.storytts.backend.domain.AudioStatus.READY
+              AND a.contentVersion IS NOT NULL
+              AND a.contentVersion = a.chapter.contentVersion
+            """)
+    long countChaptersWithReadyAudio(@Param("storyId") Long storyId);
+
+
+    /**
      * Các chương (trong danh sách truyền vào) đã có audio dùng được — một truy vấn duy nhất,
      * để danh sách chương không sinh N+1 query.
      *

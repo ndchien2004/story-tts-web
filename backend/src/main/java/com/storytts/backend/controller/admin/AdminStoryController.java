@@ -36,6 +36,23 @@ public class AdminStoryController {
         return storyService.update(id, request);
     }
 
+    /**
+     * Đăng, gỡ xuống, hoặc hẹn giờ đăng cả một truyện.
+     *
+     * <p>Gỡ truyện xuống là thao tác nặng nhất ở khu quản trị: mọi chương của nó
+     * biến mất theo, kể cả chương đã đăng. Nó có đường riêng thay vì nấp trong
+     * form sửa truyện, nơi người ta dễ bấm nhầm lúc đang định sửa cái mô tả.
+     */
+    @PatchMapping("/{id}/publication")
+    @Operation(summary = "Đăng / gỡ xuống / hẹn giờ đăng một truyện",
+            description = "Gỡ truyện xuống thì mọi chương của nó cũng biến mất khỏi trang "
+                    + "người đọc, kể cả chương đã đăng.")
+    public StorySummaryDto changePublication(@PathVariable Long id,
+                                             @Valid @RequestBody
+                                             AdminChapterController.PublicationRequest request) {
+        return storyService.changePublication(id, request.draft(), request.publishedAt());
+    }
+
     @DeleteMapping("/{id}")
     @Operation(summary = "Xóa truyện (kéo theo toàn bộ chương và audio)")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
