@@ -2,6 +2,8 @@ package com.storytts.backend.service.tts;
 
 import com.storytts.backend.config.TtsProperties;
 import com.storytts.backend.domain.AccessLevel;
+import com.storytts.backend.domain.AiUsageKind;
+import com.storytts.backend.domain.AudioFile;
 import com.storytts.backend.domain.Chapter;
 import com.storytts.backend.domain.Story;
 import com.storytts.backend.domain.User;
@@ -12,9 +14,10 @@ import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.LoginRequiredException;
 import com.storytts.backend.exception.TtsException;
 import com.storytts.backend.exception.TtsQuotaExceededException;
-import com.storytts.backend.repository.AudioFileRepository;
 import com.storytts.backend.security.AppUserPrincipal;
+import com.storytts.backend.service.AiUsageService;
 import com.storytts.backend.service.CurrentUserService;
+import com.storytts.backend.service.InMemoryAiUsage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,9 +37,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -52,6 +53,12 @@ import static org.mockito.Mockito.when;
  * <p>{@link TtsService} được mock, và mock đó gọi ngược lại
  * {@link TtsService.ReaderBudget} đúng như bản thật: chỉ gọi khi phải dựng bản mới.
  * Nhờ vậy test được cả nội dung các mức chặn lẫn chỗ chúng được hỏi tới.
+ *
+ * <p>{@link AiUsageService} thì <b>không</b> mock: nó chạy thật, trên một sổ giả
+ * nằm trong bộ nhớ. Phần đáng kiểm ở đây là phép đếm — hết lượt hay chưa, ai hết
+ * trước — nên thay nó bằng một con số dựng sẵn sẽ chỉ còn kiểm được rằng test
+ * biết tự trả lời chính mình. Phần thuộc về cơ sở dữ liệu thật (dòng sổ sống sót
+ * qua việc dọn bản audio) nằm ở {@code AiUsageJpaTest}.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -59,6 +66,7 @@ class ReaderTtsServiceTest {
 
     private static final Long CHAPTER_ID = 7L;
     private static final Long USER_ID = 42L;
+    private static final Long AUDIO_ID = 99L;
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     @Mock
@@ -66,20 +74,22 @@ class ReaderTtsServiceTest {
     @Mock
     private TtsEngine ttsEngine;
     @Mock
-    private AudioFileRepository audioFileRepository;
-    @Mock
     private CurrentUserService currentUserService;
 
+    /** Sổ đếm lượt, thật về hành vi và giả về nơi lưu. */
+    private InMemoryAiUsage usage;
+    private AiUsageService aiUsageService;
     private ReaderTtsService readerTtsService;
 
     @BeforeEach
     void setUp() {
+        usage = new InMemoryAiUsage();
+        aiUsageService = usage.service();
+
         configure(TtsProperties.Reader.defaults());
 
         when(ttsEngine.hasAnyProvider()).thenReturn(true);
         signedInAs(member());
-        when(audioFileRepository.countReaderRequestsBy(anyLong(), any())).thenReturn(0L);
-        when(audioFileRepository.countReaderRequests(any())).thenReturn(0L);
 
         // Bản thật chỉ hỏi ngân sách khi không còn bản nào dùng lại được.
         stubDelegateAsNewGeneration();
@@ -96,7 +106,8 @@ class ReaderTtsServiceTest {
                 .isInstanceOf(TtsException.class)
                 .hasMessageContaining("tạm tắt");
 
-        verifyNoInteractions(ttsService, audioFileRepository);
+        verifyNoInteractions(ttsService);
+        assertThat(usage.rows()).isEmpty();
     }
 
     @Test
@@ -131,7 +142,7 @@ class ReaderTtsServiceTest {
     // ==================== Bản đã có thì miễn phí ====================
 
     @Test
-    @DisplayName("Trúng bản đã có → không đếm hạn mức của ai cả")
+    @DisplayName("Trúng bản đã có → không ghi dòng sổ nào")
     void banDaCoThiKhongTonLuot() {
         // Không gọi ngân sách: đúng như TtsService làm khi cache dùng lại được.
         when(ttsService.requestForChapter(eq(CHAPTER_ID), any(), any()))
@@ -141,8 +152,7 @@ class ReaderTtsServiceTest {
 
         // Đây là điểm khiến chức năng này chấp nhận được: nghe lại một chương đã
         // có audio không phải là một lượt, vì nó không tốn thêm đồng nào.
-        verify(audioFileRepository, never()).countReaderRequestsBy(anyLong(), any());
-        verify(audioFileRepository, never()).countReaderRequests(any());
+        assertThat(usage.rows()).isEmpty();
     }
 
     // ==================== Hạn mức ====================
@@ -150,7 +160,7 @@ class ReaderTtsServiceTest {
     @Test
     @DisplayName("Thành viên hết lượt trong ngày → 429 kèm đúng hạn mức của bậc mình")
     void thanhVienHetLuot() {
-        when(audioFileRepository.countReaderRequestsBy(eq(USER_ID), any())).thenReturn(3L);
+        usage.seed(USER_ID, AiUsageKind.TTS, 3);
 
         assertThatThrownBy(() -> readerTtsService.request(CHAPTER_ID))
                 .isInstanceOf(TtsQuotaExceededException.class)
@@ -159,21 +169,41 @@ class ReaderTtsServiceTest {
     }
 
     @Test
+    @DisplayName("Lượt bị từ chối được hoàn ngay, nên nó không chiếm phần của lần bấm sau")
+    void luotBiTuChoiDuocHoanNgay() {
+        usage.seed(USER_ID, AiUsageKind.TTS, 3);
+
+        assertThatThrownBy(() -> readerTtsService.request(CHAPTER_ID))
+                .isInstanceOf(TtsQuotaExceededException.class);
+
+        // Cách chiếm chỗ ở đây là ghi trước rồi mới hỏi "chỗ này là chỗ thứ mấy",
+        // nên một lần từ chối vẫn để lại một dòng. Dòng ấy phải được hoàn ngay:
+        // nếu không, ba lần bấm hụt sẽ đẩy người ta xuống dưới hạn mức thật.
+        assertThat(usage.rows()).hasSize(4);
+        assertThat(usage.rows().get(3).isRefunded()).isTrue();
+        assertThat(aiUsageService.remaining(USER_ID, AiUsageKind.TTS, 3, 100)).isZero();
+    }
+
+    @Test
     @DisplayName("VIP vượt mức của Thành viên nhưng còn trong mức VIP → vẫn được tạo")
     void vipCoHanMucRieng() {
         signedInAs(vip());
-        when(audioFileRepository.countReaderRequestsBy(eq(USER_ID), any())).thenReturn(5L);
+        usage.seed(USER_ID, AiUsageKind.TTS, 5);
 
         assertThat(readerTtsService.request(CHAPTER_ID)).isNotNull();
     }
 
     @Test
-    @DisplayName("Admin không bị hạn mức nào")
+    @DisplayName("Admin không bị hạn mức nào, nhưng lượt vẫn vào sổ chi phí")
     void adminKhongBiHanMuc() {
         signedInAs(admin());
-        when(audioFileRepository.countReaderRequestsBy(eq(USER_ID), any())).thenReturn(999L);
+        usage.seed(USER_ID, AiUsageKind.TTS, 999);
 
         assertThat(readerTtsService.request(CHAPTER_ID)).isNotNull();
+
+        // Không chặn không có nghĩa là không đếm: trần chung là cầu dao của cả
+        // hệ thống, và một lượt không ai ghi vẫn là một lượt có hóa đơn.
+        assertThat(usage.rows()).hasSize(1000);
     }
 
     @Test
@@ -183,17 +213,16 @@ class ReaderTtsServiceTest {
         assertThatThrownBy(() -> readerTtsService.request(CHAPTER_ID))
                 .isInstanceOf(TtsQuotaExceededException.class);
 
-        configure(new TtsProperties.Reader(true, -1, 10, 100, 20_000));
-        when(audioFileRepository.countReaderRequestsBy(eq(USER_ID), any())).thenReturn(500L);
+        configure(new TtsProperties.Reader(true, -1, 10, 1000, 20_000));
+        usage.seed(USER_ID, AiUsageKind.TTS, 500);
         assertThat(readerTtsService.request(CHAPTER_ID)).isNotNull();
     }
 
     @Test
     @DisplayName("Cả hệ thống hết lượt → trả lời là GLOBAL, không phải 'bạn hết lượt'")
     void tranChungXetTruoc() {
-        when(audioFileRepository.countReaderRequests(any())).thenReturn(100L);
-        // Người này vẫn còn nguyên phần của mình.
-        when(audioFileRepository.countReaderRequestsBy(eq(USER_ID), any())).thenReturn(0L);
+        // Người này vẫn còn nguyên phần của mình; phần đã tiêu là của người khác.
+        usage.seed(999L, AiUsageKind.TTS, 100);
 
         assertThatThrownBy(() -> readerTtsService.request(CHAPTER_ID))
                 .isInstanceOf(TtsQuotaExceededException.class)
@@ -205,11 +234,22 @@ class ReaderTtsServiceTest {
     void hanMucTinhTheoNgayVietNam() {
         readerTtsService.request(CHAPTER_ID);
 
-        ArgumentCaptor<Instant> since = ArgumentCaptor.forClass(Instant.class);
-        verify(audioFileRepository).countReaderRequestsBy(eq(USER_ID), since.capture());
-
-        assertThat(since.getValue())
+        assertThat(usage.lastSince())
                 .isEqualTo(LocalDate.now(ZONE).atStartOfDay(ZONE).toInstant());
+    }
+
+    // ==================== Nối sổ với bản audio ====================
+
+    @Test
+    @DisplayName("Dòng sổ được nối với bản audio vừa xếp hàng — đường hoàn lượt về sau")
+    void dongSoDuocNoiVoiBanAudio() {
+        readerTtsService.request(CHAPTER_ID);
+
+        // Không có mối nối này thì một bản dựng hỏng không tìm được lượt đã trả
+        // tiền cho nó, và lời hứa "hỏng thì hoàn lượt" mất chỗ bám.
+        assertThat(usage.rows()).hasSize(1);
+        assertThat(usage.rows().getFirst().getAudioFileId()).isEqualTo(AUDIO_ID);
+        assertThat(usage.rows().getFirst().getChapterId()).isEqualTo(CHAPTER_ID);
     }
 
     // ==================== Trần độ dài chương ====================
@@ -222,6 +262,9 @@ class ReaderTtsServiceTest {
         assertThatThrownBy(() -> readerTtsService.request(CHAPTER_ID))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("50");
+
+        // Trần độ dài xét trước hạn mức, nên lần từ chối này không đụng tới sổ.
+        assertThat(usage.rows()).isEmpty();
     }
 
     @Test
@@ -259,8 +302,7 @@ class ReaderTtsServiceTest {
     @Test
     @DisplayName("Số lượt còn lại bị kẹp bởi trần chung — không hứa nhiều hơn hệ thống còn")
     void soLuotConLaiKepBoiTranChung() {
-        when(audioFileRepository.countReaderRequestsBy(eq(USER_ID), any())).thenReturn(0L);
-        when(audioFileRepository.countReaderRequests(any())).thenReturn(99L);
+        usage.seed(999L, AiUsageKind.TTS, 99);
 
         TtsReaderStatusDto status = readerTtsService.status();
 
@@ -271,7 +313,7 @@ class ReaderTtsServiceTest {
     @Test
     @DisplayName("Dùng quá hạn mức rồi hạ hạn mức xuống → số lượt còn lại là 0, không phải số âm")
     void soLuotConLaiKhongAm() {
-        when(audioFileRepository.countReaderRequestsBy(eq(USER_ID), any())).thenReturn(10L);
+        usage.seed(USER_ID, AiUsageKind.TTS, 10);
 
         assertThat(readerTtsService.status().remainingToday()).isZero();
     }
@@ -284,17 +326,18 @@ class ReaderTtsServiceTest {
                         "eleven_multilingual_v2"),
                 reader);
         readerTtsService = new ReaderTtsService(ttsService, ttsEngine, properties,
-                audioFileRepository, currentUserService);
+                aiUsageService, currentUserService);
     }
 
     /**
      * Mock {@link TtsService} theo đúng hành vi khi phải dựng bản mới: gọi ngân
-     * sách trước, rồi trả về PROCESSING.
+     * sách trước, ghi bản ghi, rồi báo lại cho ngân sách biết id của nó.
      */
     private void stubDelegateAsNewGeneration() {
         when(ttsService.requestForChapter(eq(CHAPTER_ID), any(), any())).thenAnswer(invocation -> {
-            invocation.getArgument(2, TtsService.ReaderBudget.class)
-                    .beforeNewGeneration(chapter());
+            TtsService.ReaderBudget budget = invocation.getArgument(2, TtsService.ReaderBudget.class);
+            budget.beforeNewGeneration(chapter());
+            budget.afterGenerationQueued(AudioFile.builder().id(AUDIO_ID).build());
             return processingDto();
         });
     }
@@ -332,12 +375,12 @@ class ReaderTtsServiceTest {
     }
 
     private static AudioInfoDto processingDto() {
-        return new AudioInfoDto(99L, CHAPTER_ID, 1, "TTS", AudioInfoDto.OWNER_SESSION, "PROCESSING",
-                null, "el:mot", 0, null, null, null, null, false);
+        return new AudioInfoDto(AUDIO_ID, CHAPTER_ID, 1, "TTS", AudioInfoDto.OWNER_SESSION,
+                "PROCESSING", null, "el:mot", 0, null, null, null, null, false);
     }
 
     private static AudioInfoDto readyDto() {
-        return new AudioInfoDto(99L, CHAPTER_ID, 1, "TTS", AudioInfoDto.OWNER_SESSION, "READY",
+        return new AudioInfoDto(AUDIO_ID, CHAPTER_ID, 1, "TTS", AudioInfoDto.OWNER_SESSION, "READY",
                 "/api/chapters/7/audio/99", "el:mot", 0, "elevenlabs", null, 1024L, null, true);
     }
 }

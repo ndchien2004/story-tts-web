@@ -5,6 +5,7 @@ import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.AudioTranscript;
 import com.storytts.backend.repository.AudioFileRepository;
 import com.storytts.backend.repository.AudioTranscriptRepository;
+import com.storytts.backend.service.AiUsageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -34,6 +35,7 @@ public class TtsGenerationRecords {
     private final AudioFileRepository audioFileRepository;
     private final AudioTranscriptRepository audioTranscriptRepository;
     private final TranscriptCodec transcriptCodec;
+    private final AiUsageService aiUsageService;
 
     /**
      * Hàng chờ dựng còn tồn tại không.
@@ -120,6 +122,11 @@ public class TtsGenerationRecords {
             audio.setProvider(result.providerId());
             audio.setErrorMessage(null);
             audioFileRepository.save(audio);
+
+            // Người bấm nút không nhận được gì cả: file bị xóa ngay sau đây vì
+            // nó đọc chữ đã cũ. Họ trả một lượt cho một lần sửa chương của Admin
+            // rơi đúng vào lúc họ đang chờ, nên lượt ấy được trả lại.
+            aiUsageService.refundForAudio(audioId, "chuong doi noi dung trong luc dung");
             return Outcome.STALE;
         }
 
@@ -134,7 +141,16 @@ public class TtsGenerationRecords {
         return Outcome.READY;
     }
 
-    /** Đánh dấu hỏng kèm lý do; bản ghi đã biến mất thì không còn gì để đánh dấu. */
+    /**
+     * Đánh dấu hỏng kèm lý do; bản ghi đã biến mất thì không còn gì để đánh dấu.
+     *
+     * <p>Lượt đã trừ được hoàn ở đây. Người đọc không mất lượt vì lỗi của nhà
+     * cung cấp — lời hứa ấy trước đây là hệ quả của việc hạn mức đếm trên chính
+     * bảng audio và bỏ qua hàng FAILED; giờ sổ đếm nằm ở bảng khác nên nó phải
+     * được nói thành một câu lệnh. Đường thứ hai dẫn tới FAILED là
+     * {@link StaleGenerationReconciler} lúc khởi động, và nó hoàn lượt bằng
+     * cùng lời gọi này.
+     */
     @Transactional
     public void markFailed(Long audioId, String message) {
         audioFileRepository.findById(audioId).ifPresent(audio -> {
@@ -142,6 +158,7 @@ public class TtsGenerationRecords {
             audio.setErrorMessage(truncate(message));
             audioFileRepository.save(audio);
         });
+        aiUsageService.refundForAudio(audioId, "dung audio that bai");
     }
 
     /**

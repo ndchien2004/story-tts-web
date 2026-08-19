@@ -1,61 +1,39 @@
 package com.storytts.backend.service.ai;
 
 import com.storytts.backend.config.AiAssistantProperties;
+import com.storytts.backend.domain.AiUsageKind;
 import com.storytts.backend.exception.AiQuotaExceededException;
-import lombok.extern.slf4j.Slf4j;
+import com.storytts.backend.service.AiUsageService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Đếm lượt hỏi trong ngày — hàng rào chi phí của trợ lý AI.
  *
- * <h3>Vì sao đếm trong bộ nhớ chứ không trong cơ sở dữ liệu</h3>
- * Đường tạo audio đếm được bằng cách {@code count(*)} bảng {@code audio_files},
- * vì mỗi lượt ở đó để lại một hàng có thật mà nó vốn phải ghi. Trợ lý AI không
- * để lại gì cả — hội thoại không được lưu, và đề bài nói rõ là chưa cần lưu.
- * Dựng một bảng chỉ để đếm nghĩa là dựng một bảng, một migration, một entity và
- * một repository cho một con số reset mỗi nửa đêm.
+ * <h3>Vì sao con số này từng sai, và sai theo hướng đắt tiền</h3>
+ * Bộ đếm cũ là một bảng băm trong bộ nhớ của tiến trình. Ghi chú lúc ấy có nêu
+ * một rủi ro — chạy nhiều bản ứng dụng song song thì mỗi bản đếm một kiểu —
+ * nhưng bỏ sót rủi ro thật sự đang xảy ra: <b>khởi động lại</b>. Gói miễn phí
+ * của Render ngủ sau 15 phút vắng khách, và tỉnh dậy là một tiến trình mới với
+ * bộ đếm về 0. Trần 500 lượt một ngày chỉ có hiệu lực trong quãng giữa hai lần
+ * ngủ, nên trang càng ít khách thì hàng rào càng lỏng — đúng chiều ngược với
+ * điều người ta muốn.
  *
- * <p><b>Cái giá của lựa chọn ấy, nói thẳng:</b> con số này thuộc về một tiến
- * trình. Chạy hai bản ứng dụng song song thì mỗi bản có một bộ đếm riêng, và
- * hạn mức thật thành ra gấp đôi. Với một bản triển khai một tiến trình — đúng
- * hình dạng hiện tại của dự án — thì nó chính xác. Khi nào phải chạy nhiều bản,
- * đây là chỗ cần đổi, và đổi bằng cách thay đúng lớp này.
+ * <p>Giờ phép đếm nằm ở {@link AiUsageService}, trên một bảng trong cơ sở dữ
+ * liệu. Lập luận cũ ("dựng một bảng chỉ để đếm là quá tay") không còn đúng nữa,
+ * vì đường tạo audio cũng cần đúng cái bảng ấy vì đúng một lý do như vậy — hai
+ * hàng rào chi phí, một nguồn sự thật.
  *
- * <h3>Trần chung là cầu dao cuối</h3>
- * Hạn mức từng người ngăn một người tiêu hết phần của cả ngày. Trần chung ngăn
- * một trăm người mới đăng ký làm đúng việc ấy.
+ * <p>Lớp này ở lại làm phần <i>chính sách</i>: nó biết hạn mức của một Thành
+ * viên khác hạn mức của VIP, và biết nói câu từ chối bằng lời của trợ lý.
+ * {@link AiUsageService} không biết hai điều đó và không cần biết.
  */
 @Component
-@Slf4j
+@RequiredArgsConstructor
 public class AssistantQuota {
 
-    /** Hạn mức tính theo ngày ở Việt Nam, không theo UTC — như mọi hạn mức khác. */
-    private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-
-    /**
-     * Trần số người được nhớ cùng lúc.
-     *
-     * <p>Bộ đếm tự dọn theo ngày, nhưng chỉ dọn <i>khi có người hỏi lại</i> —
-     * một người hỏi một câu rồi biến mất thì hàng của họ nằm lại. Trần này là
-     * chỗ chặn đường ấy tích thành rò rỉ bộ nhớ trên một máy chủ chạy nhiều
-     * tháng: chạm trần thì dọn sạch những hàng của ngày cũ.
-     */
-    private static final int MAX_TRACKED_USERS = 10_000;
-
     private final AiAssistantProperties properties;
-
-    private final Map<Long, DayCounter> perUser = new ConcurrentHashMap<>();
-    private final DayCounter global = new DayCounter();
-
-    public AssistantQuota(AiAssistantProperties properties) {
-        this.properties = properties;
-    }
+    private final AiUsageService usage;
 
     /**
      * Còn bao nhiêu lượt hôm nay, không tiêu lượt nào.
@@ -63,15 +41,8 @@ public class AssistantQuota {
      * @return {@code null} khi hạn mức là không giới hạn
      */
     public Integer remainingFor(long userId, boolean vip) {
-        int limit = properties.dailyQuotaFor(vip);
-        if (limit < 0) {
-            return null;
-        }
-        int mine = Math.max(limit - counterFor(userId).valueToday(), 0);
-
-        // Kẹp bởi trần chung: hứa 5 lượt trong khi cả hệ thống chỉ còn 1 là một
-        // lời hứa sai, và người đọc sẽ phát hiện ra đúng vào lúc bấm.
-        return Math.min(mine, globalRemaining());
+        return usage.remaining(userId, AiUsageKind.ASSISTANT,
+                limitFor(vip), properties.dailyQuotaGlobal());
     }
 
     /**
@@ -83,74 +54,18 @@ public class AssistantQuota {
      * @throws AiQuotaExceededException hết phần của người này, hoặc của cả ngày
      */
     public void consume(long userId, boolean vip) {
-        int globalLimit = properties.dailyQuotaGlobal();
-        if (globalLimit >= 0 && global.valueToday() >= globalLimit) {
-            throw new AiQuotaExceededException(AiQuotaExceededException.Scope.GLOBAL, globalLimit);
-        }
+        usage.reserve(userId, AiUsageKind.ASSISTANT, null,
+                limitFor(vip), properties.dailyQuotaGlobal(),
+                (scope, limit) -> new AiQuotaExceededException(
+                        scope == AiUsageService.Scope.GLOBAL
+                                ? AiQuotaExceededException.Scope.GLOBAL
+                                : AiQuotaExceededException.Scope.USER,
+                        limit));
+    }
 
+    /** Hạn mức của người này; null nghĩa là không giới hạn. */
+    private Integer limitFor(boolean vip) {
         int limit = properties.dailyQuotaFor(vip);
-        DayCounter mine = counterFor(userId);
-        if (limit >= 0 && mine.valueToday() >= limit) {
-            throw new AiQuotaExceededException(AiQuotaExceededException.Scope.USER, limit);
-        }
-
-        mine.increment();
-        global.increment();
-    }
-
-    private int globalRemaining() {
-        int limit = properties.dailyQuotaGlobal();
-        return limit < 0 ? Integer.MAX_VALUE : Math.max(limit - global.valueToday(), 0);
-    }
-
-    private DayCounter counterFor(long userId) {
-        if (perUser.size() >= MAX_TRACKED_USERS) {
-            pruneStale();
-        }
-        return perUser.computeIfAbsent(userId, ignored -> new DayCounter());
-    }
-
-    /** Bỏ những hàng thuộc về một ngày đã qua; chúng đằng nào cũng đếm lại từ 0. */
-    private void pruneStale() {
-        LocalDate today = LocalDate.now(ZONE);
-        int before = perUser.size();
-        perUser.values().removeIf(counter -> !counter.isOn(today));
-        log.debug("Dọn bộ đếm lượt hỏi AI: {} → {}", before, perUser.size());
-    }
-
-    /**
-     * Một con số kèm cái ngày nó thuộc về.
-     *
-     * <p>Không có tác vụ hẹn giờ nào reset lúc nửa đêm. Ngày được xét ngay lúc
-     * đọc: sang ngày mới thì con số cũ bị bỏ đi tại chỗ. Một bộ hẹn giờ ở đây
-     * sẽ là một luồng nữa phải nuôi, để làm đúng việc mà một phép so sánh ngày
-     * đã làm xong.
-     */
-    private static final class DayCounter {
-
-        private final AtomicInteger count = new AtomicInteger();
-        private volatile LocalDate day = LocalDate.now(ZONE);
-
-        synchronized int valueToday() {
-            rollIfNeeded();
-            return count.get();
-        }
-
-        synchronized void increment() {
-            rollIfNeeded();
-            count.incrementAndGet();
-        }
-
-        boolean isOn(LocalDate date) {
-            return day.equals(date);
-        }
-
-        private void rollIfNeeded() {
-            LocalDate today = LocalDate.now(ZONE);
-            if (!day.equals(today)) {
-                day = today;
-                count.set(0);
-            }
-        }
+        return limit == AiAssistantProperties.UNLIMITED ? null : limit;
     }
 }

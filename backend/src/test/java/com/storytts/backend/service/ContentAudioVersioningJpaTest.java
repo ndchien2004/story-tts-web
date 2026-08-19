@@ -49,7 +49,8 @@ import static org.mockito.Mockito.when;
 @DataJpaTest
 // ObjectMapper đi kèm vì TranscriptCodec cần nó, mà @DataJpaTest chỉ dựng phần
 // bền vững của ứng dụng nên không có sẵn bean ấy.
-@Import({ChapterService.class, TtsGenerationRecords.class, TranscriptCodec.class,
+@Import({ChapterService.class, AiUsageService.class,
+        TtsGenerationRecords.class, TranscriptCodec.class,
         com.fasterxml.jackson.databind.ObjectMapper.class})
 class ContentAudioVersioningJpaTest {
 

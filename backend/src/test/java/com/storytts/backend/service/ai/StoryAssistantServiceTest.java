@@ -20,6 +20,7 @@ import com.storytts.backend.security.AppUserPrincipal;
 import com.storytts.backend.service.ChapterAccessService;
 import com.storytts.backend.service.ChapterService;
 import com.storytts.backend.service.CurrentUserService;
+import com.storytts.backend.service.InMemoryAiUsage;
 import com.storytts.backend.service.ai.GeminiClient.GeminiTurn;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -75,14 +76,16 @@ class StoryAssistantServiceTest {
     @Mock
     private CurrentUserService currentUserService;
 
+    private InMemoryAiUsage usage;
     private AiAssistantProperties properties;
     private StoryAssistantService service;
 
     @BeforeEach
     void setUp() {
+        usage = new InMemoryAiUsage();
         properties = props(20, 50, 500);
         service = new StoryAssistantService(
-                properties, geminiClient, new AssistantQuota(properties),
+                properties, geminiClient, new AssistantQuota(properties, usage.service()),
                 chapterService, chapterAccessService, currentUserService);
 
         when(geminiClient.isConfigured()).thenReturn(true);
@@ -457,7 +460,7 @@ class StoryAssistantServiceTest {
 
     private StoryAssistantService withProps(AiAssistantProperties p) {
         this.properties = p;
-        return new StoryAssistantService(p, geminiClient, new AssistantQuota(p),
+        return new StoryAssistantService(p, geminiClient, new AssistantQuota(p, usage.service()),
                 chapterService, chapterAccessService, currentUserService);
     }
 

@@ -1,6 +1,8 @@
 package com.storytts.backend.service.tts;
 
 import com.storytts.backend.config.TtsProperties;
+import com.storytts.backend.domain.AiUsageKind;
+import com.storytts.backend.domain.AudioFile;
 import com.storytts.backend.domain.Chapter;
 import com.storytts.backend.domain.User;
 import com.storytts.backend.dto.audio.AudioInfoDto;
@@ -10,16 +12,13 @@ import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.LoginRequiredException;
 import com.storytts.backend.exception.TtsException;
 import com.storytts.backend.exception.TtsQuotaExceededException;
-import com.storytts.backend.repository.AudioFileRepository;
 import com.storytts.backend.security.AppUserPrincipal;
+import com.storytts.backend.service.AiUsageService;
 import com.storytts.backend.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Optional;
 
 /**
@@ -41,6 +40,19 @@ import java.util.Optional;
  * chỉ gọi tới khi đã xác định không còn bản nào dùng lại được. Nghe lại một
  * chương, hay bấm trong lúc bản đang dựng dở, không đi qua đó.
  *
+ * <h3>Hạn mức đếm ở đâu, và vì sao không đếm ở chỗ cũ</h3>
+ * Trước đây hạn mức là một phép đếm trên chính bảng {@code audio_files}: bao
+ * nhiêu bản mang tên người này, tạo từ 0 giờ sáng nay. Cách ấy có một tính chất
+ * đẹp — dùng lại cache thì không sinh hàng nào nên cũng không tốn lượt nào —
+ * nhưng nó đứng cạnh {@link ReaderNarrationCleanup}, thứ xóa sạch những hàng ấy
+ * mỗi lần người ta mở phiên đăng nhập mới. Hai việc đều đúng theo ý định riêng,
+ * nhưng cộng lại thì hạn mức nạp lại được bằng cách đăng xuất rồi đăng nhập.
+ *
+ * <p>Giờ lượt được ghi vào {@code ai_usage} — một sổ chỉ ghi thêm, không ai xóa
+ * (xem {@link AiUsageService}). Tính chất "dùng lại cache thì miễn phí" vẫn giữ
+ * nguyên, và vẫn vì đúng lý do cũ: sổ chỉ được ghi ở trong
+ * {@code beforeNewGeneration}, mà đường trả về từ cache không đi qua đó.
+ *
  * <p>Lớp này là <i>chính sách</i>, {@link TtsService} là <i>cơ chế</i>. Tách ra
  * thành hai bean chứ không phải hai method cùng bean vì hai lẽ: khu quản trị
  * phải giữ nguyên đường cũ, không hạn mức nào lẫn vào; và gọi chéo bean mới đi
@@ -53,16 +65,13 @@ import java.util.Optional;
 @Slf4j
 public class ReaderTtsService {
 
-    /** Hạn mức tính theo ngày ở Việt Nam, không theo UTC. */
-    private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-
     /** Giá trị hạn mức nghĩa là "không giới hạn". */
-    private static final int UNLIMITED = -1;
+    private static final int UNLIMITED = AiUsageService.UNLIMITED;
 
     private final TtsService ttsService;
     private final TtsEngine ttsEngine;
     private final TtsProperties properties;
-    private final AudioFileRepository audioFileRepository;
+    private final AiUsageService aiUsageService;
     private final CurrentUserService currentUserService;
 
     /**
@@ -107,14 +116,10 @@ public class ReaderTtsService {
         Optional<AppUserPrincipal> principal = currentUserService.currentPrincipal();
         Integer limit = principal.map(this::dailyQuotaFor).orElse(null);
 
-        Integer remaining = null;
-        if (limit != null) {
-            Instant since = startOfToday();
-            long used = audioFileRepository.countReaderRequestsBy(principal.get().getId(), since);
-            // Kẹp bởi trần chung: hứa 3 lượt trong khi cả hệ thống chỉ còn 1 thì
-            // con số kia là một lời hứa sai.
-            remaining = Math.min(Math.max(limit - (int) used, 0), globalRemaining(since));
-        }
+        Integer remaining = principal
+                .map(caller -> aiUsageService.remaining(
+                        caller.getId(), AiUsageKind.TTS, limit, reader.dailyQuotaGlobal()))
+                .orElse(null);
 
         return new TtsReaderStatusDto(enabled, reader.maxChars(), limit, remaining);
     }
@@ -130,6 +135,9 @@ public class ReaderTtsService {
         private final AppUserPrincipal principal;
         private final User requester;
 
+        /** Dòng sổ vừa chiếm, chờ được nối với bản audio sắp ghi. */
+        private Long usageId;
+
         private Budget(AppUserPrincipal principal, User requester) {
             this.principal = principal;
             this.requester = requester;
@@ -139,6 +147,10 @@ public class ReaderTtsService {
         public void beforeNewGeneration(Chapter chapter) {
             TtsProperties.Reader reader = properties.reader();
 
+            // Trần độ dài xét trước hạn mức: chương quá dài thì lời từ chối
+            // không phụ thuộc vào việc hôm nay còn lượt hay không, và trừ một
+            // lượt rồi mới báo "chương này dài quá" là lấy của người ta một thứ
+            // họ chưa dùng được.
             int length = chapter.getContent() == null ? 0 : chapter.getContent().length();
             if (length > reader.maxChars()) {
                 throw new BadRequestException(
@@ -147,29 +159,28 @@ public class ReaderTtsService {
                                 .formatted(length, reader.maxChars()));
             }
 
-            Integer limit = dailyQuotaFor(principal);
-            if (limit == null) {
-                // Admin: đã có console riêng và cũng là người chịu trách nhiệm chi phí.
-                return;
-            }
+            // Quản trị viên không bị chặn bởi hạn mức nào, kể cả trần chung —
+            // giữ nguyên đường cũ: họ đã có console riêng, và họ chính là người
+            // chịu trách nhiệm về hóa đơn. Lượt của họ vẫn được ghi sổ, nên
+            // bảng chi phí không có khoảng trống nào.
+            boolean unmetered = principal.isAdmin();
 
-            Instant since = startOfToday();
+            usageId = aiUsageService.reserve(
+                    principal.getId(),
+                    AiUsageKind.TTS,
+                    chapter.getId(),
+                    dailyQuotaFor(principal),
+                    unmetered ? UNLIMITED : reader.dailyQuotaGlobal(),
+                    (scope, limit) -> new TtsQuotaExceededException(
+                            scope == AiUsageService.Scope.GLOBAL
+                                    ? TtsQuotaExceededException.Scope.GLOBAL
+                                    : TtsQuotaExceededException.Scope.USER,
+                            limit));
+        }
 
-            // Trần chung xét trước hạn mức cá nhân: khi cả hệ thống đã hết thì
-            // "bạn hết lượt" là một câu trả lời sai, và không phải lỗi của họ.
-            if (globalRemaining(since) <= 0) {
-                throw new TtsQuotaExceededException(
-                        TtsQuotaExceededException.Scope.GLOBAL,
-                        properties.reader().dailyQuotaGlobal());
-            }
-
-            long used = audioFileRepository.countReaderRequestsBy(principal.getId(), since);
-            if (used >= limit) {
-                throw new TtsQuotaExceededException(TtsQuotaExceededException.Scope.USER, limit);
-            }
-
-            log.info("Người đọc {} tạo audio cho chương {} (lượt {}/{})",
-                    principal.getId(), chapter.getId(), used + 1, limit);
+        @Override
+        public void afterGenerationQueued(AudioFile audio) {
+            aiUsageService.linkToAudio(usageId, audio.getId());
         }
 
         @Override
@@ -178,7 +189,13 @@ public class ReaderTtsService {
         }
     }
 
-    /** Hạn mức theo bậc người dùng; null nghĩa là không áp hạn mức nào. */
+    /**
+     * Hạn mức theo bậc người dùng; null nghĩa là không áp hạn mức cá nhân nào.
+     *
+     * <p>Quản trị viên không bị chặn, nhưng lượt của họ vẫn được ghi sổ: trần
+     * chung là cầu dao chi phí của cả hệ thống, và một lượt không ai đếm vẫn là
+     * một lượt có hóa đơn.
+     */
     private Integer dailyQuotaFor(AppUserPrincipal principal) {
         if (principal.isAdmin()) {
             return null;
@@ -186,19 +203,5 @@ public class ReaderTtsService {
         TtsProperties.Reader reader = properties.reader();
         int limit = principal.isVip() ? reader.dailyQuotaVip() : reader.dailyQuota();
         return limit == UNLIMITED ? null : limit;
-    }
-
-    /** Số lượt cả hệ thống còn lại trong ngày; {@link Integer#MAX_VALUE} nếu không đặt trần. */
-    private int globalRemaining(Instant since) {
-        int cap = properties.reader().dailyQuotaGlobal();
-        if (cap == UNLIMITED) {
-            return Integer.MAX_VALUE;
-        }
-        long used = audioFileRepository.countReaderRequests(since);
-        return Math.max(cap - (int) used, 0);
-    }
-
-    private static Instant startOfToday() {
-        return LocalDate.now(ZONE).atStartOfDay(ZONE).toInstant();
     }
 }

@@ -177,40 +177,6 @@ public interface AudioFileRepository extends JpaRepository<AudioFile, Long> {
     boolean hasCurrentReadyAudio(@Param("chapterId") Long chapterId);
 
     /**
-     * Số bản audio một người đọc đã tự dựng kể từ mốc thời gian cho trước.
-     *
-     * <p>Bỏ bản FAILED: người đọc trả lượt cho một bản nghe được, không cho một
-     * lần hỏng của nhà cung cấp. Bản PROCESSING vẫn tính — API đã gọi rồi.
-     *
-     * <p>{@code a.requestedBy.id} so thẳng cột khóa ngoại, không sinh join.
-     */
-    @Query("""
-            SELECT COUNT(a) FROM AudioFile a
-            WHERE a.requestedBy.id = :userId
-              AND a.source = com.storytts.backend.domain.AudioSource.TTS
-              AND a.status <> com.storytts.backend.domain.AudioStatus.FAILED
-              AND a.createdAt >= :since
-            """)
-    long countReaderRequestsBy(@Param("userId") Long userId, @Param("since") Instant since);
-
-    /**
-     * Tổng số bản audio do người đọc dựng kể từ mốc thời gian cho trước — trần
-     * chung của toàn hệ thống.
-     *
-     * <p>{@code requestedBy IS NOT NULL} lọc ra đúng phần do người đọc gây ra:
-     * một lô do Admin dựng không có tên người nên không bị tính vào đây, đúng ý
-     * "khu quản trị không bị hạn mức của người đọc chặn".
-     */
-    @Query("""
-            SELECT COUNT(a) FROM AudioFile a
-            WHERE a.requestedBy IS NOT NULL
-              AND a.source = com.storytts.backend.domain.AudioSource.TTS
-              AND a.status <> com.storytts.backend.domain.AudioStatus.FAILED
-              AND a.createdAt >= :since
-            """)
-    long countReaderRequests(@Param("since") Instant since);
-
-    /**
      * Các chương (trong danh sách truyền vào) đã có audio dùng được — một truy vấn duy nhất,
      * để danh sách chương không sinh N+1 query.
      *

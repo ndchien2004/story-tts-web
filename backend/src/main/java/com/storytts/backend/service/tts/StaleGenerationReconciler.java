@@ -3,6 +3,7 @@ package com.storytts.backend.service.tts;
 import com.storytts.backend.domain.AudioFile;
 import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.repository.AudioFileRepository;
+import com.storytts.backend.service.AiUsageService;
 import com.storytts.backend.service.StorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +49,7 @@ public class StaleGenerationReconciler implements ApplicationRunner {
 
     private final AudioFileRepository audioFileRepository;
     private final StorageService storageService;
+    private final AiUsageService aiUsageService;
 
     @Override
     @Transactional
@@ -67,6 +69,13 @@ public class StaleGenerationReconciler implements ApplicationRunner {
                     "Quá trình tạo audio bị gián đoạn do máy chủ khởi động lại. Vui lòng thử lại.");
         });
         audioFileRepository.saveAll(stale);
+
+        // Máy chủ khởi động lại giữa chừng là lỗi của máy chủ, nên lượt đã trừ
+        // được trả lại — cùng một lời hứa mà TtsGenerationRecords.markFailed giữ
+        // cho những lần hỏng lúc đang chạy. Không có nó thì một lần Render ngủ
+        // dậy sẽ lặng lẽ ăn mất lượt của những người đang chờ dở.
+        stale.forEach(audio ->
+                aiUsageService.refundForAudio(audio.getId(), "may chu khoi dong lai giua chung"));
 
         log.info("Đã đánh dấu {} lượt dựng audio bị gián đoạn là hỏng", stale.size());
     }

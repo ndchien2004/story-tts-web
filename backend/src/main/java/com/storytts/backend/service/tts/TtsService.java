@@ -82,6 +82,22 @@ public class TtsService {
          */
         void beforeNewGeneration(Chapter chapter);
 
+        /**
+         * Gọi ngay sau khi bản ghi mới được ghi, trong cùng giao dịch ấy.
+         *
+         * <p>Tồn tại vì hai việc phải xảy ra theo đúng thứ tự này và không thể
+         * gộp làm một: hạn mức bị trừ <i>trước</i> khi có gì được tạo ra, còn
+         * mối nối giữa lượt đã trừ và bản audio thì chỉ dựng được <i>sau</i>
+         * khi bản audio có id. Mối nối ấy là đường hoàn lượt về sau, lúc bản
+         * dựng hỏng.
+         *
+         * <p>Mặc định không làm gì: khu quản trị không trừ lượt của ai nên cũng
+         * không có gì để nối.
+         */
+        default void afterGenerationQueued(AudioFile audio) {
+            // Không có sổ nào để ghi.
+        }
+
         /** Người sẽ bị trừ lượt, hoặc null nếu bản này không tính cho ai. */
         User requester();
     }
@@ -207,6 +223,11 @@ public class TtsService {
                 .contentType("audio/mpeg")
                 .requestedBy(budget.requester())
                 .build());
+
+        // Cùng giao dịch với lệnh ghi ngay trên. Lượt đã trừ và bản ghi vừa tạo
+        // hoặc cùng tồn tại, hoặc cùng biến mất — không có trạng thái nào ở giữa
+        // để lại một lượt bị trừ cho một bản audio không bao giờ có.
+        budget.afterGenerationQueued(pending);
 
         log.info("Xếp hàng dựng audio chương {} phiên bản {} (giọng={}, tốc độ={})",
                 chapterId, contentVersion, voice, speed);
