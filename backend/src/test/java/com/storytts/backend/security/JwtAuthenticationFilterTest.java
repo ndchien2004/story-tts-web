@@ -63,6 +63,9 @@ class JwtAuthenticationFilterTest {
                 jwtService, userDetailsService, new ApiErrorWriter(objectMapper));
 
         request = new MockHttpServletRequest();
+        // MockHttpServletRequest để phương thức là chuỗi rỗng nếu không đặt, mà
+        // filter thì hỏi tới nó: token trên URL chỉ được nhận ở request GET.
+        request.setMethod("GET");
         request.setRequestURI("/api/auth/me");
         response = new MockHttpServletResponse();
 
@@ -134,6 +137,44 @@ class JwtAuthenticationFilterTest {
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(response.getContentAsString()).contains(AccountLockedException.CODE);
         verify(filterChain, never()).doFilter(any(), any());
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Phạm vi của ngoại lệ "token trên URL"                               */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Ngoại lệ ấy sinh ra cho thẻ {@code <audio>}, thứ không đặt được header.
+     * Trước đây nó có hiệu lực ở <b>mọi</b> đường, nên bất kỳ ai cũng dựng được
+     * một URL mang theo phiên đăng nhập của mình rồi dán đi — và URL thì đi vào
+     * access log, vào {@code Referer}, vào lịch sử trình duyệt.
+     */
+    @Test
+    @DisplayName("token trên URL chỉ có tác dụng ở đường phát media, không ở đường khác")
+    void queryTokenOnlyWorksOnStreamPaths() throws Exception {
+        request.setRequestURI("/api/auth/me");
+        request.setParameter("access_token", TOKEN);
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        // Không đọc token ra thì cũng không có ai để nạp: request đi tiếp với tư
+        // cách Khách, và tầng URL của Spring Security trả 401 như với mọi lời
+        // gọi không mang danh tính.
+        verify(userDetailsService, never()).loadUserById(any());
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("POST mang token trên URL cũng không được nhận, kể cả ở đường phát")
+    void queryTokenIsGetOnly() throws Exception {
+        request.setMethod("POST");
+        request.setRequestURI("/api/chapters/5/audio/9");
+        request.setParameter("access_token", TOKEN);
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(userDetailsService, never()).loadUserById(any());
+        verify(filterChain).doFilter(request, response);
     }
 
     // ==================== Những đường không được phép hỏng theo ====================
