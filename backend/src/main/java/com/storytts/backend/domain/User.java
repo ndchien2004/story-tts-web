@@ -79,6 +79,20 @@ public class User {
     @Builder.Default
     private boolean enabled = true;
 
+    /**
+     * Số lần đăng nhập sai <b>liên tiếp</b>; một lần đúng đưa nó về 0.
+     *
+     * <p>Đếm liên tiếp chứ không đếm tổng: người hay quên mật khẩu không được
+     * phép tích dần tới mức bị khóa qua nhiều tháng sử dụng.
+     */
+    @Column(name = "failed_login_attempts", nullable = false)
+    @Builder.Default
+    private int failedLoginAttempts = 0;
+
+    /** Hết quãng nghỉ vì đăng nhập sai quá nhiều; null nghĩa là không bị khóa. */
+    @Column(name = "login_locked_until")
+    private Instant loginLockedUntil;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -122,5 +136,46 @@ public class User {
         Instant from = hasActiveSubscription() ? vipUntil : Instant.now();
         vipUntil = from.atZone(java.time.ZoneOffset.UTC).plusMonths(months).toInstant();
         return vipUntil;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Quãng nghỉ vì đăng nhập sai quá nhiều                               */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Đang trong quãng nghỉ hay không.
+     *
+     * <p>Khác hẳn {@link #enabled}: cái kia là quyết định của quản trị viên và
+     * chỉ họ mở lại được; cái này là hậu quả tạm thời của việc gõ sai, và nó tự
+     * hết. Hai thứ được giữ riêng để không bao giờ có chuyện dò mật khẩu vào một
+     * tài khoản lại làm nó trông như bị quản trị viên khóa.
+     */
+    public boolean isLoginThrottled() {
+        return loginLockedUntil != null && loginLockedUntil.isAfter(Instant.now());
+    }
+
+    /**
+     * Ghi nhận một lần gõ sai, và bắt đầu quãng nghỉ nếu đã đủ số lần.
+     *
+     * @return true nếu lần này là lần chạm ngưỡng
+     */
+    public boolean recordFailedLogin(int threshold, java.time.Duration lockFor) {
+        failedLoginAttempts++;
+        if (failedLoginAttempts < threshold) {
+            return false;
+        }
+        loginLockedUntil = Instant.now().plus(lockFor);
+        return true;
+    }
+
+    /**
+     * Đăng nhập được thì xóa sạch dấu vết của những lần sai trước.
+     *
+     * <p>Xóa cả mốc khóa chứ không chỉ bộ đếm: người vừa chứng minh được họ biết
+     * mật khẩu thì quãng nghỉ không còn lý do tồn tại.
+     */
+    public void recordSuccessfulLogin() {
+        failedLoginAttempts = 0;
+        loginLockedUntil = null;
     }
 }

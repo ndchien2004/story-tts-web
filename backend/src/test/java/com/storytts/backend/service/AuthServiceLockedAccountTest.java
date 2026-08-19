@@ -1,6 +1,7 @@
 package com.storytts.backend.service;
 
 import com.storytts.backend.config.GoogleProperties;
+import com.storytts.backend.config.LoginThrottleProperties;
 import com.storytts.backend.domain.Role;
 import com.storytts.backend.domain.User;
 import com.storytts.backend.dto.auth.GoogleLoginRequest;
@@ -70,6 +71,7 @@ class AuthServiceLockedAccountTest {
         authService = new AuthService(userRepository, passwordEncoder, jwtService, currentUserService,
                 googleIdTokenVerifier, new GoogleProperties("demo.apps.googleusercontent.com",
                 "https://certs"),
+                new LoginThrottleProperties(10, java.time.Duration.ofMinutes(15)),
                 passwordResetService, readerNarrationCleanup);
 
         // Mật khẩu đúng, có chủ ý: thứ đang được kiểm là trạng thái tài khoản,

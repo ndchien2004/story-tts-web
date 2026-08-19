@@ -173,6 +173,23 @@ public class GlobalExceptionHandler {
                         "TTS_QUOTA_EXCEEDED", ex.getMessage(), request.getRequestURI()));
     }
 
+    /**
+     * Tài khoản đang trong quãng nghỉ vì gõ sai quá nhiều → 429.
+     *
+     * <p>{@code Retry-After} ở đây tính bằng giây tới lúc hết nghỉ, không phải
+     * tới nửa đêm như hạn mức theo ngày: hai con số trả lời hai câu hỏi khác
+     * nhau, và trang đăng nhập hiển thị đúng con số này thành "thử lại sau N
+     * phút".
+     */
+    @ExceptionHandler(LoginThrottledException.class)
+    public ResponseEntity<ApiErrorResponse> handleLoginThrottled(LoginThrottledException ex,
+                                                                HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(ApiErrorResponse.of(HttpStatus.TOO_MANY_REQUESTS.value(),
+                        LoginThrottledException.CODE, ex.getMessage(), request.getRequestURI()));
+    }
+
     @ExceptionHandler(LoginRequiredException.class)
     public ResponseEntity<ApiErrorResponse> handleLoginRequired(LoginRequiredException ex,
                                                                HttpServletRequest request) {

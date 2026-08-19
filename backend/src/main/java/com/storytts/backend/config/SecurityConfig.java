@@ -3,6 +3,7 @@ package com.storytts.backend.config;
 import com.storytts.backend.security.ApiErrorWriter;
 import com.storytts.backend.security.CustomUserDetailsService;
 import com.storytts.backend.security.JwtAuthenticationFilter;
+import com.storytts.backend.security.ratelimit.RateLimitFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -43,6 +44,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitFilter rateLimitFilter;
     private final CustomUserDetailsService userDetailsService;
     private final CorsProperties corsProperties;
     private final ApiErrorWriter apiErrorWriter;
@@ -140,7 +142,12 @@ public class SecurityConfig {
 
                         .anyRequest().authenticated())
                 .authenticationProvider(authenticationProvider(passwordEncoder()))
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                // Trước cả lớp xác thực, và thứ tự ấy là điểm chính: nạp người
+                // dùng từ JWT tốn một câu SELECT cho mỗi request: chặn sau đó
+                // nghĩa là kẻ bắn request dồn dập vẫn bắt được cơ sở dữ liệu
+                // làm việc cho mình.
+                .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }
