@@ -7,6 +7,7 @@ import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
 import com.storytts.backend.domain.ReadingProgress;
 import com.storytts.backend.domain.Story;
+import com.storytts.backend.dto.admin.ContentDeletionDto;
 import com.storytts.backend.dto.chapter.ChapterAccessDto;
 import com.storytts.backend.dto.chapter.ChapterDetailDto;
 import com.storytts.backend.dto.chapter.ChapterRequest;
@@ -55,6 +56,7 @@ public class ChapterService {
     private final CurrentUserService currentUserService;
     private final PublicationService publicationService;
     private final StoredAudioCleanup storedAudioCleanup;
+    private final ChapterRefundService chapterRefundService;
     private final ApplicationEventPublisher eventPublisher;
 
     /** Số chương mặc định mỗi trang — đủ rộng cho gần hết truyện, đủ hẹp cho truyện dài. */
@@ -314,16 +316,24 @@ public class ChapterService {
      * <p>Lượt đọc trong {@code view_events} và lượt dùng AI trong {@code ai_usage}
      * cố ý ở lại: cả hai là lịch sử đã xảy ra, không phải thứ thuộc về chương.
      *
+     * <h3>Ai đã trả Xu cho chương này thì được hoàn</h3>
+     * Quyền đọc đã mua cũng nằm trong nhóm "biến mất theo cascade", nhưng nó
+     * khác những thứ còn lại ở một điểm: nó đã được trả tiền. Nên nó phải được
+     * trả lại trước, trong cùng giao dịch — xem {@link ChapterRefundService}.
+     * Thứ tự bắt buộc là hoàn trước, xóa sau: sau lệnh xóa thì không còn dòng
+     * quyền nào để biết ai đã trả bao nhiêu.
      */
     @Transactional
-    public void delete(Long chapterId) {
+    public ContentDeletionDto delete(Long chapterId) {
         Chapter chapter = chapterRepository.findById(chapterId)
                 .orElseThrow(() -> ResourceNotFoundException.of("chương", chapterId));
 
+        ChapterRefundService.Refunds refunds = chapterRefundService.refundChapter(chapterId);
         storedAudioCleanup.purgeChapterAfterCommit(chapterId);
         chapterRepository.delete(chapter);
 
         log.info("Admin xóa chương {} của truyện {}", chapterId, chapter.getStory().getId());
+        return new ContentDeletionDto(refunds.coins(), refunds.readers());
     }
 
     /** Đổi riêng mức khóa của một chương — thao tác nhanh trong trang quản trị. */

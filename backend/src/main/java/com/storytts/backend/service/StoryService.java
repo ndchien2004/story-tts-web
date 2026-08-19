@@ -3,6 +3,7 @@ package com.storytts.backend.service;
 import com.storytts.backend.domain.Story;
 import com.storytts.backend.domain.StoryStatus;
 import com.storytts.backend.domain.ViewType;
+import com.storytts.backend.dto.admin.ContentDeletionDto;
 import com.storytts.backend.dto.chapter.ChapterSummaryDto;
 import com.storytts.backend.dto.common.PageResponse;
 import com.storytts.backend.dto.story.StoryDetailDto;
@@ -56,6 +57,7 @@ public class StoryService {
     private final ChapterService chapterService;
     private final PublicationService publicationService;
     private final StoredAudioCleanup storedAudioCleanup;
+    private final ChapterRefundService chapterRefundService;
     private final GenreService genreService;
     private final AuthorService authorService;
     private final RatingCommentService ratingCommentService;
@@ -231,12 +233,17 @@ public class StoryService {
      * tác vốn chỉ cần một.
      */
     @Transactional
-    public void delete(Long storyId) {
+    public ContentDeletionDto delete(Long storyId) {
         Story story = findEntity(storyId);
         log.info("Admin xóa truyện id={} title='{}'", storyId, story.getTitle());
 
+        // Hoàn Xu trước khi có gì bị xóa: sau lệnh xóa thì không còn dòng quyền
+        // nào để biết ai đã trả bao nhiêu cho chương nào.
+        ChapterRefundService.Refunds refunds = chapterRefundService.refundStory(storyId);
         storedAudioCleanup.purgeStoryAfterCommit(storyId);
         storyRepository.delete(story);
+
+        return new ContentDeletionDto(refunds.coins(), refunds.readers());
     }
 
     @Transactional(readOnly = true)

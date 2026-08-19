@@ -28,6 +28,35 @@ public interface ChapterEntitlementRepository extends JpaRepository<ChapterEntit
 
     long countByChapterId(Long chapterId);
 
+    /**
+     * Những quyền đã <b>trả tiền</b> cho một chương — đầu vào của việc hoàn Xu
+     * khi chương bị xóa.
+     *
+     * <p>{@code coinsSpent > 0} loại ra quyền do quản trị viên cấp: không có
+     * đồng nào đi vào thì cũng không có đồng nào để trả lại, và một dòng sổ cái
+     * hoàn 0 Xu chỉ làm rối trang lịch sử giao dịch.
+     *
+     * <p>{@code JOIN FETCH} cả người lẫn chương vì bên gọi cần id người nhận và
+     * tên chương để ghi vào sổ; không có nó thì mỗi dòng sinh thêm hai truy vấn,
+     * đúng lúc danh sách có thể dài hàng trăm dòng.
+     */
+    @Query("""
+            SELECT e FROM ChapterEntitlement e
+            JOIN FETCH e.user
+            JOIN FETCH e.chapter
+            WHERE e.chapter.id = :chapterId AND e.coinsSpent > 0
+            """)
+    List<ChapterEntitlement> findPaidByChapter(@Param("chapterId") Long chapterId);
+
+    /** Như trên, nhưng cho mọi chương của một truyện — dùng khi xóa cả truyện. */
+    @Query("""
+            SELECT e FROM ChapterEntitlement e
+            JOIN FETCH e.user
+            JOIN FETCH e.chapter
+            WHERE e.chapter.story.id = :storyId AND e.coinsSpent > 0
+            """)
+    List<ChapterEntitlement> findPaidByStory(@Param("storyId") Long storyId);
+
     /** Xóa truyện kéo theo chương; quyền trỏ tới chương ấy phải đi trước. */
     void deleteByChapterId(Long chapterId);
 }

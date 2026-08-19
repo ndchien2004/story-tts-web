@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { adminApi, storyApi } from "../../api/endpoints";
 import { pollUntilSettled } from "../../utils/poll";
 import { formatDateTime } from "../../utils/format";
+import { deletionNotice } from "../../utils/deletionNotice";
 import AdminPage from "./AdminPage";
 import { useAdminToast } from "../../context/admin-toast-context";
 import AudioPreview from "../../components/admin/AudioPreview";
@@ -409,8 +410,8 @@ export default function AdminChaptersPage() {
   async function confirmDelete() {
     setDeleting(true);
     try {
-      await adminApi.deleteChapter(pendingDelete.id);
-      notify(`Đã xóa chương “${pendingDelete.title}”.`);
+      const outcome = await adminApi.deleteChapter(pendingDelete.id);
+      notify(deletionNotice(`Đã xóa chương “${pendingDelete.title}”.`, outcome));
       setPendingDelete(null);
       load();
     } catch (err) {
@@ -911,7 +912,7 @@ export default function AdminChaptersPage() {
         open={Boolean(pendingDelete)}
         title="Xóa chương?"
         message={`Chương “${pendingDelete?.title}” sẽ bị xóa khỏi truyện.`}
-        detail="File audio của chương cũng bị xóa theo, không khôi phục được."
+        detail="File audio của chương cũng bị xóa theo, không khôi phục được. Ai đã mua chương này bằng Xu sẽ được hoàn lại đúng số đã trả."
         confirmLabel="Xóa chương"
         busy={deleting}
         onConfirm={confirmDelete}

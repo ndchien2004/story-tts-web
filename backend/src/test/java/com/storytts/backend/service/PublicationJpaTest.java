@@ -53,6 +53,8 @@ class PublicationJpaTest {
     /** Không dùng ở đây; đường xóa được kiểm riêng ở ContentDeletionJpaTest. */
     @MockitoBean
     private StoredAudioCleanup storedAudioCleanup;
+    @MockitoBean
+    private ChapterRefundService chapterRefundService;
 
     @MockitoBean
     private CurrentUserService currentUserService;

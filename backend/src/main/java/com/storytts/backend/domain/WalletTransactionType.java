@@ -9,10 +9,15 @@ package com.storytts.backend.domain;
  * nhánh {@code switch} không bao giờ chạy tới và những báo cáo có cột luôn bằng
  * không.
  *
- * <p>Hoàn tiền chưa có giá trị riêng, vì hệ thống chưa có quy tắc hoàn tiền nào.
- * Khi cần trả Xu lại cho ai đó ngay hôm nay, {@link #ADMIN_ADJUSTMENT} làm được
- * việc ấy và để lại đúng dấu vết cần thiết. Một giá trị {@code REFUND} riêng chỉ
- * đáng có khi kèm theo nó là quy tắc "hoàn thì có thu lại quyền đọc không".
+ * <p>Ghi chú cũ ở đây từng nói hoàn tiền chưa đáng có giá trị riêng, vì chưa có
+ * quy tắc nào trả lời được câu "hoàn thì có thu lại quyền đọc không". Giờ có:
+ * chương bị xóa thì quyền đọc nó biến mất cùng, nên câu trả lời là <i>có</i>, và
+ * nó không cần ai quyết định vì không còn gì để đọc. Đó là điều kiện khiến
+ * {@link #REFUND_CHAPTER} ra đời — xem {@code ChapterRefundService}.
+ *
+ * <p>{@link #ADMIN_ADJUSTMENT} vẫn là chỗ cho những lần trả Xu lại không theo
+ * quy tắc nào: nó mô tả một quyết định của con người, còn giá trị dưới đây mô tả
+ * một hệ quả tự động.
  */
 public enum WalletTransactionType {
 
@@ -21,6 +26,14 @@ public enum WalletTransactionType {
 
     /** Mở một chương bằng Xu. Luôn âm. */
     PURCHASE_CHAPTER("Mở khóa chương"),
+
+    /**
+     * Trả lại Xu vì chương đã mua bị gỡ khỏi trang. Luôn dương.
+     *
+     * <p>Số hoàn là số đã trả lúc mua, không phải giá hiện tại của chương: giá
+     * đổi về sau không được làm sai lệch điều đã xảy ra rồi.
+     */
+    REFUND_CHAPTER("Hoàn Xu do chương bị gỡ"),
 
     /** Quản trị viên cộng hoặc trừ tay. Dấu nào cũng được. */
     ADMIN_ADJUSTMENT("Điều chỉnh từ quản trị viên");

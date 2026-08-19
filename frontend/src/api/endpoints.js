@@ -320,7 +320,14 @@ export const commentApi = {
 export const adminApi = {
   createStory: (payload) => client.post("/api/admin/stories", payload).then((r) => r.data),
   updateStory: (id, payload) => client.put(`/api/admin/stories/${id}`, payload).then((r) => r.data),
-  deleteStory: (id) => client.delete(`/api/admin/stories/${id}`),
+  /**
+   * Deletes a story and everything under it.
+   *
+   * Answers with what the deletion cost rather than an empty 204: readers who
+   * bought chapters with coins are refunded in the same transaction, and a
+   * silent response would leave the admin unaware that money moved.
+   */
+  deleteStory: (id) => client.delete(`/api/admin/stories/${id}`).then((r) => r.data),
 
   createChapter: (storyId, payload) =>
     client.post(`/api/admin/stories/${storyId}/chapters`, payload).then((r) => r.data),
@@ -343,7 +350,8 @@ export const adminApi = {
   updateChapter: (id, payload) => client.put(`/api/admin/chapters/${id}`, payload).then((r) => r.data),
   setChapterAccessLevel: (id, accessLevel) =>
     client.patch(`/api/admin/chapters/${id}/access-level`, { accessLevel }).then((r) => r.data),
-  deleteChapter: (id) => client.delete(`/api/admin/chapters/${id}`),
+  /** Same as `deleteStory`: the answer carries the coins refunded to buyers. */
+  deleteChapter: (id) => client.delete(`/api/admin/chapters/${id}`).then((r) => r.data),
 
   listUsers: (params) => client.get("/api/admin/users", { params }).then((r) => r.data),
   setVip: (id, value) => client.patch(`/api/admin/users/${id}/vip`, { value }).then((r) => r.data),

@@ -6,6 +6,7 @@ import { useAdminToast } from "../../context/admin-toast-context";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import Pagination from "../../components/Pagination";
 import useDebouncedValue from "../../hooks/useDebouncedValue";
+import { deletionNotice } from "../../utils/deletionNotice";
 import { Alert, Badge, Button, ButtonLink, EmptyState, SearchInput, Spinner } from "../../components/ui";
 
 /** Fills the panel on a typical desktop screen without needing a scroll. */
@@ -45,8 +46,8 @@ export default function AdminStoriesPage() {
   async function confirmDelete() {
     setDeleting(true);
     try {
-      await adminApi.deleteStory(pendingDelete.id);
-      notify(`Đã xóa truyện “${pendingDelete.title}”.`);
+      const outcome = await adminApi.deleteStory(pendingDelete.id);
+      notify(deletionNotice(`Đã xóa truyện “${pendingDelete.title}”.`, outcome));
       setPendingDelete(null);
       load();
     } catch (err) {
@@ -192,7 +193,7 @@ export default function AdminStoriesPage() {
         open={Boolean(pendingDelete)}
         title="Xóa truyện?"
         message={`Truyện “${pendingDelete?.title}” sẽ bị xóa khỏi hệ thống.`}
-        detail="Toàn bộ chương và file audio thuộc truyện này cũng bị xóa theo, không khôi phục được."
+        detail="Toàn bộ chương và file audio thuộc truyện này cũng bị xóa theo, không khôi phục được. Ai đã mua chương nào bằng Xu sẽ được hoàn lại đúng số đã trả."
         confirmLabel="Xóa truyện"
         busy={deleting}
         onConfirm={confirmDelete}

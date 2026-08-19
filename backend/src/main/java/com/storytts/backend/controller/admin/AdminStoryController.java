@@ -1,5 +1,6 @@
 package com.storytts.backend.controller.admin;
 
+import com.storytts.backend.dto.admin.ContentDeletionDto;
 import com.storytts.backend.dto.chapter.ChapterRequest;
 import com.storytts.backend.dto.chapter.ChapterSummaryDto;
 import com.storytts.backend.dto.story.StoryRequest;
@@ -54,10 +55,11 @@ public class AdminStoryController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Xóa truyện (kéo theo toàn bộ chương và audio)")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        storyService.delete(id);
-        return ResponseEntity.noContent().build();
+    @Operation(summary = "Xóa truyện (kéo theo toàn bộ chương và audio)",
+            description = "Người đã mua bất kỳ chương nào của truyện được hoàn lại đúng số "
+                    + "đã trả, trong cùng giao dịch.")
+    public ContentDeletionDto delete(@PathVariable Long id) {
+        return storyService.delete(id);
     }
 
     @PostMapping("/{storyId}/chapters")

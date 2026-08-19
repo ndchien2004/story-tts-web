@@ -1,6 +1,7 @@
 package com.storytts.backend.controller.admin;
 
 import com.storytts.backend.domain.AccessLevel;
+import com.storytts.backend.dto.admin.ContentDeletionDto;
 import com.storytts.backend.dto.chapter.ChapterDetailDto;
 import com.storytts.backend.dto.chapter.ChapterRequest;
 import com.storytts.backend.dto.chapter.ChapterSummaryDto;
@@ -48,11 +49,19 @@ public class AdminChapterController {
         return chapterService.changeAccessLevel(id, request.accessLevel());
     }
 
+    /**
+     * Xóa hẳn một chương.
+     *
+     * <p>Trả về thân response thay vì 204 vì thao tác này có thể trả lại Xu cho
+     * người đã mua chương — một việc đụng tới tiền, xảy ra như hệ quả phụ của
+     * một cú bấm nút. 204 nghĩa là nó diễn ra hoàn toàn im lặng.
+     */
     @DeleteMapping("/{id}")
-    @Operation(summary = "Xóa chương")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        chapterService.delete(id);
-        return ResponseEntity.noContent().build();
+    @Operation(summary = "Xóa chương",
+            description = "Người đã mua chương bằng Xu được hoàn lại đúng số đã trả, "
+                    + "trong cùng giao dịch. Kết quả trả về nói rõ hoàn bao nhiêu cho mấy người.")
+    public ContentDeletionDto delete(@PathVariable Long id) {
+        return chapterService.delete(id);
     }
 
     /** Đặt cùng một mức khóa cho nhiều chương — thay vì mở từng dropdown một. */

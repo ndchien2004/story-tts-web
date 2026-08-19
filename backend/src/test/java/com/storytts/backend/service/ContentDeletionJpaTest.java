@@ -5,19 +5,26 @@ import com.storytts.backend.domain.AudioFile;
 import com.storytts.backend.domain.AudioSource;
 import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
+import com.storytts.backend.domain.ChapterEntitlement;
+import com.storytts.backend.domain.EntitlementSource;
 import com.storytts.backend.domain.Favorite;
 import com.storytts.backend.domain.RatingComment;
 import com.storytts.backend.domain.ReadingProgress;
 import com.storytts.backend.domain.Role;
 import com.storytts.backend.domain.Story;
 import com.storytts.backend.domain.User;
+import com.storytts.backend.domain.WalletReferenceType;
+import com.storytts.backend.domain.WalletTransactionType;
+import com.storytts.backend.dto.admin.ContentDeletionDto;
 import com.storytts.backend.repository.AudioFileRepository;
+import com.storytts.backend.repository.ChapterEntitlementRepository;
 import com.storytts.backend.repository.ChapterRepository;
 import com.storytts.backend.repository.FavoriteRepository;
 import com.storytts.backend.repository.RatingCommentRepository;
 import com.storytts.backend.repository.ReadingProgressRepository;
 import com.storytts.backend.repository.StoryRepository;
 import com.storytts.backend.repository.UserRepository;
+import com.storytts.backend.repository.WalletTransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -55,7 +62,8 @@ import static org.mockito.Mockito.when;
  */
 @DataJpaTest
 @Import({ChapterService.class, StoryService.class, PublicationService.class,
-        ChapterAccessService.class, AccessControlService.class})
+        ChapterAccessService.class, AccessControlService.class,
+        ChapterRefundService.class, WalletService.class})
 class ContentDeletionJpaTest {
 
     @Autowired
@@ -76,6 +84,12 @@ class ContentDeletionJpaTest {
     private RatingCommentRepository ratingCommentRepository;
     @Autowired
     private AudioFileRepository audioFileRepository;
+    @Autowired
+    private ChapterEntitlementRepository entitlementRepository;
+    @Autowired
+    private WalletTransactionRepository transactionRepository;
+    @Autowired
+    private WalletService walletService;
     @Autowired
     private TestEntityManager entityManager;
 
@@ -173,6 +187,100 @@ class ContentDeletionJpaTest {
         assertThat(ratingCommentRepository.count()).isZero();
         assertThat(progressRepository.count()).isZero();
     }
+
+    /* ------------------------------------------------------------------ */
+    /* Hoàn Xu cho người đã mua                                            */
+    /* ------------------------------------------------------------------ */
+
+    @Test
+    @DisplayName("xóa chương đã bán thì người mua được hoàn đúng số Xu đã trả")
+    void hoanXuChoNguoiDaMua() {
+        buy(reader, chapter, 50);
+        flushAndClear();
+
+        ContentDeletionDto result = chapterService.delete(chapter.getId());
+        flushAndClear();
+
+        // Không hoàn thì quyền đọc biến mất im lặng theo cascade, và người mua
+        // mất tiền vì một quyết định họ không tham gia.
+        assertThat(result.refundedCoins()).isEqualTo(50);
+        assertThat(result.refundedReaders()).isEqualTo(1);
+        assertThat(walletService.balanceOf(reader.getId())).isEqualTo(50);
+    }
+
+    @Test
+    @DisplayName("hoàn đúng số đã trả, không phải giá hiện tại của chương")
+    void hoanTheoGiaLucMua() {
+        buy(reader, chapter, 50);
+
+        // Quản trị viên hạ giá rồi mới xóa. Giá đổi về sau không được viết lại
+        // một việc đã xong.
+        chapter.setCoinPrice(20);
+        chapterRepository.saveAndFlush(chapter);
+        flushAndClear();
+
+        assertThat(chapterService.delete(chapter.getId()).refundedCoins()).isEqualTo(50);
+    }
+
+    @Test
+    @DisplayName("quyền do quản trị viên cấp không sinh dòng hoàn nào")
+    void quyenCapTayKhongHoan() {
+        entitlementRepository.save(ChapterEntitlement.builder()
+                .user(reader).chapter(chapter)
+                .source(EntitlementSource.ADMIN_GRANT)
+                .coinsSpent(0L)
+                .build());
+        flushAndClear();
+
+        // Không có đồng nào đi vào thì cũng không có đồng nào để trả lại, và một
+        // dòng sổ cái hoàn 0 Xu chỉ làm rối trang lịch sử giao dịch.
+        assertThat(chapterService.delete(chapter.getId()).refundedCoins()).isZero();
+        assertThat(walletService.balanceOf(reader.getId())).isZero();
+    }
+
+    @Test
+    @DisplayName("xóa truyện thì hoàn mọi chương đã mua, đếm theo người chứ không theo dòng")
+    void hoanCaTruyenDemTheoNguoi() {
+        Chapter second = chapterRepository.save(Chapter.builder()
+                .story(story).title("Chương 2").content("Nội dung 2.").chapterNumber(2)
+                .accessLevel(AccessLevel.MEMBER).coinPrice(30)
+                .publishedAt(Instant.now().minusSeconds(60)).build());
+
+        buy(reader, chapter, 50);
+        buy(reader, second, 30);
+        flushAndClear();
+
+        ContentDeletionDto result = storyService.delete(story.getId());
+        flushAndClear();
+
+        assertThat(result.refundedCoins()).isEqualTo(80);
+        // Một người mua hai chương của cùng một truyện là một người được hoàn.
+        assertThat(result.refundedReaders()).isEqualTo(1);
+        assertThat(walletService.balanceOf(reader.getId())).isEqualTo(80);
+    }
+
+    @Test
+    @DisplayName("mỗi lượt mua một dòng sổ cái hoàn, để còn tra được hoàn cho chương nào")
+    void moiLuotMuaMotDongSo() {
+        buy(reader, chapter, 50);
+        flushAndClear();
+
+        chapterService.delete(chapter.getId());
+        flushAndClear();
+
+        // Dòng sổ vẫn trỏ tới chương dù chương đã biến mất: cặp tham chiếu ấy cố
+        // ý không có khóa ngoại, vì lịch sử tiền bạc không được biến mất theo nội
+        // dung mà nó đã trả tiền cho.
+        assertThat(transactionRepository.findAll())
+                .filteredOn(row -> row.getType() == WalletTransactionType.REFUND_CHAPTER)
+                .singleElement()
+                .satisfies(row -> {
+                    assertThat(row.getAmount()).isEqualTo(50);
+                    assertThat(row.getReferenceType()).isEqualTo(WalletReferenceType.CHAPTER);
+                    assertThat(row.getReferenceId()).isEqualTo(chapter.getId());
+                });
+    }
+
     /* ------------------------------------------------------------------ */
     /* File audio trên nơi lưu                                             */
     /* ------------------------------------------------------------------ */
@@ -213,6 +321,16 @@ class ContentDeletionJpaTest {
     private void flushAndClear() {
         entityManager.flush();
         entityManager.clear();
+    }
+
+    /** Một lượt mua đã hoàn tất: quyền đọc, và số Xu đã trả chép lại trên nó. */
+    private void buy(User user, Chapter target, long price) {
+        entitlementRepository.save(ChapterEntitlement.builder()
+                .user(user)
+                .chapter(target)
+                .source(EntitlementSource.COIN_PURCHASE)
+                .coinsSpent(price)
+                .build());
     }
 
     private AudioFile audio(String path) {
