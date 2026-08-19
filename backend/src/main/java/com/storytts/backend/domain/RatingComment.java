@@ -1,6 +1,9 @@
 package com.storytts.backend.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
+
 import lombok.*;
 
 import java.time.Instant;
@@ -26,8 +29,16 @@ public class RatingComment {
     @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_rc_user"))
     private User user;
 
+    /**
+     * Truyện được bình luận.
+     *
+     * <p>Xóa truyện thì bình luận về nó cũng mất theo — xem migration V12. Một
+     * bình luận về truyện không còn tồn tại thì không ai đọc tới được, nhưng nó
+     * đủ để chặn lệnh xóa nếu không khai báo gì.
+     */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "story_id", nullable = false, foreignKey = @ForeignKey(name = "fk_rc_story"))
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private Story story;
 
     /** Số sao 1-5. Null nếu người dùng chỉ bình luận mà không chấm điểm. */

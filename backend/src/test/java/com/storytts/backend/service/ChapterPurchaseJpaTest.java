@@ -67,6 +67,10 @@ class ChapterPurchaseJpaTest {
     private TestEntityManager entityManager;
 
     /** Cửa vào SecurityContext; điều khiển "ai đang đăng nhập" từ đây. */
+    /** Không dùng ở đây; đường xóa được kiểm riêng ở ContentDeletionJpaTest. */
+    @MockitoBean
+    private StoredAudioCleanup storedAudioCleanup;
+
     @MockitoBean
     private CurrentUserService currentUserService;
 

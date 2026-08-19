@@ -55,6 +55,7 @@ public class StoryService {
     private final CurrentUserService currentUserService;
     private final ChapterService chapterService;
     private final PublicationService publicationService;
+    private final StoredAudioCleanup storedAudioCleanup;
     private final GenreService genreService;
     private final AuthorService authorService;
     private final RatingCommentService ratingCommentService;
@@ -217,10 +218,24 @@ public class StoryService {
     }
 
     /** Xóa truyện kéo theo toàn bộ chương và bản ghi audio của nó (cascade ở entity). */
+    /**
+     * Xóa hẳn một truyện, kéo theo toàn bộ chương và audio của nó.
+     *
+     * <p>Cùng một câu chuyện với {@code ChapterService.delete}: trước migration
+     * V12, một lượt bấm yêu thích hay một bình luận là đủ để lệnh xóa hỏng với
+     * lỗi ràng buộc. Đường này còn dễ hỏng hơn vì nó đi qua ba khóa ngoại khác
+     * nhau, và mỗi lần sửa một cái thì cái tiếp theo mới lộ ra.
+     *
+     * <p>File audio được dọn theo cả truyện trong một lần đọc, chứ không lặp qua
+     * từng chương: một truyện nghìn chương sẽ là nghìn câu truy vấn cho một thao
+     * tác vốn chỉ cần một.
+     */
     @Transactional
     public void delete(Long storyId) {
         Story story = findEntity(storyId);
         log.info("Admin xóa truyện id={} title='{}'", storyId, story.getTitle());
+
+        storedAudioCleanup.purgeStoryAfterCommit(storyId);
         storyRepository.delete(story);
     }
 

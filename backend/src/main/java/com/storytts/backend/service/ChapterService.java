@@ -54,6 +54,7 @@ public class ChapterService {
     private final ReadingProgressRepository progressRepository;
     private final CurrentUserService currentUserService;
     private final PublicationService publicationService;
+    private final StoredAudioCleanup storedAudioCleanup;
     private final ApplicationEventPublisher eventPublisher;
 
     /** Số chương mặc định mỗi trang — đủ rộng cho gần hết truyện, đủ hẹp cho truyện dài. */
@@ -296,11 +297,33 @@ public class ChapterService {
         return toSummary(saved, storyId, hasAudio);
     }
 
+    /**
+     * Xóa hẳn một chương.
+     *
+     * <h3>Những thứ đi theo nó</h3>
+     * Tiến độ đọc, quyền đã mua bằng Xu và bản ghi audio đều biến mất cùng —
+     * việc ấy do khóa ngoại của lược đồ lo (xem migration V12), không phải do
+     * mã ở đây nhớ gọi đủ. Trước V12 thì chỉ cần <b>một</b> người đã đọc chương
+     * là lệnh xóa hỏng với lỗi ràng buộc, và Admin nhận về một câu "lỗi máy chủ"
+     * không nói gì.
+     *
+     * <p>Thứ duy nhất cơ sở dữ liệu không dọn được là file audio trên đĩa hoặc
+     * trên Cloudinary — xem {@link StoredAudioCleanup}. Nó phải được gọi
+     * <i>trước</i> lệnh xóa, vì đường dẫn file chỉ còn đọc được khi hàng vẫn còn.
+     *
+     * <p>Lượt đọc trong {@code view_events} và lượt dùng AI trong {@code ai_usage}
+     * cố ý ở lại: cả hai là lịch sử đã xảy ra, không phải thứ thuộc về chương.
+     *
+     */
     @Transactional
     public void delete(Long chapterId) {
         Chapter chapter = chapterRepository.findById(chapterId)
                 .orElseThrow(() -> ResourceNotFoundException.of("chương", chapterId));
+
+        storedAudioCleanup.purgeChapterAfterCommit(chapterId);
         chapterRepository.delete(chapter);
+
+        log.info("Admin xóa chương {} của truyện {}", chapterId, chapter.getStory().getId());
     }
 
     /** Đổi riêng mức khóa của một chương — thao tác nhanh trong trang quản trị. */

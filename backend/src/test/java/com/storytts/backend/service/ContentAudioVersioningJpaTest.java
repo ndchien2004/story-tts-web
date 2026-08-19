@@ -71,6 +71,10 @@ class ContentAudioVersioningJpaTest {
     private TestEntityManager entityManager;
 
     /** Quyền đọc không phải thứ đang kiểm ở đây; mọi chương đều mở. */
+    /** Không dùng ở đây; đường xóa được kiểm riêng ở ContentDeletionJpaTest. */
+    @MockitoBean
+    private StoredAudioCleanup storedAudioCleanup;
+
     @MockitoBean
     private ChapterAccessService chapterAccessService;
     @MockitoBean

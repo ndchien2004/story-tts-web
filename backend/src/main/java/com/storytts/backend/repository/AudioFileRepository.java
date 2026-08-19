@@ -157,6 +157,28 @@ public interface AudioFileRepository extends JpaRepository<AudioFile, Long> {
     /** Mọi bản một người đọc đã tự dựng — dùng để dọn khi phiên đăng nhập kết thúc. */
     List<AudioFile> findByRequestedById(Long userId);
 
+    /**
+     * Đường dẫn file của mọi bản audio thuộc một chương.
+     *
+     * <p>Chỉ lấy đúng cột cần dùng: bên gọi sắp xóa cả chương, nên nạp thực thể
+     * đầy đủ chỉ để đọc một chuỗi là công vô ích.
+     *
+     * <p>Lọc null ngay trong truy vấn — bản đang PROCESSING và bản FAILED chưa
+     * có file nào trên đĩa, và một danh sách lẫn null sẽ bắt bên gọi kiểm lại.
+     */
+    @Query("""
+            SELECT a.filePath FROM AudioFile a
+            WHERE a.chapter.id = :chapterId AND a.filePath IS NOT NULL
+            """)
+    List<String> findFilePathsByChapter(@Param("chapterId") Long chapterId);
+
+    /** Như trên, nhưng cho cả một truyện — dùng khi xóa truyện. */
+    @Query("""
+            SELECT a.filePath FROM AudioFile a
+            WHERE a.chapter.story.id = :storyId AND a.filePath IS NOT NULL
+            """)
+    List<String> findFilePathsByStory(@Param("storyId") Long storyId);
+
     boolean existsByChapterIdAndStatus(Long chapterId, AudioStatus status);
 
     /**

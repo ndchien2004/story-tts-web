@@ -50,6 +50,10 @@ class PublicationJpaTest {
     @Autowired
     private StoryRepository storyRepository;
 
+    /** Không dùng ở đây; đường xóa được kiểm riêng ở ContentDeletionJpaTest. */
+    @MockitoBean
+    private StoredAudioCleanup storedAudioCleanup;
+
     @MockitoBean
     private CurrentUserService currentUserService;
 
