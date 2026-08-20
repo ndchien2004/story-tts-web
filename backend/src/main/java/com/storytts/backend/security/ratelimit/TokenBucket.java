@@ -20,8 +20,19 @@ import java.time.Duration;
  * <p>Số học chạy trên {@code System.nanoTime()} chứ không phải đồng hồ tường:
  * đồng hồ tường nhảy khi máy chủ đồng bộ giờ, và một cú nhảy lùi sẽ đóng băng
  * hàng rào cho tới khi thời gian đuổi kịp.
+ *
+ * <h3>Vì sao lớp này {@code public} chứ không còn nằm gọn trong gói</h3>
+ * Vì có một hàng rào thứ hai cần đúng phép tính này và <b>không</b> đi qua chuỗi
+ * filter HTTP: hộp thư hỗ trợ đếm số tin gửi qua WebSocket, theo tài khoản —
+ * xem {@code SupportRateLimiter}. Chép lại phép rót token sang một lớp thứ hai
+ * là chép cả những chỗ dễ viết sai (rót theo tỉ lệ, đồng hồ đơn điệu, điều kiện
+ * dọn gáo), và hai bản sao của một hàng rào là hai bản có thể siết khác nhau.
+ *
+ * <p>Cái được chia sẻ là <i>phép tính</i>, không phải một thể hiện dùng chung:
+ * mỗi bên dùng tự giữ bản đồ gáo của mình, tự chọn khóa và tự đặt mức. Cùng cách
+ * mà {@code SseHub} được dùng lại giữa hai luồng SSE.
  */
-final class TokenBucket {
+public final class TokenBucket {
 
     private final int capacity;
 
@@ -31,7 +42,7 @@ final class TokenBucket {
     private double tokens;
     private long lastRefillNanos;
 
-    TokenBucket(int capacity, Duration window) {
+    public TokenBucket(int capacity, Duration window) {
         this.capacity = capacity;
         this.nanosPerToken = (double) window.toNanos() / capacity;
         this.tokens = capacity;
@@ -43,7 +54,7 @@ final class TokenBucket {
      *
      * @return số nano giây phải chờ tới token tiếp theo, hoặc 0 nếu lấy được
      */
-    synchronized long tryConsume() {
+    public synchronized long tryConsume() {
         refill();
         if (tokens >= 1) {
             tokens -= 1;
@@ -58,7 +69,7 @@ final class TokenBucket {
      * <p>Đây là điều kiện để dọn: một gáo đầy y hệt một gáo chưa từng tồn tại,
      * nên bỏ nó đi không làm mất thông tin nào.
      */
-    synchronized boolean isFull() {
+    public synchronized boolean isFull() {
         refill();
         return tokens >= capacity;
     }
