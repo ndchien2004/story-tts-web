@@ -136,6 +136,72 @@ public class ChapterEventStream {
     }
 
     /**
+     * Báo cho những ai đang mở một chương vừa bị gỡ.
+     *
+     * <h3>Vì sao gửi xong thì đóng luôn kết nối</h3>
+     * Với {@link ChapterContentUpdated}, chương vẫn còn và vẫn có thể đổi lần
+     * nữa, nên kết nối ở lại. Ở đây thì không: chương đã biến mất khỏi cơ sở dữ
+     * liệu, nên luồng này sẽ không bao giờ có gì khác để nói về nó. Giữ nó mở là
+     * giữ một chỗ trong trần {@link #MAX_SUBSCRIBERS} cho một chương không tồn
+     * tại, tới tận mười lăm phút sau.
+     *
+     * <p>{@code complete()} chứ không {@code completeWithError()}: lời báo đã đi
+     * tới nơi trọn vẹn, phần còn lại là dọn dẹp. Trình duyệt sẽ tự mở lại kết
+     * nối sau một lần đóng sạch — đó là hành vi mặc định của {@code EventSource}
+     * — nên bên nhận có trách nhiệm tự đóng khi nhận được khung này. Nó có làm
+     * việc ấy: xem {@code useChapterUpdates}. Không làm được thì cái giá chỉ là
+     * một kết nối vô ích tới một chương đã chết, không phải một vòng lặp.
+     *
+     * <p>Thứ tự bắt buộc là gửi trước, đóng sau. Đóng trước thì khung tin không
+     * bao giờ rời khỏi máy chủ, và người đang nghe dở sẽ ngồi lại trên một trang
+     * đọc một chương không còn tồn tại — đúng cái tình huống mà cả sự kiện này
+     * sinh ra để chấm dứt.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onContentDeleted(ContentDeleted event) {
+        String type = event.wholeStory() ? "STORY_DELETED" : "CHAPTER_DELETED";
+
+        for (Long chapterId : event.chapterIds()) {
+            Set<SseEmitter> listeners = byChapter.get(chapterId);
+            if (listeners == null || listeners.isEmpty()) {
+                // Trường hợp thường gặp nhất khi xóa cả một truyện dài: hàng
+                // trăm chương không có ai đang mở. Một lần tra bản đồ, không tốn
+                // gì thêm.
+                continue;
+            }
+
+            log.info("Báo chương {} đã bị gỡ ({}) cho {} trình duyệt",
+                    chapterId, type, listeners.size());
+
+            for (SseEmitter emitter : listeners) {
+                try {
+                    emitter.send(SseEmitter.event()
+                            .name("content-deleted")
+                            .data(new ContentDeletedPayload(
+                                    type, chapterId, event.storyId(), event.refunded())));
+                    emitter.complete();
+                } catch (IOException | IllegalStateException ex) {
+                    // Trình duyệt đã đi khỏi mà máy chủ chưa kịp biết. Không phải
+                    // lỗi đáng báo, chỉ là một kết nối cần dọn — và ở đây nó cũng
+                    // là kết cục mong muốn.
+                    log.debug("Không gửi được lời báo gỡ tới một kết nối của chương {}", chapterId);
+                } finally {
+                    // Bỏ sổ ngay tại đây thay vì đợi callback onCompletion mà
+                    // complete() ở trên sẽ kích hoạt.
+                    //
+                    // Callback ấy do vùng chứa servlet gọi, và nó *sẽ* tới —
+                    // nhưng "sẽ tới" không phải là "đã tới": tới lúc đó bộ đếm
+                    // vẫn tính những kết nối này vào trần MAX_SUBSCRIBERS. Gọi
+                    // thẳng thì sổ sách đúng ngay tại dòng này, không phụ thuộc
+                    // vào nhịp của vùng chứa. remove() bỏ qua lần gọi thứ hai,
+                    // nên callback tới sau không trừ bộ đếm lần nữa.
+                    remove(chapterId, emitter);
+                }
+            }
+        }
+    }
+
+    /**
      * Nhịp tim giữ kết nối qua các lớp proxy.
      *
      * <p>Render đóng một kết nối im lặng quá lâu, và một kết nối bị đóng sau lưng
@@ -183,5 +249,23 @@ public class ChapterEventStream {
      * {@link ChapterContentUpdated}.
      */
     public record ChapterUpdatedPayload(String type, Long chapterId, Long storyId, int contentVersion) {
+    }
+
+    /**
+     * Khung tin báo nội dung đã bị gỡ.
+     *
+     * <p>{@code type} là {@code CHAPTER_DELETED} hoặc {@code STORY_DELETED}, và
+     * sự khác nhau ấy quyết định trang đọc còn chỗ nào để đưa người ta về hay
+     * không: chương mất thì danh sách chương vẫn còn, cả truyện mất thì không.
+     *
+     * <p>{@code refunded} nói rằng <b>có người</b> được hoàn Xu, không nói người
+     * nhận khung tin này có phải một trong số đó không. Luồng SSE là đường công
+     * khai — nó không đòi đăng nhập, vì nó không mang gì riêng tư — nên nó không
+     * biết mình đang nói với ai. Trang đọc dùng cờ này để nói một câu có điều
+     * kiện ("nếu bạn đã mua chương này…") thay vì một lời khẳng định mà nó không
+     * có cơ sở để đưa ra. Số dư thật thì vẫn nằm ở ví, sau lớp xác thực.
+     */
+    public record ContentDeletedPayload(String type, Long chapterId, Long storyId,
+                                        boolean refunded) {
     }
 }

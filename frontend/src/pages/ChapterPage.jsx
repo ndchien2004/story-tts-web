@@ -6,6 +6,10 @@ import useBgm from "../audio/useBgm";
 import useTranscript from "../audio/useTranscript";
 import useKaraoke from "../audio/karaoke/useKaraoke";
 import AudioPlayer from "../components/AudioPlayer";
+import ContentRemovedNotice, {
+  isContentGone,
+  UNKNOWN_DELETION,
+} from "../components/ContentRemovedNotice";
 import KaraokeText from "../components/KaraokeText";
 import LockedGate from "../components/LockedGate";
 import PurchaseReceipt from "../components/PurchaseReceipt";
@@ -75,6 +79,11 @@ export default function ChapterPage() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Chương đã bị gỡ *trước khi* người đọc tới. Tách khỏi `error` vì nó không
+  // phải một sự cố: nó là một câu trả lời dứt khoát, và nó có màn hình riêng
+  // thay cho dải đỏ vô nghĩa "Không tìm thấy chương với id = 41".
+  const [removedOnArrival, setRemovedOnArrival] = useState(false);
+
   // Chương bán lẻ bằng Xu: giá, số dư và phần còn thiếu, lấy từ chính lần bị từ
   // chối. Null nghĩa là chương này không nằm sau một cái giá nào.
   const [purchase, setPurchase] = useState(null);
@@ -110,11 +119,29 @@ export default function ChapterPage() {
     contentVersion: chapter?.contentVersion,
   });
 
-  // Tells us the moment an admin rewrites the chapter under the reader.
-  const { staleVersion, dismiss: dismissUpdate } = useChapterUpdates(
+  // Tells us the moment an admin rewrites — or removes — the chapter under the
+  // reader. Two events on one stream; see the hook for why they stay apart.
+  const { staleVersion, dismiss: dismissUpdate, deletion } = useChapterUpdates(
     chapter ? chapterId : null,
     chapter?.contentVersion,
   );
+
+  /*
+   * Bản sao của `deletion` để những hàm gọi lại đọc, thay vì phụ thuộc vào nó.
+   *
+   * Đưa `deletion` thẳng vào danh sách phụ thuộc của `savePosition` thì hàm ấy
+   * đổi danh tính đúng lúc nội dung bị gỡ — và hiệu ứng "ghi lại chỗ nghe dở khi
+   * rời trang" nhận `savePosition` làm phụ thuộc, nên nó chạy phần dọn dẹp của
+   * mình ngay tại đó. Phần dọn dẹp ấy ghi tiến độ, bằng bản cũ của hàm, tức là
+   * bản chưa biết chương đã bị gỡ: đúng một request cho một chương không còn tồn
+   * tại, ngay tại thời điểm mà tất cả những dòng này tồn tại để ngăn nó.
+   *
+   * Một ref không đổi danh tính, nên chuỗi ấy không bao giờ bắt đầu.
+   */
+  const deletionRef = useRef(null);
+  useEffect(() => {
+    deletionRef.current = deletion;
+  }, [deletion]);
 
   // Refreshed after each generation, since producing one spends a daily go.
   const { status: ttsStatus, refresh: refreshTtsStatus } = useTtsStatus();
@@ -137,6 +164,7 @@ export default function ChapterPage() {
     setChapter(null);
     setLockError(null);
     setError(null);
+    setRemovedOnArrival(false);
     setPurchase(null);
     setPurchaseError(null);
     // Nút mở khóa cố ý không tự tắt trạng thái chờ khi thành công: nó sống tới
@@ -165,6 +193,11 @@ export default function ChapterPage() {
               0,
             ),
           });
+        } else if (isContentGone(err)) {
+          // Chương đã bị gỡ trước khi người này mở link — từ một trang cũ, một
+          // dấu trang, hay một chương vừa biến mất trong lúc họ bấm. Cùng một
+          // sự thật với lời báo tức thời, nên cùng một màn hình.
+          setRemovedOnArrival(true);
         } else {
           setError(err.message);
         }
@@ -283,6 +316,13 @@ export default function ChapterPage() {
   const savePosition = useCallback(
     (seconds) => {
       if (!isAuthenticated) return;
+      // Chương đã bị gỡ thì không còn chỗ nào để ghi tiến độ vào. Lời gọi ấy
+      // vốn nuốt lỗi nên nó vô hại, nhưng nó vẫn là một request gửi đi cho một
+      // thứ không tồn tại — và nó sẽ bắn đúng vào lúc trang đang dừng lại, kể cả
+      // từ chính lệnh tạm dừng bên dưới (bộ trộn báo `onPause` về đây).
+      //
+      // Đọc qua ref chứ không qua phụ thuộc — xem ghi chú ở `deletionRef`.
+      if (deletionRef.current) return;
       progressApi
         .save(chapterId, { audioPositionSeconds: Math.floor(seconds) })
         .catch(() => {});
@@ -381,6 +421,27 @@ export default function ChapterPage() {
     });
     if (autoPlayNext) setAutoPlayNext(false);
   }, [autoPlayNext, chapter, engine, streamUrl]);
+
+  /**
+   * Nội dung vừa bị gỡ dưới tay người đang nghe: dừng tiếng ngay.
+   *
+   * <p>Cái hộp chặn ở trên che mất mọi nút bấm, nhưng che không phải là dừng —
+   * không có chỗ này thì giọng đọc của một chương đã bị gỡ vẫn tiếp tục vang
+   * sau lưng lời báo rằng nó không còn nữa, và người nghe không còn cách nào
+   * tắt nó. Đây là nửa "dừng" của yêu cầu; nửa "chặn" là cái hộp.
+   *
+   * <p>Dừng cả nhạc nền theo. Nhạc nền là của người nghe chứ không của chương,
+   * nhưng nó được bật lên để đệm cho một buổi đọc vừa chấm dứt — để nó chạy
+   * tiếp một mình dưới một hộp thoại báo tin xấu là hỏng cả hai.
+   *
+   * <p>Tạm dừng chứ không tháo bỏ đường tiếng: bộ trộn sống lâu hơn màn hình
+   * này và sẽ phục vụ chương tiếp theo người ta mở.
+   */
+  useEffect(() => {
+    if (!deletion) return;
+    engine.pause();
+    engine.pauseBgm();
+  }, [deletion, engine]);
 
   /**
    * Giữ lại chỗ nghe dở khi rời trang.
@@ -550,6 +611,23 @@ export default function ChapterPage() {
     );
   }
 
+  /*
+    Chương đã bị gỡ trước khi người này tới.
+
+    Đứng trước nhánh `error` chứ không lẫn vào nó: đây không phải một sự cố mà
+    là một câu trả lời dứt khoát, và trước đây nó hiện ra dưới dạng một dải đỏ
+    mang nguyên văn "Không tìm thấy chương với id = 41" — đúng, nhưng đọc như
+    một lỗi do người dùng gây ra, có một số id của cơ sở dữ liệu trong đó, và
+    không chỉ ra chỗ nào để đi tiếp.
+  */
+  if (removedOnArrival) {
+    return (
+      <div className="container-narrow page">
+        <ContentRemovedNotice deletion={UNKNOWN_DELETION} />
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="page">
@@ -659,6 +737,23 @@ export default function ChapterPage() {
           </Button>
         </div>
       )}
+
+      {/*
+        Nội dung vừa bị gỡ dưới tay người đang đọc.
+
+        Cùng một luồng SSE với dòng thông báo ngay trên, và cố ý trông khác hẳn
+        nó. Dải trên là một lời mời: chương vẫn còn, có bản mới, đọc lúc nào tùy
+        bạn. Cái này là một bức tường: không còn gì để đọc, nên màn hình dừng
+        lại thay vì gợi ý. Đó cũng là chỗ nội dung đã trả tiền thôi không với
+        tới được nữa.
+
+        Trang chữ và thanh nghe vẫn nằm dưới lớp phủ chứ không bị tháo khỏi cây
+        DOM. Tháo chúng đi giữa chừng sẽ hủy bộ trộn và mọi thứ móc vào nó ngay
+        trong lúc React đang dựng cái hộp này — nhiều việc hơn, và mỗi việc là
+        một chỗ hỏng mới, cho một thứ không ai nhìn thấy. Tiếng đã tắt bằng một
+        hiệu ứng ở trên, và lớp phủ chặn mọi cú bấm.
+      */}
+      {deletion && <ContentRemovedNotice deletion={deletion} asModal />}
 
       <div className="reader-grid">
         {/* Tên chương trên thanh trên là tiêu đề của chính khối chữ này, nên nó

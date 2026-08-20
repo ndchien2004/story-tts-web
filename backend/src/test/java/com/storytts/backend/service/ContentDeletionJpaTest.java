@@ -25,6 +25,8 @@ import com.storytts.backend.repository.ReadingProgressRepository;
 import com.storytts.backend.repository.StoryRepository;
 import com.storytts.backend.repository.UserRepository;
 import com.storytts.backend.repository.WalletTransactionRepository;
+import com.storytts.backend.service.realtime.ChapterContentUpdated;
+import com.storytts.backend.service.realtime.ContentDeleted;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,8 +35,11 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,6 +66,7 @@ import static org.mockito.Mockito.when;
  * {@code @OnDelete} ở {@link ReadingProgress}.
  */
 @DataJpaTest
+@RecordApplicationEvents
 @Import({ChapterService.class, StoryService.class, PublicationService.class,
         ChapterAccessService.class, AccessControlService.class,
         ChapterRefundService.class, WalletService.class})
@@ -92,6 +98,16 @@ class ContentDeletionJpaTest {
     private WalletService walletService;
     @Autowired
     private TestEntityManager entityManager;
+
+    /**
+     * Những sự kiện mà đường xóa đã phát ra.
+     *
+     * <p>Ghi lại việc *phát*, không phải việc gửi đi: người nhận thật đăng ký ở
+     * AFTER_COMMIT, mà @DataJpaTest thì luôn cuộn ngược nên mốc ấy không bao giờ
+     * tới. Việc gửi được kiểm riêng ở {@code ChapterEventStreamTest}.
+     */
+    @Autowired
+    private ApplicationEvents events;
 
     @MockitoBean
     private CurrentUserService currentUserService;
@@ -308,6 +324,99 @@ class ContentDeletionJpaTest {
         // một thao tác vốn chỉ cần một.
         verify(storedAudioCleanup).purgeStoryAfterCommit(story.getId());
         verify(storedAudioCleanup, never()).purgeChapterAfterCommit(anyLong());
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Báo cho người đang đọc                                              */
+    /* ------------------------------------------------------------------ */
+
+    /*
+     * Người đang mở dở một chương phải biết ngay khi nó biến mất, chứ không phải
+     * ở lần bấm tiếp theo. Việc gửi đi nằm ở ChapterEventStream và được kiểm
+     * riêng; ở đây kiểm phần mà chỉ đường xóa mới trả lời được: có phát sự kiện
+     * không, và nó mang đúng những gì không?
+     *
+     * Thứ dễ hỏng nhất là danh sách chương của một truyện. Nó phải được đọc
+     * TRƯỚC lệnh xóa — bên nhận chạy ở AFTER_COMMIT, và tới lúc ấy thì không còn
+     * hàng nào để tra.
+     */
+
+    @Test
+    @DisplayName("xóa chương thì phát một sự kiện mang đúng chương và truyện của nó")
+    void xoaChuongThiPhatSuKien() {
+        chapterService.delete(chapter.getId());
+
+        ContentDeleted event = onlyDeletionEvent();
+        assertThat(event.chapterIds()).containsExactly(chapter.getId());
+        assertThat(event.storyId()).isEqualTo(story.getId());
+        assertThat(event.wholeStory()).isFalse();
+        assertThat(event.refunded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("xóa truyện thì sự kiện mang theo mọi chương của nó")
+    void xoaTruyenThiSuKienMangMoiChuong() {
+        Chapter second = chapterRepository.save(Chapter.builder()
+                .story(story).title("Chương 2").content("Nội dung 2.").chapterNumber(2)
+                .accessLevel(AccessLevel.PUBLIC)
+                .publishedAt(Instant.now().minusSeconds(60))
+                .build());
+        flushAndClear();
+
+        storyService.delete(story.getId());
+
+        ContentDeleted event = onlyDeletionEvent();
+        assertThat(event.wholeStory()).isTrue();
+        assertThat(event.storyId()).isEqualTo(story.getId());
+        // Luồng SSE đánh khóa theo chương, nên thiếu một id ở đây là một người
+        // đọc ngồi lại trên một chương đã chết mà không ai báo.
+        assertThat(event.chapterIds())
+                .containsExactlyInAnyOrder(chapter.getId(), second.getId());
+    }
+
+    @Test
+    @DisplayName("có người được hoàn Xu thì sự kiện nói vậy — trang đọc dựa vào đó để nhắc về ví")
+    void suKienMangTheoCoHoanXu() {
+        buy(reader, chapter, 50L);
+        flushAndClear();
+
+        chapterService.delete(chapter.getId());
+
+        assertThat(onlyDeletionEvent().refunded()).isTrue();
+    }
+
+    @Test
+    @DisplayName("truyện không có chương nào thì không phát gì — không có ai để báo")
+    void truyenRongThiKhongPhatGi() {
+        chapterRepository.delete(chapter);
+        flushAndClear();
+
+        storyService.delete(story.getId());
+
+        assertThat(events.stream(ContentDeleted.class)).isEmpty();
+    }
+
+    /**
+     * Sự kiện xóa và sự kiện sửa nội dung là hai loại tách bạch.
+     *
+     * <p>Chúng đi chung một luồng SSE nhưng nói hai câu trái ngược nhau — "có bản
+     * mới, đọc khi nào bạn muốn" và "không còn gì để đọc". Một lần xóa mà phát
+     * kèm lời mời đọc bản mới sẽ dựng đúng cái màn hình vô nghĩa ấy lên.
+     */
+    @Test
+    @DisplayName("xóa chương không phát kèm lời báo 'nội dung đã đổi'")
+    void xoaChuongKhongPhatLoiBaoDoiNoiDung() {
+        chapterService.delete(chapter.getId());
+
+        assertThat(events.stream(ContentDeleted.class)).hasSize(1);
+        assertThat(events.stream(ChapterContentUpdated.class)).isEmpty();
+    }
+
+    /** Đúng một sự kiện xóa được phát, và đây là nó. */
+    private ContentDeleted onlyDeletionEvent() {
+        List<ContentDeleted> published = events.stream(ContentDeleted.class).toList();
+        assertThat(published).hasSize(1);
+        return published.getFirst();
     }
 
     /**

@@ -2,13 +2,29 @@ import { useCallback, useEffect, useState } from "react";
 import { chapterApi } from "../api/endpoints";
 
 /**
- * Watches a chapter for the moment an admin changes its text.
+ * Watches a chapter for the two things an admin can do to it underneath a
+ * reader: rewrite it, or remove it.
  *
  * A reader can sit on one chapter for twenty minutes without touching anything
  * — that is what listening looks like. Polling would mean a request every few
  * seconds for an event that fires once a month, so the server pushes instead,
  * over `EventSource`. Reconnection after a dropped link is the browser's job,
  * not ours.
+ *
+ * <h3>One stream, two events, two very different answers</h3>
+ * Both arrive on the same connection and both are announced only after the
+ * server's transaction commits. What they ask of the reader is opposite, and
+ * the hook keeps them apart rather than folding them into one "something
+ * changed" flag:
+ *
+ * - `staleVersion` — the text was rewritten. There is a newer version to read
+ *   *when the reader feels like it*. Nothing is taken away from them.
+ * - `deletion` — the chapter (or its whole story) is gone. There is nothing
+ *   left to read, so the page has to stop rather than offer.
+ *
+ * A single flag would force every caller to branch on a field to find out which
+ * of those two it was told, and a caller that forgot would invite someone to
+ * "load the new version" of a chapter that no longer exists.
  *
  * <h3>Comparing versions rather than counting events</h3>
  * The hook reports `staleVersion` — the version the server says exists — only
@@ -28,8 +44,12 @@ import { chapterApi } from "../api/endpoints";
  *
  * @param chapterId      chapter being read, or null to watch nothing
  * @param currentVersion `contentVersion` of the text currently on screen
- * @returns {{staleVersion: number|null, dismiss: () => void}} `staleVersion` is
- *          null while the page is up to date
+ * @returns {{staleVersion: number|null, dismiss: () => void,
+ *            deletion: {wholeStory: boolean, storyId: number|null,
+ *                       refunded: boolean}|null}}
+ *          `staleVersion` is null while the page is up to date; `deletion` is
+ *          null until the content is removed, and never goes back to null —
+ *          deletion is not something that gets undone
  */
 export default function useChapterUpdates(chapterId, currentVersion) {
   // Holds what the server last announced, not "is there an update" — the
@@ -38,8 +58,14 @@ export default function useChapterUpdates(chapterId, currentVersion) {
   // notice that they did.
   const [announcedVersion, setAnnouncedVersion] = useState(null);
 
+  // Deliberately has no dismiss. A stale version is information the reader may
+  // act on later; a deleted chapter is a dead end, and letting them wave it
+  // away would put them back on a reader with no content behind it.
+  const [deletion, setDeletion] = useState(null);
+
   useEffect(() => {
     setAnnouncedVersion(null);
+    setDeletion(null);
   }, [chapterId]);
 
   useEffect(() => {
@@ -72,7 +98,31 @@ export default function useChapterUpdates(chapterId, currentVersion) {
       }
     };
 
+    const onDeleted = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (Number(payload.chapterId) !== Number(chapterId)) return;
+
+        setDeletion({
+          wholeStory: payload.type === "STORY_DELETED",
+          // Only worth keeping when the story outlived the chapter: it is what
+          // the "back to the chapter list" link is built from.
+          storyId: payload.type === "STORY_DELETED" ? null : (payload.storyId ?? null),
+          refunded: Boolean(payload.refunded),
+        });
+
+        // Close from this side rather than letting the server's `complete()`
+        // stand on its own. A cleanly closed EventSource reconnects by design,
+        // and reconnecting to a chapter that no longer exists would hold an
+        // open request for something that can never have news again.
+        source.close();
+      } catch {
+        // A frame we cannot read is not worth breaking the page over.
+      }
+    };
+
     source.addEventListener("chapter-updated", onUpdate);
+    source.addEventListener("content-deleted", onDeleted);
 
     // Deliberately no error handler beyond closing nothing: EventSource
     // reconnects on its own, and surfacing a transient network blip as an error
@@ -80,6 +130,7 @@ export default function useChapterUpdates(chapterId, currentVersion) {
     // for.
     return () => {
       source.removeEventListener("chapter-updated", onUpdate);
+      source.removeEventListener("content-deleted", onDeleted);
       source.close();
     };
   }, [chapterId]);
@@ -87,9 +138,14 @@ export default function useChapterUpdates(chapterId, currentVersion) {
   const dismiss = useCallback(() => setAnnouncedVersion(null), []);
 
   const staleVersion =
-    announcedVersion !== null && currentVersion != null && announcedVersion > currentVersion
+    announcedVersion !== null &&
+    currentVersion != null &&
+    announcedVersion > currentVersion &&
+    // A chapter that has been removed cannot also be offering a newer version.
+    // Both banners on screen at once would be the page arguing with itself.
+    deletion === null
       ? announcedVersion
       : null;
 
-  return { staleVersion, dismiss };
+  return { staleVersion, dismiss, deletion };
 }

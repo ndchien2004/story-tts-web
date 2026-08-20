@@ -112,6 +112,21 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
     long countByStoryId(Long storyId);
 
     /**
+     * Id của mọi chương thuộc một truyện.
+     *
+     * <p>Chỉ dùng ở đường xóa truyện, và chỉ để soạn sự kiện báo cho những trình
+     * duyệt đang mở dở một chương của nó — xem {@code ContentDeleted}. Phải chạy
+     * <b>trước</b> lệnh xóa: sau khi commit thì không còn hàng nào để hỏi, và bên
+     * nhận sự kiện chạy sau đúng mốc ấy.
+     *
+     * <p>Lấy id chứ không lấy cả thực thể: một truyện nghìn chương thì đây là
+     * một truy vấn trên chỉ mục trả về nghìn con số, còn cách kia là nạp nghìn
+     * hàng đầy đủ kèm nội dung chương vào bộ nhớ để rồi vứt đi.
+     */
+    @Query("SELECT c.id FROM Chapter c WHERE c.story.id = :storyId")
+    List<Long> findIdsByStoryId(@Param("storyId") Long storyId);
+
+    /**
      * Đếm số chương cho nhiều truyện trong MỘT truy vấn.
      * Tránh N+1 query khi render danh sách truyện (yêu cầu tải dưới 2 giây
      */

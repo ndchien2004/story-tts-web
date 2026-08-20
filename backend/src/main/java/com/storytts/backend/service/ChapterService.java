@@ -20,6 +20,7 @@ import com.storytts.backend.repository.ChapterRepository;
 import com.storytts.backend.repository.ReadingProgressRepository;
 import com.storytts.backend.repository.StoryRepository;
 import com.storytts.backend.service.realtime.ChapterContentUpdated;
+import com.storytts.backend.service.realtime.ContentDeleted;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -328,11 +329,20 @@ public class ChapterService {
         Chapter chapter = chapterRepository.findById(chapterId)
                 .orElseThrow(() -> ResourceNotFoundException.of("chương", chapterId));
 
+        Long storyId = chapter.getStory().getId();
+
         ChapterRefundService.Refunds refunds = chapterRefundService.refundChapter(chapterId);
         storedAudioCleanup.purgeChapterAfterCommit(chapterId);
         chapterRepository.delete(chapter);
 
-        log.info("Admin xóa chương {} của truyện {}", chapterId, chapter.getStory().getId());
+        // Người đang đọc dở chương này cần biết ngay, không phải ở lần bấm tiếp
+        // theo. Cùng đường đi với lời báo "nội dung đã đổi" ngay phía trên, và
+        // cùng một điều kiện: người nhận đăng ký ở AFTER_COMMIT, nên lần xóa nào
+        // cuộn ngược thì không lời báo nào đi ra. Xem ChapterEventStream.
+        eventPublisher.publishEvent(
+                ContentDeleted.chapter(chapterId, storyId, refunds.any()));
+
+        log.info("Admin xóa chương {} của truyện {}", chapterId, storyId);
         return new ContentDeletionDto(refunds.coins(), refunds.readers());
     }
 

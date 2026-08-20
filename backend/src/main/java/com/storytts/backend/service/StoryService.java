@@ -17,8 +17,10 @@ import com.storytts.backend.repository.ChapterRepository;
 import com.storytts.backend.repository.ReadingProgressRepository;
 import com.storytts.backend.repository.StoryRepository;
 import com.storytts.backend.repository.ViewEventRepository;
+import com.storytts.backend.service.realtime.ContentDeleted;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -63,6 +65,7 @@ public class StoryService {
     private final RatingCommentService ratingCommentService;
     private final FavoriteService favoriteService;
     private final ReadingProgressService readingProgressService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * Danh sách truyện: tìm theo tên/tác giả, lọc thể loại, sắp xếp.
@@ -237,11 +240,24 @@ public class StoryService {
         Story story = findEntity(storyId);
         log.info("Admin xóa truyện id={} title='{}'", storyId, story.getTitle());
 
+        // Đọc trước lệnh xóa, cùng lý do với việc hoàn Xu ngay dưới: sau khi
+        // truyện biến mất thì không còn chương nào để hỏi, mà bên nhận sự kiện
+        // chạy ở AFTER_COMMIT — tức là sau đúng mốc ấy.
+        List<Long> chapterIds = chapterRepository.findIdsByStoryId(storyId);
+
         // Hoàn Xu trước khi có gì bị xóa: sau lệnh xóa thì không còn dòng quyền
         // nào để biết ai đã trả bao nhiêu cho chương nào.
         ChapterRefundService.Refunds refunds = chapterRefundService.refundStory(storyId);
         storedAudioCleanup.purgeStoryAfterCommit(storyId);
         storyRepository.delete(story);
+
+        // Xóa truyện là xóa mọi chương của nó, nên mọi người đang đọc dở bất kỳ
+        // chương nào đều phải biết ngay. Luồng SSE đánh khóa theo chương, đó là
+        // lý do sự kiện mang theo cả danh sách — xem ContentDeleted.
+        if (!chapterIds.isEmpty()) {
+            eventPublisher.publishEvent(
+                    ContentDeleted.story(storyId, chapterIds, refunds.any()));
+        }
 
         return new ContentDeletionDto(refunds.coins(), refunds.readers());
     }
