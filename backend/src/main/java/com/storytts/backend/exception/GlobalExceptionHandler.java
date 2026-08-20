@@ -85,6 +85,27 @@ public class GlobalExceptionHandler {
                                 "affordable", false)));
     }
 
+    /**
+     * Gift code bị từ chối → 404 khi không có mã ấy, 409 cho mọi lý do còn lại.
+     *
+     * <p>Chia hai vì hai chuyện khác nhau: "không tồn tại" nói về việc gõ sai,
+     * còn bốn lý do kia nói về <i>trạng thái</i> của một mã có thật — nó chưa tới
+     * giờ, đã hết hạn, đã tắt, hoặc đã hết lượt. 409 là mã trạng thái cho đúng
+     * loại xung đột ấy, và nó cũng giữ cho "đã đổi rồi" trả lời giống nhau dù đến
+     * từ đường kiểm tra trước hay từ ràng buộc duy nhất.
+     *
+     * <p>Không ghi log ở mức cảnh báo: gõ nhầm một mã hết hạn là chuyện bình
+     * thường của người dùng, không phải sự cố của máy chủ.
+     */
+    @ExceptionHandler(GiftCodeException.class)
+    public ResponseEntity<ApiErrorResponse> handleGiftCode(GiftCodeException ex,
+                                                           HttpServletRequest request) {
+        HttpStatus status = ex.getReason() == GiftCodeException.Reason.INVALID_GIFT_CODE
+                ? HttpStatus.NOT_FOUND
+                : HttpStatus.CONFLICT;
+        return build(status, ex.code(), ex.getMessage(), request);
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleNotFound(ResourceNotFoundException ex,
                                                            HttpServletRequest request) {

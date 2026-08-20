@@ -16,6 +16,16 @@ public enum WalletReferenceType {
     /** Chương vừa được mở — dòng {@code PURCHASE_CHAPTER} trỏ về đây. */
     CHAPTER,
 
+    /**
+     * Gift code vừa được đổi — dòng {@code GIFT_CODE} trỏ về đây.
+     *
+     * <p>Trỏ tới cái mã chứ không tới dòng đổi mã, dù cả hai đều truy ngược
+     * được: câu hỏi thật sự hay được hỏi là "đợt mã này đã phát ra bao nhiêu
+     * Xu", và nó là một lần quét chỉ mục
+     * {@code (reference_type, reference_id)} khi id ở đây là id của mã.
+     */
+    GIFT_CODE,
+
     /** Người quản trị đã thao tác — {@code reference_id} là id của người ấy. */
     ADMIN
 }
