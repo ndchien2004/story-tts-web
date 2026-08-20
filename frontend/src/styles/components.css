@@ -925,8 +925,13 @@ body:has(.reader) .navbar {
 /* Account menu                                                        */
 /* ------------------------------------------------------------------ */
 
+/* `inline-flex` chứ không phải khối thường, cùng lý do với `.notif` bên dưới:
+   một hộp mức dòng bên trong lớp bọc dạng khối kéo theo khoảng chừa cho đuôi
+   chữ, và khoảng ấy đẩy cả cụm lệch khỏi hàng của thanh điều hướng. */
 .user-menu {
   position: relative;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Frameless, like the links: the picture is already a shape of its own and the
@@ -1150,19 +1155,41 @@ body:has(.reader) .navbar {
  * ba mở ra từ thanh điều hướng, sau menu thể loại và menu tài khoản, và ba cái
  * hộp mở ra ba kiểu khác nhau sẽ khiến thanh ấy trông như ba trang web ghép lại.
  */
+/*
+ * `inline-flex`, không phải khối thường — và đây là phần sửa một lỗi có thật.
+ *
+ * Cái nút bên trong là `inline-flex`, tức là một hộp mức dòng. Trong một lớp
+ * bọc dạng khối, nó nằm trên đường cơ sở của dòng chữ, nên bên dưới nó còn một
+ * khoảng chừa cho phần đuôi chữ (g, y, p). Khoảng ấy làm lớp bọc cao hơn cái
+ * nút, và vì `.navbar-actions` căn giữa theo trục dọc, cả cụm bị đẩy **lên**
+ * một hai pixel so với nút đổi giao diện — thứ vốn là con của flex nên không
+ * dính đường cơ sở nào.
+ *
+ * Cho lớp bọc thành flex là bỏ hẳn dòng chữ vô hình ấy đi. Cùng một sửa chữa
+ * cho `.user-menu` ở trên, vì nó có đúng hình dạng đó.
+ */
 .notif {
   position: relative;
+  display: inline-flex;
+  align-items: center;
 }
 
-/* Cùng dáng frameless với nút tài khoản bên cạnh: cả hai là biểu tượng đứng
-   một mình trong một thanh vốn đã có đủ đường viền. */
+/*
+ * Cùng một cái ô với `.theme-toggle` đứng ngay bên cạnh: 2.25rem vuông, hình
+ * 1.15rem, nét 2.2 (đặt trong `NotificationBell`).
+ *
+ * Ba con số ấy đi cùng nhau. Ô nhỏ hơn thì tâm hình lệch khỏi tâm hàng; hình
+ * to hơn hoặc nét mảnh hơn thì hai biểu tượng cạnh nhau trông như thuộc hai bộ
+ * khác nhau — mắt bắt được điều đó ngay cả khi không chỉ ra được khác ở đâu.
+ */
 .notif-trigger {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 2.25rem;
   padding: 0;
   color: var(--ink-muted);
   cursor: pointer;
@@ -1178,8 +1205,8 @@ body:has(.reader) .navbar {
 }
 
 .notif-trigger svg {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 /*
@@ -1189,17 +1216,21 @@ body:has(.reader) .navbar {
  * đặt bên cạnh thì nó đẩy mọi thứ trong thanh dịch đi mỗi khi có tin mới, còn
  * đặt đè lên thì nó không tốn bề rộng nào. Vòng viền lấy màu nền trang nên con
  * số đọc được cả khi nó chồng lên nét vẽ của cái chuông.
+ *
+ * Nằm gọn **bên trong** ô 2.25rem chứ không thò ra ngoài: thò ra thì nó là thứ
+ * duy nhất trong cả thanh vượt khỏi hàng, và trên màn hình hẹp nó chạm mép
+ * thanh. Ô rộng hơn hình 1.15rem đúng một khoảng đủ để nó có chỗ ngồi.
  */
 .notif-badge {
   position: absolute;
-  top: -0.15rem;
-  right: -0.2rem;
-  min-width: 1.05rem;
-  height: 1.05rem;
-  padding: 0 0.22rem;
-  font-size: 0.62rem;
+  top: 0.1rem;
+  right: 0.1rem;
+  min-width: 0.95rem;
+  height: 0.95rem;
+  padding: 0 0.2rem;
+  font-size: 0.58rem;
   font-weight: 700;
-  line-height: 1.05rem;
+  line-height: 0.95rem;
   text-align: center;
   color: var(--on-tint);
   background: var(--accent);
@@ -1261,7 +1292,20 @@ body:has(.reader) .navbar {
   text-align: center;
 }
 
+/*
+ * Một dòng, và ba con số quyết định cách nó xếp.
+ *
+ * Chúng là biến chứ không phải giá trị chép tay vì cùng thành phần này chạy ở
+ * hai chỗ: trong tấm bảng chật của cái chuông, và trên trang lịch sử rộng rãi.
+ * Chỗ thứ hai chỉ cần nới `--notif-pad`, và cột chữ lẫn chỗ thụt của hàng nút
+ * tự đi theo — thay vì ba phép cộng chép tay có thể lệch nhau.
+ */
 .notif-item {
+  --notif-pad: var(--space-3);
+  --notif-icon-size: 1.1rem;
+  /* Cột mà phần chữ bắt đầu: lề trái + ô biểu tượng + khoảng cách. */
+  --notif-gutter: calc(var(--notif-pad) * 2 + var(--notif-icon-size));
+
   border-bottom: var(--outline-width) solid var(--outline);
 }
 
@@ -1285,9 +1329,9 @@ body:has(.reader) .navbar {
 .notif-item-body {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-3);
+  gap: var(--notif-pad);
   width: 100%;
-  padding: var(--space-3);
+  padding: var(--notif-pad);
   font: inherit;
   text-align: left;
   color: inherit;
@@ -1300,10 +1344,35 @@ body:has(.reader) .navbar {
   background: var(--bg-alt);
 }
 
+/*
+ * Ô biểu tượng, cỡ cố định.
+ *
+ * Cỡ cố định chứ không để hình tự quyết: phần chữ bên phải phải bắt đầu ở cùng
+ * một cột trên mọi dòng, và các nút ở hàng dưới thụt vào đúng cột ấy — xem
+ * `--notif-gutter`. Một hình rộng hơn hình kia là một dòng chữ so le.
+ *
+ * Màu nhạt như phần chữ phụ, không phải như tiêu đề: nó là dấu hiệu để lướt
+ * qua, không phải thứ đáng đọc trước tiêu đề của chính dòng nó đứng.
+ */
 .notif-item-icon {
   flex: 0 0 auto;
-  font-size: 1.1rem;
-  line-height: 1.4;
+  display: grid;
+  place-items: center;
+  width: var(--notif-icon-size);
+  height: var(--notif-icon-size);
+  /* Hạ xuống ngang thân dòng tiêu đề thay vì ngang mép trên của nó. */
+  margin-top: 0.08rem;
+  color: var(--ink-muted);
+}
+
+.notif-item-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Dòng chưa đọc: biểu tượng đậm lên cùng với phần còn lại của dòng. */
+.notif-item.unread .notif-item-icon {
+  color: var(--ink);
 }
 
 .notif-item-text {
@@ -1347,12 +1416,13 @@ body:has(.reader) .navbar {
 }
 
 /* Các nút thụt vào ngang với phần chữ, không ngang với biểu tượng: mắt đọc
-   chúng như phần tiếp theo của câu chứ như một hàng mới. */
+   chúng như phần tiếp theo của câu chứ như một hàng mới. Chỗ thụt tính từ
+   `--notif-gutter` nên nó khớp với cột chữ ở cả hai cỡ dòng. */
 .notif-item-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  padding: 0 var(--space-3) var(--space-3) 3rem;
+  padding: 0 var(--notif-pad) var(--notif-pad) var(--notif-gutter);
 }
 
 .notif-item-action {
@@ -1393,11 +1463,41 @@ body:has(.reader) .navbar {
  * Dùng lại nguyên bộ `.notif-item` chứ không dựng một kiểu thứ hai: một thông
  * báo trông giống nhau ở cả hai chỗ là điều kiện để người đọc nhận ra nó là
  * cùng một thứ, và hai bộ kiểu cho một thành phần là hai bộ sẽ trôi khỏi nhau.
+ *
+ * Khác đúng hai chỗ, và cả hai đến từ việc ở đây có sẵn chỗ mà tấm bảng kia
+ * không có: lề rộng hơn, và câu chữ hiện đủ thay vì cắt ở ba dòng.
  */
 .notif-history {
   border: var(--outline-width) solid var(--outline);
   border-radius: var(--radius);
   overflow: hidden;
+}
+
+.notif-history .notif-item {
+  --notif-pad: var(--space-4);
+}
+
+/*
+ * Không cắt dòng ở đây.
+ *
+ * Trong tấm bảng của cái chuông, cắt ở ba dòng là để một tin dài của quản trị
+ * viên không đẩy chín dòng còn lại ra khỏi tầm nhìn. Trên trang này thì không
+ * còn lý do ấy — người ta mở nó ra chính là để đọc — và một câu bị cắt ở đây
+ * sẽ không còn chỗ nào khác để đọc cho hết.
+ */
+.notif-history .notif-item-message {
+  display: block;
+  overflow: visible;
+  font-size: 0.9rem;
+}
+
+/* Hàng đầu trang lịch sử: còn bao nhiêu chưa đọc, và cách dọn hết. */
+.notif-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
 /*

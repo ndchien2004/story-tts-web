@@ -1,24 +1,40 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNotifications } from "../context/notification-context";
-import { iconFor, primaryAction, secondaryAction } from "../utils/notificationRoutes";
+import { primaryAction, secondaryAction } from "../utils/notificationRoutes";
 import { relativeTime } from "../utils/format";
+import NotificationIcon from "./NotificationIcon";
 
-const BellIcon = ({ hasUnread }) => (
+/*
+ * Cái chuông trên thanh điều hướng.
+ *
+ * <h3>Vẽ để cân với cái nút bên cạnh, không phải để cân trong khung của nó</h3>
+ * Nét vẽ ở đây dùng chung ba con số với `ThemeToggle`: `strokeWidth` 2.2, ô
+ * 2.25rem, hình 1.15rem — xem `.notif-trigger` trong `components.css`. Hai
+ * biểu tượng đứng cạnh nhau mà khác độ dày nét thì đọc ra ngay, kể cả khi
+ * không nói được là khác ở đâu.
+ *
+ * <p>Hình được đặt sao cho hộp bao của nó nằm giữa theo chiều dọc: vòm chuông
+ * ở y≈5.4, đáy quai ở y≈18.5, tâm rơi đúng vào 12. Bản đầu vẽ vòm từ y≈2.4 nên
+ * cả hình nằm lệch lên trong khung — cộng với ô nhỏ hơn ô của nút đổi giao
+ * diện, nó trông như bị đẩy lên một hai pixel so với hàng.
+ *
+ * <p>Bản đầu còn đổi hướng cái quai khi có tin chưa đọc. Bỏ đi: con số ngay
+ * trên đầu chuông đã nói điều đó rõ hơn hẳn, còn một hình đổi dáng theo trạng
+ * thái là một hình phải cân lại hai lần.
+ */
+const BellIcon = () => (
   <svg
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth={2}
+    strokeWidth={2.2}
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
   >
-    <path d="M18 8.4a6 6 0 1 0-12 0c0 5.2-1.8 6.6-1.8 6.6h15.6S18 13.6 18 8.4" />
-    {/* Cái quai chỉ đung đưa khi có tin: một cái chuông tĩnh và một cái chuông
-        đang rung là hai hình khác nhau, và mắt bắt được sự khác nhau ấy trước
-        khi kịp đọc con số. */}
-    <path d={hasUnread ? "M13.7 19a2 2 0 0 1-3.4 0" : "M10.3 19a2 2 0 0 0 3.4 0"} />
+    <path d="M17.8 11.2a5.8 5.8 0 1 0-11.6 0c0 4.1-1.7 5.4-1.7 5.4h15s-1.7-1.3-1.7-5.4" />
+    <path d="M9.9 16.9a2 2 0 0 0 3.9 0" />
   </svg>
 );
 
@@ -94,7 +110,7 @@ export default function NotificationBell({ onNavigate }) {
         aria-label={unread > 0 ? `Thông báo, ${unread} chưa đọc` : "Thông báo"}
         onClick={() => setOpen((value) => !value)}
       >
-        <BellIcon hasUnread={unread > 0} />
+        <BellIcon />
         {unread > 0 && (
           /* aria-hidden vì aria-label của nút đã nói con số thành câu; để cả
              hai thì trình đọc màn hình đọc số hai lần. */
@@ -155,6 +171,11 @@ export default function NotificationBell({ onNavigate }) {
  * Xem `notificationRoutes.js`. Chỗ này chỉ nhận về một đường dẫn đã được ghép từ
  * hằng cộng một số, nên không có chuỗi nào từ cơ sở dữ liệu trở thành `to`.
  *
+ * <h3>Biểu tượng là nét vẽ một màu</h3>
+ * Xem `NotificationIcon`. Nó lấy màu từ `currentColor` nên nó đi theo sắc độ
+ * của cả dòng — nhạt khi đã đọc, đậm khi chưa — thay vì là một mảng màu đứng
+ * ngoài quy tắc "chỉ lỗi mới có màu" của cả trang.
+ *
  * <h3>Bấm vào là đã đọc, kể cả khi không đi đâu</h3>
  * Một thông báo không có nút nào — tin chung của quản trị viên — vẫn phải đánh
  * dấu được. Nên chính cái dòng là nút, và hai liên kết bên trong chỉ chồng thêm
@@ -178,8 +199,8 @@ function NotificationRow({ notification, onOpen, onNavigate }) {
         onClick={handleOpen}
         aria-label={read ? notification.title : `${notification.title} (chưa đọc)`}
       >
-        <span className="notif-item-icon" aria-hidden="true">
-          {iconFor(notification.type)}
+        <span className="notif-item-icon">
+          <NotificationIcon type={notification.type} />
         </span>
 
         <span className="notif-item-text">

@@ -488,14 +488,22 @@ function NotificationHistory() {
 
   return (
     <div className="stack" style={{ gap: "var(--space-4)" }}>
-      {unread > 0 && (
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <span className="muted">{unread} thông báo chưa đọc</span>
+      {/* Hàng đầu luôn có mặt, kể cả khi không còn gì chưa đọc: một hàng lúc
+          có lúc không sẽ làm cả danh sách bên dưới nhảy lên nhảy xuống mỗi lần
+          đọc nốt thông báo cuối. Chỉ cái nút là biến mất, vì lúc ấy nó không
+          còn việc gì để làm. */}
+      <div className="notif-history-head">
+        <span className="muted">
+          {unread > 0
+            ? `${unread} thông báo chưa đọc`
+            : `${inbox.totalElements} thông báo · đã đọc hết`}
+        </span>
+        {unread > 0 && (
           <Button size="sm" onClick={handleMarkAll}>
             Đánh dấu tất cả đã đọc
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="notif-history">
         {inbox.content.map((notification) => (

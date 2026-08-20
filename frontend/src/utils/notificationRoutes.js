@@ -59,27 +59,6 @@ const ENTITY_LABELS = {
 };
 
 /**
- * Ký hiệu đứng đầu mỗi dòng.
- *
- * Emoji chứ không phải một bộ SVG mới: mỗi loại thông báo cần đúng một hình
- * nhỏ, và dựng thêm bảy biểu tượng vector cho việc ấy là trả giá cho thứ mà một
- * ký tự đã làm xong. Chúng cũng đọc được bởi trình đọc màn hình — nhưng ở đây
- * bị ẩn khỏi nó, vì tiêu đề ngay bên cạnh đã nói đủ.
- */
-const TYPE_ICONS = {
-  VIP_GRANTED: "🎉",
-  CHAPTER_DELETED: "📕",
-  CHAPTER_UPDATED: "📖",
-  PAYMENT: "💳",
-  REFUND: "↩️",
-  SYSTEM: "⚙️",
-  ANNOUNCEMENT: "📣",
-};
-
-/** Loại chưa có trong bảng vẫn phải hiện ra được — xem `iconFor`. */
-const FALLBACK_ICON = "🔔";
-
-/**
  * Nút chính của một thông báo, hoặc null nếu nó không dẫn đi đâu.
  *
  * @param notification một phần tử của hộp thư, đúng như máy chủ trả về
@@ -112,17 +91,6 @@ export function secondaryAction(notification) {
   if (primary && primary.to === to) return null;
 
   return { to, label: ENTITY_LABELS[notification.relatedEntityType] ?? "Xem chi tiết" };
-}
-
-/**
- * Ký hiệu của một loại.
- *
- * Loại lạ — một phiên bản máy chủ mới hơn trình duyệt đang mở — rơi về cái
- * chuông chung thay vì hiện ra một ô trống. Đây chính là chỗ khiến việc thêm
- * loại mới ở backend không làm hỏng những tab đang mở.
- */
-export function iconFor(type) {
-  return TYPE_ICONS[type] ?? FALLBACK_ICON;
 }
 
 /** Chỉ nhận số; mọi thứ khác thành null. Xem ghi chú về an toàn ở đầu tệp. */
