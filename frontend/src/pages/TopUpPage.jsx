@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { walletApi } from "../api/endpoints";
+import GiftCodeRedeem from "../components/GiftCodeRedeem";
 import { useAuth } from "../context/auth-context";
 import { Alert, Button, ButtonLink, EmptyState, Spinner } from "../components/ui";
 import { formatCoins, formatVnd } from "../utils/format";
@@ -141,6 +142,20 @@ export default function TopUpPage() {
             </article>
           ))}
         </div>
+      )}
+
+      {/* Dưới bảng giá chứ không trên: người tới đây phần lớn là để nạp tiền,
+          còn ô này dành cho một thiểu số đang cầm sẵn một cái mã. Chỉ hiện với
+          tài khoản đã đăng nhập, vì Xu phải vào ví của một người cụ thể — và
+          máy chủ cũng từ chối request không mang token. */}
+      {isAuthenticated && (
+        <section className="upgrade-notes">
+          <h2 className="label">Có gift code?</h2>
+          <p className="muted">
+            Nhập mã để nhận Xu ngay. Mỗi tài khoản đổi được một mã đúng một lần.
+          </p>
+          <GiftCodeRedeem onRedeemed={(result) => setBalance(result.balance)} />
+        </section>
       )}
 
       <section className="upgrade-notes">

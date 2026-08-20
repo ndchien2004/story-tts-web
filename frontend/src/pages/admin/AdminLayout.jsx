@@ -192,9 +192,13 @@ const NAV_GROUPS = [
       // Tab riêng chứ không gộp vào mục VIP: hai thứ bán được khác nhau về bản
       // chất — một cái bán thời gian, một cái bán lượt mở — và gộp lại thì mỗi
       // lần sửa bảng giá phải đoán xem mình đang ở bảng nào.
+      //
+      // Gift code ở chung mục này chứ không thành mục thứ ba, cùng cách chia với
+      // mục VIP ở trên: bán Xu và phát Xu là hai mặt của một việc, nên chúng là
+      // hai tab bên trong màn hình chứ không phải hai chỗ trong thanh bên.
       {
         to: "/admin/xu/goi",
-        label: "Gói nạp Xu",
+        label: "Gói nạp Xu & gift code",
         Icon: CoinIcon,
         isActive: (pathname) => pathname.startsWith("/admin/xu"),
       },

@@ -457,6 +457,69 @@ export const adminApi = {
   /** `amount` có dấu: dương là cộng, âm là trừ. Lý do đi vào sổ cái người dùng đọc được. */
   adjustWallet: (userId, amount, reason) =>
     client.post(`/api/admin/wallet/users/${userId}/adjust`, { amount, reason }).then((r) => r.data),
+
+  /* ---------------- Gift code ---------------- */
+
+  /**
+   * `params` nhận keyword, status, from, to, sort, direction, page, size.
+   *
+   * `status` là một trong ACTIVE / SCHEDULED / EXPIRED / DISABLED / EXHAUSTED.
+   * Nó được máy chủ suy ra từ các cột chứ không lưu, nên bộ lọc và cái nhãn trên
+   * từng dòng luôn nói cùng một chuyện — xem `GiftCode.status`.
+   */
+  giftCodes: (params) => client.get("/api/admin/gift-codes", { params }).then((r) => r.data),
+
+  giftCodeStats: () => client.get("/api/admin/gift-codes/stats").then((r) => r.data),
+
+  /** Một mã kèm số lượt đổi và tổng Xu đã phát, cả hai đọc từ sổ đổi mã. */
+  giftCode: (id) => client.get(`/api/admin/gift-codes/${id}`).then((r) => r.data),
+
+  /** `params` nhận page và size. Phân trang bắt buộc: một mã sự kiện có thể có hàng nghìn lượt. */
+  giftCodeRedemptions: (id, params) =>
+    client.get(`/api/admin/gift-codes/${id}/redemptions`, { params }).then((r) => r.data),
+
+  createGiftCode: (payload) =>
+    client.post("/api/admin/gift-codes", payload).then((r) => r.data),
+
+  updateGiftCode: (id, payload) =>
+    client.put(`/api/admin/gift-codes/${id}`, payload).then((r) => r.data),
+
+  setGiftCodeEnabled: (id, enabled) =>
+    client.patch(`/api/admin/gift-codes/${id}/enabled`, { enabled }).then((r) => r.data),
+
+  /** Máy chủ từ chối nếu đã có người đổi — lịch sử Xu của họ trỏ về mã này. */
+  deleteGiftCode: (id) => client.delete(`/api/admin/gift-codes/${id}`).then((r) => r.data),
+
+  /**
+   * Một mã ngẫu nhiên chưa tồn tại, để điền sẵn vào ô.
+   *
+   * Sinh ở máy chủ chứ không ở trình duyệt: chỉ máy chủ trả lời được "chưa tồn
+   * tại", và một mã đoán được là Xu mất.
+   */
+  generateGiftCode: (prefix) =>
+    client.post("/api/admin/gift-codes/generate", { prefix }).then((r) => r.data.code),
+};
+
+/* ------------------------------------------------------------------ */
+/* Gift code (reader side)                                             */
+/* ------------------------------------------------------------------ */
+
+export const giftCodeApi = {
+  /**
+   * Đổi một mã lấy Xu.
+   *
+   * Gửi lên đúng một trường, và đó là điểm chính: người nhận là tài khoản của
+   * token, số Xu lấy từ mã trong cơ sở dữ liệu. Không có `userId` và không có
+   * `amount` để mà quên kiểm.
+   *
+   * Trả về `{ code, coinAmount, balance }`, trong đó `balance` là số dư *sau*
+   * khi cộng — đọc bên trong cùng giao dịch, nên trang gọi không cần hỏi lại ví.
+   *
+   * Thất bại là một `ApiError` có `code` riêng: INVALID_GIFT_CODE,
+   * GIFT_CODE_NOT_STARTED, GIFT_CODE_EXPIRED, GIFT_CODE_DISABLED,
+   * GIFT_CODE_EXHAUSTED, GIFT_CODE_ALREADY_REDEEMED.
+   */
+  redeem: (code) => client.post("/api/gift-codes/redeem", { code }).then((r) => r.data),
 };
 
 /* ------------------------------------------------------------------ */

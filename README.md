@@ -54,6 +54,7 @@ nhau bằng JWT.
 | Gợi ý | Truyện cùng thể loại với những truyện đã đọc, hiện ở trang chủ |
 | Tương tác | Chấm sao, bình luận, xóa bình luận của chính mình |
 | Nâng cấp VIP | Mua gói VIP theo tháng, **thanh toán thật qua PayOS** (chuyển khoản / QR); hạn được cộng dồn khi gia hạn sớm |
+| Gift code | Nhập mã để nhận Xu, ngay cạnh số dư ở trang tài khoản và dưới bảng giá ở trang nạp Xu. Mã không phân biệt hoa thường; **mỗi tài khoản đổi một mã đúng một lần**, và số Xu luôn lấy từ mã trong cơ sở dữ liệu chứ không từ thứ trình duyệt gửi lên |
 
 ### Quản trị viên
 
@@ -69,6 +70,7 @@ nhau bằng JWT.
 | Thành viên | Cấp/thu hồi VIP vĩnh viễn, khóa/mở tài khoản, nâng/hạ quyền quản trị |
 | Gói VIP & thanh toán | Tự đặt gói bán ra (số tháng và giá tùy ý), bật/tắt bán; xem mọi đơn và đối chiếu lại đơn còn treo với cổng thanh toán |
 | Gói Xu & ví | Đặt bảng giá gói nạp Xu, cộng/trừ Xu tay cho một tài khoản, xem sổ cái từng giao dịch |
+| Gift code | Tab thứ hai của mục Gói nạp Xu. Tạo mã (gõ tay hoặc **sinh ngẫu nhiên**) với số Xu, giờ bắt đầu, giờ hết hạn và số lượt tối đa — bỏ trống ba thứ sau nghĩa là hiệu lực ngay / không hết hạn / không giới hạn. Bảng có tìm kiếm, lọc theo tình trạng và theo ngày tạo, sắp theo cột, phân trang; mở một mã ra xem danh sách tài khoản đã đổi và tổng Xu đã phát. Mã đã có người đổi thì **tắt được nhưng không xóa được** — lịch sử Xu của họ trỏ về nó |
 
 ---
 
@@ -508,7 +510,7 @@ khoảnh khắc khởi động lại không để lại hậu quả nào tích l
 | Nội dung | `stories` · `chapters` · `audio_files` · `audio_transcripts` · `genres` · `authors` · `bgm_tracks` |
 | Người dùng | `users` · `password_reset_tokens` · `pending_registrations` |
 | Đọc & tương tác | `reading_progress` · `favorites` · `ratings_comments` · `view_events` |
-| Tiền | `wallets` · `wallet_transactions` · `coin_packages` · `chapter_entitlements` · `vip_plans` · `payment_orders` |
+| Tiền | `wallets` · `wallet_transactions` · `coin_packages` · `chapter_entitlements` · `vip_plans` · `payment_orders` · `gift_codes` · `gift_code_redemptions` |
 | Chi phí AI | `ai_usage` |
 
 `view_events` ghi mỗi lượt mở chương để đọc hoặc nghe. Cần bảng riêng vì `view_count` chỉ là số cộng
@@ -522,6 +524,16 @@ bảng này tồn tại.
 `wallets` giữ số dư còn `wallet_transactions` giải thích nó, và cả hai luôn được ghi trong cùng một
 giao dịch: số dư một mình không trả lời được "vì sao lại là con số này", còn sổ cái một mình thì mỗi
 lần mở chương là một lần cộng dồn cả lịch sử.
+
+`gift_codes` không có cột trạng thái. SCHEDULED / ACTIVE / EXPIRED / DISABLED / EXHAUSTED đều suy ra
+được từ `enabled`, `start_at`, `end_at`, `max_uses` và `used_count` — cùng lập luận với `published_at`
+ở đoạn dưới. Ba lời hứa của tính năng này đều do cơ sở dữ liệu giữ chứ không do mã nguồn kiểm tra:
+`UNIQUE(code)` trên giá trị đã viết hoa khiến `summer2026` và `SUMMER2026` là một mã;
+`UNIQUE(gift_code_id, user_id)` khiến bấm "Đổi mã" mười lần cùng lúc chỉ cộng Xu một lần; và
+`UPDATE ... WHERE used_count < max_uses` — một câu lệnh vừa kiểm vừa ghi, giống hệt phép trừ Xu ở
+`wallets` — khiến bốn mươi người tranh một mã còn mười lượt thì đúng mười người nhận được. Cả ba nằm
+trong một giao dịch cùng với việc cộng Xu, nên số dư ví, sổ cái Xu, sổ đổi mã và cột đếm lượt không
+lệch nhau được.
 
 `stories.published_at` và `chapters.published_at` là một cột mang ba trạng thái — null là nháp, mốc ở
 tương lai là hẹn giờ, mốc đã qua là đã đăng. Không có tác vụ định kỳ nào đi đổi trạng thái: "tới giờ

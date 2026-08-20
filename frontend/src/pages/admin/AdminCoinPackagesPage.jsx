@@ -8,6 +8,19 @@ import { formatCoins, formatVnd } from "../../utils/format";
 import { Alert, Badge, Button, EmptyState, Spinner } from "../../components/ui";
 
 /**
+ * Hai màn hình của cùng một chủ đề: những cách Xu vào ví người đọc.
+ *
+ * <p>Ở đây thay vì thành hai mục riêng trong thanh bên, cùng lý do với
+ * {@code VIP_TABS}: chúng là hai mặt của một việc — một cái bán Xu, một cái phát
+ * Xu — nên chúng đứng cạnh nhau ở đầu phần việc chúng thuộc về, chứ không giả vờ
+ * là hai phần rời nhau của bảng quản trị.
+ */
+export const XU_TABS = [
+  { to: "/admin/xu/goi", label: "Gói nạp Xu" },
+  { to: "/admin/xu/ma-qua-tang", label: "Gift code" },
+];
+
+/**
  * Bảng giá gói nạp Xu.
  *
  * <p>Cùng hình dạng với trang gói VIP, và cố ý giống: hai bảng giá làm cùng một
@@ -70,6 +83,7 @@ export default function AdminCoinPackagesPage() {
     <AdminPage
       crumbs={[{ label: "Gói nạp Xu" }]}
       title="Gói nạp Xu"
+      tabs={XU_TABS}
       actions={
         <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
           Thêm gói

@@ -35,6 +35,7 @@ import AdminUsersPage from "./pages/admin/AdminUsersPage";
 import AdminVipPage from "./pages/admin/AdminVipPage";
 import AdminVipPlansPage from "./pages/admin/AdminVipPlansPage";
 import AdminCoinPackagesPage from "./pages/admin/AdminCoinPackagesPage";
+import AdminGiftCodesPage from "./pages/admin/AdminGiftCodesPage";
 
 export default function App() {
   return (
@@ -122,6 +123,10 @@ export default function App() {
                 {/* The price list on its own page — see AdminVipPlansPage. */}
                 <Route path="vip/goi" element={<AdminVipPlansPage />} />
                 <Route path="xu/goi" element={<AdminCoinPackagesPage />} />
+                {/* Cùng nhánh với gói nạp: hai cách Xu vào ví người đọc — một
+                    cái bán, một cái phát. Mirrored by hasRole('ADMIN') on the
+                    server, which guards all of /api/admin. */}
+                <Route path="xu/ma-qua-tang" element={<AdminGiftCodesPage />} />
                 <Route path="truyen/moi" element={<AdminStoryFormPage />} />
                 <Route path="truyen/:storyId" element={<AdminStoryFormPage />} />
                 <Route path="truyen/:storyId/chuong" element={<AdminChaptersPage />} />

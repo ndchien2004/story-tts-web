@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { favoriteApi, progressApi, vipApi, walletApi } from "../api/endpoints";
 import Avatar from "../components/Avatar";
 import AvatarUpload from "../components/AvatarUpload";
+import GiftCodeRedeem from "../components/GiftCodeRedeem";
 import Pagination from "../components/Pagination";
 import StoryCard from "../components/StoryCard";
 import { useAuth } from "../context/auth-context";
@@ -173,6 +174,11 @@ export default function AccountPage() {
           <ButtonLink to="/nap-xu" size="sm" block>
             Nạp Xu
           </ButtonLink>
+
+          {/* Ngay dưới số dư, vì đó là chỗ người vừa nhận được một cái mã sẽ
+              nhìn tới. Số dư ở trên tự cập nhật khi đổi xong, nên không có
+              khoảnh khắc nào nó nói một con số cũ. */}
+          <GiftCodeRedeem compact onRedeemed={(result) => setBalance(result.balance)} />
         </div>
 
         {!isAdmin && !isVip && (

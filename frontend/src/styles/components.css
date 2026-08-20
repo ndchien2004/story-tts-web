@@ -4608,3 +4608,91 @@ body:has(.reader) .navbar {
     height: 2.55rem;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Đổi gift code                                                       */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Ô đổi mã của người đọc, dùng ở hai chỗ: cạnh số dư trong trang tài khoản, và
+ * dưới bảng giá ở trang nạp Xu. Một bộ quy tắc cho cả hai, vì hai chỗ ấy là hai
+ * câu trả lời cho cùng một ý định.
+ */
+.gift-redeem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Ô nhập và cái nút trên một dòng: chúng là một thao tác, không phải hai. Ô co
+   giãn còn nút giữ nguyên bề ngang của chữ trong nó. */
+.gift-redeem-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.gift-redeem-row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.gift-redeem-row > .nb-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/*
+ * Bản thu gọn, cho cột hồ sơ hẹp.
+ *
+ * Ở bề ngang ấy ô nhập và nút cạnh nhau chỉ còn vài ký tự mỗi bên, nên chúng
+ * xuống dòng — và cái nút chiếm trọn bề ngang thay vì nép vào một góc, để nó
+ * vẫn là thứ rõ ràng cần bấm tiếp theo.
+ */
+.gift-redeem-compact {
+  padding-top: var(--space-3);
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+.gift-redeem-compact .gift-redeem-row {
+  flex-wrap: wrap;
+}
+
+.gift-redeem-compact .gift-redeem-row > .nb-btn {
+  flex: 1 1 100%;
+}
+
+/* Mã là chuỗi ký tự phải gõ lại cho đúng, nên nó được font đều nét: chữ O và số
+   0 phân biệt được, và mắt đếm được ký tự. Cùng lý do ở bảng quản trị. */
+.gift-redeem input,
+.gift-code-cell {
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------------ */
+/* Nội dung đã bị gỡ                                                   */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Thân hộp thoại báo chương/truyện vừa bị gỡ.
+ *
+ * Xếp dọc và căn giữa, mượn đúng ngôn ngữ của `.locked-gate` — màn hình chặn
+ * vốn có của trang đọc. Hai thứ nói cùng một loại câu ("bạn không đọc tiếp được,
+ * và đây là vì sao"), nên chúng không nên trông như hai tính năng khác nhau.
+ *
+ * Nhãn nhỏ ở trên dùng lại `.locked-gate-tag` nguyên vẹn thay vì có bản sao
+ * riêng: một cái nhãn thứ hai trông gần giống là cách chắc chắn để hai chỗ lệch
+ * nhau sau lần sửa màu tiếp theo.
+ */
+.content-removed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+
+.content-removed p {
+  margin: 0;
+}

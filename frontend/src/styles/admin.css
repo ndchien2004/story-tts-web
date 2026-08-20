@@ -1733,3 +1733,96 @@ a.admin-dash-todo:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/*
+ * Ô mã trong biểu mẫu gift code, kèm nút sinh mã.
+ *
+ * Cùng hình dạng với `.gift-redeem-row` bên trang người đọc, và cố ý giống: cả
+ * hai là một ô nhập mã kèm đúng một hành động đi liền với nó.
+ */
+.gift-code-input-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.gift-code-input-row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.gift-code-input-row > .nb-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.gift-code-input-row input {
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  letter-spacing: 0.04em;
+}
+
+/*
+ * Hàng bộ lọc thứ hai của bảng gift code.
+ *
+ * `.admin-panel-head` vốn giữ mọi thứ trên một dòng; ở đây có một nhóm chip
+ * cộng một khoảng ngày, và trên màn hình hẹp chúng phải xuống dòng thay vì ép
+ * nhau bẹp lại.
+ */
+.admin-panel-head-wrap {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
+/* Khoảng ngày tạo. Đẩy về cuối hàng, cạnh ô tìm kiếm ở hàng trên nó. */
+.admin-daterange {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+
+/* Đủ rộng cho một ngày và cái nút lịch của trình duyệt, không rộng hơn. */
+.admin-date-input {
+  width: auto;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.85rem;
+}
+
+/*
+ * Tiêu đề cột bấm được.
+ *
+ * Là một <button> thật nằm trong <th>, không phải một <th> gắn onClick: bàn
+ * phím tab tới được, Enter và Space hoạt động sẵn, và trình đọc màn hình gọi nó
+ * là một cái nút. Phần tạo dáng chỉ có việc gỡ bỏ vẻ ngoài mặc định của nút để
+ * nó trông vẫn là một tiêu đề cột.
+ */
+.admin-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.admin-sort-btn:hover .admin-sort-arrow {
+  opacity: 1;
+}
+
+/* Mũi tên của cột không được sắp mờ đi: nó là lời mời bấm, không phải một
+   thông tin. Cột đang sắp thì nó rõ hẳn, vì lúc ấy nó *là* thông tin. */
+.admin-sort-arrow {
+  font-size: 0.7em;
+  opacity: 0.45;
+}
+
+th[aria-sort="ascending"] .admin-sort-arrow,
+th[aria-sort="descending"] .admin-sort-arrow {
+  opacity: 1;
+}
