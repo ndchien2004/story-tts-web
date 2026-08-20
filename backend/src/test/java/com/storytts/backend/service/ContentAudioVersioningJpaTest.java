@@ -13,6 +13,7 @@ import com.storytts.backend.repository.StoryRepository;
 import com.storytts.backend.service.tts.SynthesisResult;
 import com.storytts.backend.service.tts.TranscriptCodec;
 import com.storytts.backend.service.tts.TtsGenerationRecords;
+import com.storytts.backend.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,7 +51,7 @@ import static org.mockito.Mockito.when;
 // ObjectMapper đi kèm vì TranscriptCodec cần nó, mà @DataJpaTest chỉ dựng phần
 // bền vững của ứng dụng nên không có sẵn bean ấy.
 @Import({ChapterService.class, PublicationService.class, AiUsageService.class,
-        TtsGenerationRecords.class, TranscriptCodec.class,
+        TtsGenerationRecords.class, TranscriptCodec.class, NotificationService.class,
         com.fasterxml.jackson.databind.ObjectMapper.class})
 class ContentAudioVersioningJpaTest {
 

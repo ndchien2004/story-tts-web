@@ -50,3 +50,32 @@ export function formatDateTime(value) {
     minute: "2-digit",
   });
 }
+
+/**
+ * "2 phút trước", "5 giờ trước", "12/08/2026".
+ *
+ * Thông báo được đọc theo thứ tự thời gian, và câu hỏi duy nhất người ta đặt ra
+ * với cái mốc ấy là "mới hay cũ". Một dấu thời gian đầy đủ trả lời câu ấy chậm
+ * hơn hẳn: mắt phải trừ hai con số trước khi biết được điều mình muốn biết.
+ *
+ * Chuyển sang ngày tháng đầy đủ từ mốc một tuần. Qua đó thì "9 ngày trước"
+ * không còn nói được gì mà một ngày cụ thể chưa nói, và nó bắt đầu sai lệch:
+ * không ai nghĩ theo đơn vị "27 ngày trước".
+ */
+export function relativeTime(value) {
+  if (!value) return "";
+
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return "";
+
+  const seconds = Math.round((Date.now() - then) / 1000);
+
+  // Đồng hồ của máy người dùng có thể chạy trước máy chủ vài giây. "Vừa xong"
+  // là câu đúng cho cả hai phía của mốc 0; "trong -3 giây nữa" thì không.
+  if (seconds < 60) return "Vừa xong";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} phút trước`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} giờ trước`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)} ngày trước`;
+
+  return formatDate(value);
+}

@@ -1,13 +1,16 @@
 package com.storytts.backend.service;
 
+import com.storytts.backend.domain.NotificationType;
 import com.storytts.backend.domain.Role;
 import com.storytts.backend.domain.User;
 import com.storytts.backend.domain.PaymentOrder;
 import com.storytts.backend.domain.PaymentOrderKind;
 import com.storytts.backend.domain.PaymentOrderStatus;
 import com.storytts.backend.domain.VipPlan;
+import com.storytts.backend.repository.NotificationRepository;
 import com.storytts.backend.repository.UserRepository;
 import com.storytts.backend.repository.PaymentOrderRepository;
+import com.storytts.backend.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * trên một cơ sở dữ liệu biết đếm số dòng đã sửa.
  */
 @DataJpaTest
-@Import({PaymentOrderLedger.class, WalletService.class})
+@Import({PaymentOrderLedger.class, WalletService.class, NotificationService.class})
 class PaymentOrderLedgerJpaTest {
 
     @Autowired
@@ -48,6 +51,8 @@ class PaymentOrderLedgerJpaTest {
     private TestEntityManager entityManager;
     @Autowired
     private WalletService walletService;
+    @Autowired
+    private NotificationRepository notificationRepository;
 
     /** Chỉ đường mở đơn cần tới, và bài này dựng sẵn đơn chứ không đi qua đó. */
     @MockitoBean
@@ -194,6 +199,67 @@ class PaymentOrderLedgerJpaTest {
         entityManager.flush();
         entityManager.clear();
         assertThat(walletService.balanceOf(buyerId)).isZero();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Hộp thư của người mua                                               */
+    /* ------------------------------------------------------------------ */
+
+    @Test
+    @DisplayName("đơn VIP thanh toán xong: một lời chúc mừng kèm hạn thật từ máy chủ")
+    void aPaidVipOrderCongratulates() {
+        ledger.recordWebhook(orderCode, true);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(notificationRepository.findAll()).singleElement().satisfies(sent -> {
+            assertThat(sent.getUser().getId()).isEqualTo(buyerId);
+            assertThat(sent.getType()).isEqualTo(NotificationType.VIP_GRANTED);
+            // Hạn lấy từ chính phép cộng vừa chạy, không phải từ thân request.
+            assertThat(sent.getMessage()).contains("có hiệu lực tới");
+            assertThat(sent.getMetadata()).contains("vipUntil");
+        });
+    }
+
+    @Test
+    @DisplayName("đơn nạp Xu thanh toán xong: một thông báo kèm đúng số Xu vừa cộng")
+    void aPaidCoinOrderIsAnnounced() {
+        Long coinOrderCode = openCoinOrder(550L);
+
+        ledger.recordWebhook(coinOrderCode, true);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(notificationRepository.findAll()).singleElement().satisfies(sent -> {
+            assertThat(sent.getType()).isEqualTo(NotificationType.PAYMENT);
+            assertThat(sent.getMessage()).contains("550 Xu");
+        });
+    }
+
+    @Test
+    @DisplayName("webhook gửi lại ba lần chỉ để lại một thông báo")
+    void aRepeatedWebhookAnnouncesOnce() {
+        ledger.recordWebhook(orderCode, true);
+        ledger.recordWebhook(orderCode, true);
+        ledger.recordWebhook(orderCode, true);
+        entityManager.flush();
+        entityManager.clear();
+
+        // Câu UPDATE có điều kiện đã chặn lượt giao hàng thứ hai; khóa sự kiện
+        // `payment:<id đơn>` là chốt chặn thứ hai, ở tầng cơ sở dữ liệu.
+        assertThat(notificationRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("đơn chưa trả tiền thì không có thông báo nào")
+    void anUnpaidOrderSaysNothing() {
+        ledger.recordWebhook(orderCode, false);
+        entityManager.flush();
+        entityManager.clear();
+
+        // Không có gì được giao thì cũng không có gì để báo — và một lời báo
+        // "thanh toán thành công" cho một đơn chưa trả tiền là kiểu sai tệ nhất.
+        assertThat(notificationRepository.count()).isZero();
     }
 
     /** Dựng thẳng một đơn nạp Xu đang chờ, không đi qua đường tạo đơn có gọi PayOS. */

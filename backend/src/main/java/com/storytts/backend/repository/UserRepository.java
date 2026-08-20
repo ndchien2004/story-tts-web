@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -55,6 +56,19 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** Dùng để chặn việc hạ quyền người quản trị cuối cùng. */
     long countByRole(Role role);
+
+    /**
+     * Id của mọi tài khoản còn dùng được — người nhận của một tin loan chung.
+     *
+     * <p>Chỉ id, không nạp thực thể: bên gọi chỉ cần khóa ngoại để ghi thông báo,
+     * và nạp cả bảng {@code users} lên bộ nhớ để lấy một cột là trả giá cho thứ
+     * không ai đọc.
+     *
+     * <p>Bỏ tài khoản đã bị khóa: họ không đăng nhập được nên hộp thư của họ
+     * không có ai mở, và ghi vào đó chỉ làm bảng dài thêm.
+     */
+    @Query("SELECT u.id FROM User u WHERE u.enabled = TRUE ORDER BY u.id")
+    List<Long> findEnabledIds();
 
     /**
      * Ghi đường dẫn ảnh đại diện mới.

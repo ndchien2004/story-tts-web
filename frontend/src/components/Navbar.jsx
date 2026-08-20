@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { LOGO_MARK } from "../brand";
 import { useAuth } from "../context/auth-context";
 import GenreMenu from "./GenreMenu";
+import NotificationBell from "./NotificationBell";
 import ThemeToggle from "./ThemeToggle";
 import UserMenu from "./UserMenu";
 import { ButtonLink } from "./ui";
@@ -76,7 +77,15 @@ export default function Navbar() {
           <ThemeToggle />
 
           {isAuthenticated ? (
-            <UserMenu onNavigate={closeMenu} />
+            /* The bell sits immediately left of the avatar, and only for
+               someone signed in: a notification belongs to an account, so
+               there is nothing for it to count otherwise. It stays in the bar
+               at every width — like the theme switch and the account button,
+               it is needed often and costs almost no room. */
+            <>
+              <NotificationBell onNavigate={closeMenu} />
+              <UserMenu onNavigate={closeMenu} />
+            </>
           ) : (
             /* One entry point, not two look-alike buttons side by side. The
                login page carries the link to registration, and so does the

@@ -55,6 +55,7 @@ nhau bằng JWT.
 | Tương tác | Chấm sao, bình luận, xóa bình luận của chính mình |
 | Nâng cấp VIP | Mua gói VIP theo tháng, **thanh toán thật qua PayOS** (chuyển khoản / QR); hạn được cộng dồn khi gia hạn sớm |
 | Gift code | Nhập mã để nhận Xu, ngay cạnh số dư ở trang tài khoản và dưới bảng giá ở trang nạp Xu. Mã không phân biệt hoa thường; **mỗi tài khoản đổi một mã đúng một lần**, và số Xu luôn lấy từ mã trong cơ sở dữ liệu chứ không từ thứ trình duyệt gửi lên |
+| Thông báo | Cái chuông cạnh ảnh đại diện, kèm số chưa đọc. Được cấp VIP, thanh toán xong, chương đã mua bị gỡ (kèm **đúng số Xu đã hoàn**), chương đã mua được sửa, tin chung của quản trị viên — tất cả vào một hộp thư có phân trang trong trang tài khoản. Thông báo **được ghi vào cơ sở dữ liệu trong cùng giao dịch với việc nó nói về**, nên người đang offline vẫn thấy khi đăng nhập lại; luồng SSE chỉ để nó tới ngay. Đọc ở tab này thì tab kia và điện thoại cùng tài khoản tự cập nhật theo |
 
 ### Quản trị viên
 
@@ -67,7 +68,8 @@ nhau bằng JWT.
 | Thể loại & tác giả | CRUD, kèm số truyện của từng mục; chặn xóa mục còn truyện đang dùng |
 | Nhạc nền | Tải nhạc nền lên cho người nghe chọn, đặt tên và dòng ghi công; **tạm ẩn** một bản khỏi danh sách mà vẫn giữ file, hoặc xóa hẳn |
 | Bình luận | Kiểm duyệt toàn bộ bình luận của mọi truyện, tìm kiếm và xóa |
-| Thành viên | Cấp/thu hồi VIP vĩnh viễn, khóa/mở tài khoản, nâng/hạ quyền quản trị |
+| Thành viên | Cấp/thu hồi VIP vĩnh viễn, khóa/mở tài khoản, nâng/hạ quyền quản trị. Cấp VIP thành công thì người ấy nhận ngay một lời chúc mừng trong hộp thư — cùng giao dịch, nên một lần cấp bị cuộn ngược không để lại lời chúc nào |
+| Thông báo | Soạn tin gửi **một thành viên** (tìm theo username/email) hoặc **loan cho tất cả**. Bấm gửi hai lần cùng nội dung trong ngày chỉ tạo một thông báo mỗi người, và câu trả lời nói rõ đã ghi được bao nhiêu trên tổng số. Không có ô nhập đường dẫn: nút bấm trong thông báo dựng từ một tập ý định cố định, và nội dung luôn hiện ra dưới dạng chữ thuần |
 | Gói VIP & thanh toán | Tự đặt gói bán ra (số tháng và giá tùy ý), bật/tắt bán; xem mọi đơn và đối chiếu lại đơn còn treo với cổng thanh toán |
 | Gói Xu & ví | Đặt bảng giá gói nạp Xu, cộng/trừ Xu tay cho một tài khoản, xem sổ cái từng giao dịch |
 | Gift code | Tab thứ hai của mục Gói nạp Xu. Tạo mã (gõ tay hoặc **sinh ngẫu nhiên**) với số Xu, giờ bắt đầu, giờ hết hạn và số lượt tối đa — bỏ trống ba thứ sau nghĩa là hiệu lực ngay / không hết hạn / không giới hạn. Bảng có tìm kiếm, lọc theo tình trạng và theo ngày tạo, sắp theo cột, phân trang; mở một mã ra xem danh sách tài khoản đã đổi và tổng Xu đã phát. Mã đã có người đổi thì **tắt được nhưng không xóa được** — lịch sử Xu của họ trỏ về nó |
@@ -728,6 +730,9 @@ story-tts-web/
 │     │                  GoogleIdTokenVerifier (kiểm ID token bằng JWKS)
 │     └─ service/        Nghiệp vụ; service/tts/ cho Text-to-Speech,
 │                        service/payment/ cho PayOS (ký HMAC + gọi REST),
+│                        service/notification/ cho hộp thư người đọc,
+│                        service/realtime/ cho SSE (SseHub dùng chung cho hai luồng:
+│                        theo chương và theo người),
 │                        MailService + PasswordResetService cho quên mật khẩu
 ├─ frontend/
 │  └─ src/
@@ -735,7 +740,7 @@ story-tts-web/
 │     ├─ audio/          TypeScript: bộ trộn Web Audio (giọng đọc + nhạc nền) và
 │     │                  karaoke/ cho phần bám chữ theo giọng đọc
 │     ├─ components/     Component dùng lại
-│     ├─ context/        Auth, Theme
+│     ├─ context/        Auth, Theme, Notification (hộp thư + luồng SSE của phiên)
 │     ├─ hooks/          useChapterAudio, useDebouncedValue, useAuthProviders
 │     ├─ pages/          Trang theo route (thư mục con admin/)
 │     ├─ styles/         CSS thuần, chia theo nhóm
@@ -1152,6 +1157,7 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | GET | `/api/vip/plans` | Bảng giá các gói VIP đang bán |
 | GET | `/api/wallet/packages` | Bảng giá các gói nạp Xu đang bán |
 | POST | `/api/payments/payos/webhook` | PayOS gọi về — bảo vệ bằng chữ ký HMAC, không phải JWT |
+| GET | `/api/notifications/stream?ticket=…` | Luồng SSE thông báo cá nhân. Công khai ở tầng URL vì `EventSource` không gửi được header; danh tính đến từ cái vé, và **không có vé thì trả 401** |
 
 ### Cần đăng nhập
 
@@ -1176,6 +1182,11 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | POST | `/api/vip/orders` | Tạo đơn, trả về link thanh toán PayOS |
 | GET | `/api/vip/orders/{orderCode}` | Tra cứu đơn; đơn còn treo sẽ được hỏi lại cổng thanh toán |
 | POST | `/api/vip/orders/{orderCode}/cancel` | Hủy đơn chưa thanh toán |
+| GET | `/api/notifications` | Hộp thư của chính người gọi, mới nhất trước (`page`, `size`) |
+| GET | `/api/notifications/unread-count` | Số chưa đọc — một câu đếm trên chỉ mục, hỏi ở mỗi lần mở trang |
+| PATCH | `/api/notifications/{id}/read` | Đánh dấu một thông báo đã đọc; **id của người khác trả 404** |
+| PATCH | `/api/notifications/read-all` | Dọn sạch cái chuông |
+| POST | `/api/notifications/stream-ticket` | Vé một lần, sống 60 giây, để mở luồng SSE ở bảng trên |
 
 ### Chỉ Admin (`/api/admin/**`)
 
@@ -1209,6 +1220,7 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | POST | `/api/admin/vip/orders/{orderCode}/refresh` | Đối chiếu một đơn còn treo với PayOS |
 | GET/POST/PUT | `/api/admin/wallet/packages` | Xem và cấu hình các gói nạp Xu |
 | POST | `/api/admin/wallet/users/{id}/adjust` | Cộng/trừ Xu tay, kèm lý do vào sổ cái |
+| POST | `/api/admin/notifications` | Gửi thông báo cho một người hoặc loan cho tất cả; gửi trùng nội dung trong ngày không nhân đôi |
 | GET | `/api/admin/storage/audit` · `POST /repair` | Đối chiếu cơ sở dữ liệu với nơi lưu file |
 
 ---
@@ -1223,7 +1235,7 @@ cd backend
 Test dùng H2 in-memory nên **không cần MySQL đang chạy**, và cũng không gọi API TTS thật (mọi phụ thuộc
 bên ngoài đều được thay bằng mock).
 
-**283 bài, 27 lớp.** Những bài quan trọng nhất không kiểm "hàm này trả về đúng chưa" mà ghim một
+**425 bài, 41 lớp.** Những bài quan trọng nhất không kiểm "hàm này trả về đúng chưa" mà ghim một
 *bất biến* — thứ mà một lần refactor sau này có thể phá vỡ mà không ai nhận ra.
 
 | Lớp test | Kiểm điều gì |
@@ -1243,6 +1255,10 @@ bên ngoài đều được thay bằng mock).
 | `RegistrationServiceTest` | Bước một không ghi gì vào `users`, chỉ băm của mã được lưu, mật khẩu không bị băm chồng ở bước hai, hết lượt thử thì hủy lượt đăng ký, và bấm gửi lại quá sớm bị chặn |
 | `PasswordResetServiceTest` | Email lạ và tài khoản bị khóa không nhận được liên kết, chỉ băm của token được lưu, liên kết cũ bị vô hiệu, và một liên kết chỉ dùng được một lần |
 | `AuthServiceGoogleTest` · `AuthServiceLockedAccountTest` | Tạo tài khoản ở lần đăng nhập Google đầu tiên, ghép vào tài khoản cùng email, ưu tiên `google_id`, và tài khoản bị khóa không đăng nhập lại được bằng đường nào |
+| `NotificationJpaTest` · `AdminNotificationJpaTest` | Hộp thư trên cơ sở dữ liệu thật: cùng một sự kiện gửi hai lần chỉ để lại **một** hàng và **một** đơn vị trên cái chuông; hộp thư của người này không lọt sang người kia; **id của người khác trả 404 chứ không phải một lệnh thành công**; phân trang giữ đúng thứ tự mới-nhất-trước |
+| `ChapterRefundNotificationTest` · `ContentDeletionJpaTest` | Cộng Xu hỏng thì **không lời báo nào nói rằng đã hoàn** — kể cả khi người đầu tiên trong lô đã được cộng; ba mươi chương của một truyện gửi ba mươi dòng sổ cái nhưng đúng **một** thông báo; số Xu trong câu chữ lấy từ sổ cái, không từ giá đã hạ |
+| `VipNotificationJpaTest` · `ChapterUpdateNotificationJpaTest` | Cấp VIP thành công mới có lời chúc mừng — thao tác bị từ chối thì không; bấm cấp lần thứ hai trên người đã là VIP không chúc mừng lần nữa; sửa mỗi tiêu đề không báo ai, vì những chữ đem đi đọc không đổi |
+| `UserEventStreamTest` · `NotificationStreamTicketsTest` · `NotificationStreamAccessTest` | Mọi cửa sổ của một tài khoản cùng nhận, **cửa sổ của tài khoản khác thì không**; một tab đánh dấu đã đọc thì các tab còn lại được báo kèm số mới; vé mở luồng dùng đúng một lần và không mở được hộp thư của người khác |
 | `ContentImporterJpaTest` · `LocalMediaStorageTest` · `ByteRangeTest` | Nhập nội dung chạy lại nhiều lần an toàn, ghi file qua tên tạm rồi đổi tên nguyên tử, và phân tích header `Range` đúng cả với những dạng hiếm |
 | `BackendApplicationTests` | Toàn bộ context Spring khởi động được |
 

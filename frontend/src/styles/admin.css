@@ -1826,3 +1826,41 @@ th[aria-sort="ascending"] .admin-sort-arrow,
 th[aria-sort="descending"] .admin-sort-arrow {
   opacity: 1;
 }
+
+/*
+ * Gợi ý người nhận, ngay dưới ô tìm.
+ *
+ * Một danh sách phẳng chứ không phải một combobox: nó xuất hiện ở đúng một chỗ
+ * trong cả bảng quản trị, và dựng một thành phần chọn-có-gợi-ý đầy đủ — bàn
+ * phím, vai trò ARIA, cuộn ảo — là trả giá cho một màn hình duy nhất. Mỗi dòng
+ * là một cái nút thật, nên bàn phím vẫn đi qua được bằng Tab.
+ */
+.admin-picker {
+  display: flex;
+  flex-direction: column;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.admin-picker-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.admin-picker-item:hover,
+.admin-picker-item.active {
+  background: var(--bg-alt);
+}

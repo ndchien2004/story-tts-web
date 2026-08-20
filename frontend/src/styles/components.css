@@ -1139,6 +1139,288 @@ body:has(.reader) .navbar {
 }
 
 /* ------------------------------------------------------------------ */
+/* Notifications                                                       */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Cái chuông và hộp thư sau nó.
+ *
+ * Tấm bảng dùng lại `.user-menu-panel` nguyên vẹn — nền, viền, bóng, hoạt ảnh
+ * rơi xuống — và chỉ ghi đè bề rộng cùng cách xếp bên trong. Đây là cái hộp thứ
+ * ba mở ra từ thanh điều hướng, sau menu thể loại và menu tài khoản, và ba cái
+ * hộp mở ra ba kiểu khác nhau sẽ khiến thanh ấy trông như ba trang web ghép lại.
+ */
+.notif {
+  position: relative;
+}
+
+/* Cùng dáng frameless với nút tài khoản bên cạnh: cả hai là biểu tượng đứng
+   một mình trong một thanh vốn đã có đủ đường viền. */
+.notif-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--ink-muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-pill);
+  transition: color var(--transition);
+}
+
+.notif-trigger:hover,
+.notif-trigger.open {
+  color: var(--ink);
+}
+
+.notif-trigger svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/*
+ * Con số, ghim vào góc trên phải của cái chuông.
+ *
+ * Đúng chỗ mà `.user-menu-rank` ngồi trên ảnh đại diện, và vì cùng một lý do:
+ * đặt bên cạnh thì nó đẩy mọi thứ trong thanh dịch đi mỗi khi có tin mới, còn
+ * đặt đè lên thì nó không tốn bề rộng nào. Vòng viền lấy màu nền trang nên con
+ * số đọc được cả khi nó chồng lên nét vẽ của cái chuông.
+ */
+.notif-badge {
+  position: absolute;
+  top: -0.15rem;
+  right: -0.2rem;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.22rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.05rem;
+  text-align: center;
+  color: var(--on-tint);
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  border-radius: var(--radius-pill);
+}
+
+/* Rộng hơn menu tài khoản vì nó chở câu chữ chứ không chở nhãn; hẹp hơn menu
+   thể loại vì nó chỉ có một cột. */
+.notif-panel {
+  width: min(24rem, calc(100vw - var(--space-4) * 2));
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+/* Một liên kết chứ không phải một nút có khung: nó là hành động phụ của tấm
+   bảng, và một nút thật ở đây sẽ nặng hơn cả tiêu đề bên trái nó. */
+.notif-mark-all {
+  padding: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.notif-mark-all:hover {
+  color: var(--ink);
+}
+
+/*
+ * Trần chiều cao theo viewport, không theo một số cố định.
+ *
+ * Mười dòng trên màn hình máy tính vừa vặn; trên một điện thoại nằm ngang thì
+ * cùng mười dòng ấy cao hơn cả màn hình, và phần bị cắt là phần có các nút.
+ */
+.notif-list {
+  max-height: min(26rem, 60vh);
+  overflow-y: auto;
+}
+
+.notif-empty {
+  padding: var(--space-5) var(--space-3);
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.notif-item {
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.notif-item:last-child {
+  border-bottom: 0;
+}
+
+/*
+ * Chưa đọc: một nền nhạt, và cái chấm bên phải.
+ *
+ * Hai dấu hiệu cho cùng một trạng thái, và cố ý hai: nền phân biệt được cả
+ * mảng dòng bằng một cái liếc, còn cái chấm là thứ đọc được kể cả với người
+ * không phân biệt được hai sắc xám gần nhau.
+ */
+.notif-item.unread {
+  background: var(--accent-soft);
+}
+
+/* Cả dòng là một cái nút, vì một thông báo không có nút nào — tin chung của
+   quản trị viên — vẫn phải đánh dấu đã đọc được. */
+.notif-item-body {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.notif-item-body:hover {
+  background: var(--bg-alt);
+}
+
+.notif-item-icon {
+  flex: 0 0 auto;
+  font-size: 1.1rem;
+  line-height: 1.4;
+}
+
+.notif-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.notif-item-title {
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* Cắt ở ba dòng: đủ cho mọi câu mà backend dựng ra, và giữ cho một tin chung
+   dài dòng của quản trị viên không đẩy chín dòng còn lại ra khỏi tầm nhìn. */
+.notif-item-message {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--ink-muted);
+}
+
+.notif-item-time {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.notif-item-dot {
+  flex: 0 0 auto;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-top: 0.45rem;
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+}
+
+/* Các nút thụt vào ngang với phần chữ, không ngang với biểu tượng: mắt đọc
+   chúng như phần tiếp theo của câu chứ như một hàng mới. */
+.notif-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3) 3rem;
+}
+
+.notif-item-action {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
+  border: var(--outline-width) solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.notif-item-action:hover {
+  color: var(--on-tint);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Chân bảng: đường sang lịch sử đầy đủ. */
+.notif-all {
+  display: block;
+  padding: var(--space-3);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: center;
+  text-decoration: none;
+  color: var(--ink);
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+.notif-all:hover {
+  background: var(--bg-alt);
+}
+
+/*
+ * Cùng những dòng ấy, trên trang lịch sử đầy đủ.
+ *
+ * Dùng lại nguyên bộ `.notif-item` chứ không dựng một kiểu thứ hai: một thông
+ * báo trông giống nhau ở cả hai chỗ là điều kiện để người đọc nhận ra nó là
+ * cùng một thứ, và hai bộ kiểu cho một thành phần là hai bộ sẽ trôi khỏi nhau.
+ */
+.notif-history {
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/*
+ * Trên màn hình hẹp tấm bảng bỏ neo góc phải và trải gần hết bề rộng.
+ *
+ * Một dropdown 24rem neo phải tràn ra ngoài mép màn hình điện thoại, và phần
+ * tràn ra đúng là phần có các nút.
+ */
+@media (max-width: 560px) {
+  .notif-panel {
+    position: fixed;
+    top: calc(var(--navbar-height) + var(--space-2));
+    right: var(--space-3);
+    left: var(--space-3);
+    width: auto;
+  }
+
+  .notif-list {
+    max-height: min(30rem, 65vh);
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Story grid                                                          */
 /* ------------------------------------------------------------------ */
 

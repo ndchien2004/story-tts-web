@@ -76,6 +76,8 @@ class PaymentOrderBoundaryTest {
     private CoinPackageService coinPackageService;
     @Mock
     private WalletService walletService;
+    @Mock
+    private com.storytts.backend.service.notification.NotificationService notificationService;
 
     private PaymentOrderService service;
     private PaymentOrderLedger realLedger;
@@ -84,7 +86,8 @@ class PaymentOrderBoundaryTest {
     void setUp() {
         service = new PaymentOrderService(orderRepository, userRepository, ledger,
                 payosClient, payosProperties, currentUserService);
-        realLedger = new PaymentOrderLedger(orderRepository, userRepository, planService, coinPackageService, walletService);
+        realLedger = new PaymentOrderLedger(orderRepository, userRepository, planService,
+                coinPackageService, walletService, notificationService);
 
         when(currentUserService.currentPrincipal())
                 .thenReturn(Optional.of(new AppUserPrincipal(member())));

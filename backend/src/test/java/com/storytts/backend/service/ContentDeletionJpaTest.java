@@ -8,6 +8,10 @@ import com.storytts.backend.domain.Chapter;
 import com.storytts.backend.domain.ChapterEntitlement;
 import com.storytts.backend.domain.EntitlementSource;
 import com.storytts.backend.domain.Favorite;
+import com.storytts.backend.domain.NotificationAction;
+import com.storytts.backend.domain.NotificationEntityType;
+import com.storytts.backend.domain.NotificationPriority;
+import com.storytts.backend.domain.NotificationType;
 import com.storytts.backend.domain.RatingComment;
 import com.storytts.backend.domain.ReadingProgress;
 import com.storytts.backend.domain.Role;
@@ -19,6 +23,7 @@ import com.storytts.backend.dto.admin.ContentDeletionDto;
 import com.storytts.backend.repository.AudioFileRepository;
 import com.storytts.backend.repository.ChapterEntitlementRepository;
 import com.storytts.backend.repository.ChapterRepository;
+import com.storytts.backend.repository.NotificationRepository;
 import com.storytts.backend.repository.FavoriteRepository;
 import com.storytts.backend.repository.RatingCommentRepository;
 import com.storytts.backend.repository.ReadingProgressRepository;
@@ -27,6 +32,9 @@ import com.storytts.backend.repository.UserRepository;
 import com.storytts.backend.repository.WalletTransactionRepository;
 import com.storytts.backend.service.realtime.ChapterContentUpdated;
 import com.storytts.backend.service.realtime.ContentDeleted;
+import com.storytts.backend.service.notification.NotificationCreated;
+import com.storytts.backend.service.notification.NotificationDraft;
+import com.storytts.backend.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -69,7 +77,7 @@ import static org.mockito.Mockito.when;
 @RecordApplicationEvents
 @Import({ChapterService.class, StoryService.class, PublicationService.class,
         ChapterAccessService.class, AccessControlService.class,
-        ChapterRefundService.class, WalletService.class})
+        ChapterRefundService.class, WalletService.class, NotificationService.class})
 class ContentDeletionJpaTest {
 
     @Autowired
@@ -94,6 +102,10 @@ class ContentDeletionJpaTest {
     private ChapterEntitlementRepository entitlementRepository;
     @Autowired
     private WalletTransactionRepository transactionRepository;
+    @Autowired
+    private NotificationRepository notificationRepository;
+    @Autowired
+    private NotificationService notificationService;
     @Autowired
     private WalletService walletService;
     @Autowired
@@ -410,6 +422,135 @@ class ContentDeletionJpaTest {
 
         assertThat(events.stream(ContentDeleted.class)).hasSize(1);
         assertThat(events.stream(ChapterContentUpdated.class)).isEmpty();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Hộp thư của người mua                                               */
+    /* ------------------------------------------------------------------ */
+
+    /*
+     * Người đang mở chương được báo qua luồng SSE công khai — nhưng luồng ấy
+     * không đòi đăng nhập nên nó không biết mình đang nói với ai, và nó chỉ nói
+     * được "có người được hoàn Xu". Câu khẳng định — kèm đúng số Xu, gửi đúng
+     * người, và còn nguyên khi họ đăng nhập lại tuần sau — đi đường khác: một
+     * hàng trong `notifications`, ghi trong chính giao dịch vừa hoàn tiền.
+     */
+
+    @Test
+    @DisplayName("gỡ chương đã bán: người mua có một thông báo mang đúng số Xu vừa được hoàn")
+    void nguoiMuaNhanThongBaoKemSoXuThat() {
+        buy(reader, chapter, 50);
+        flushAndClear();
+
+        chapterService.delete(chapter.getId());
+        flushAndClear();
+
+        assertThat(notificationRepository.findAll()).singleElement().satisfies(sent -> {
+            assertThat(sent.getUser().getId()).isEqualTo(reader.getId());
+            assertThat(sent.getType()).isEqualTo(NotificationType.CHAPTER_DELETED);
+            assertThat(sent.getPriority()).isEqualTo(NotificationPriority.IMPORTANT);
+            assertThat(sent.getActionType()).isEqualTo(NotificationAction.VIEW_REFUND_HISTORY);
+            assertThat(sent.isRead()).isFalse();
+            // Số trong câu chữ phải là số của sổ cái, không phải giá hiện tại.
+            assertThat(sent.getMessage()).contains("50 Xu");
+            // Truyện vẫn còn sống, nên có một chỗ để quay về.
+            assertThat(sent.getRelatedEntityType()).isEqualTo(NotificationEntityType.STORY);
+            assertThat(sent.getRelatedEntityId()).isEqualTo(story.getId());
+        });
+    }
+
+    @Test
+    @DisplayName("số Xu trong thông báo khớp với dòng sổ cái, không khớp với giá đã hạ")
+    void thongBaoNoiTheoSoDaTraChuKhongTheoGiaMoi() {
+        buy(reader, chapter, 50);
+        chapter.setCoinPrice(20);
+        chapterRepository.saveAndFlush(chapter);
+        flushAndClear();
+
+        chapterService.delete(chapter.getId());
+        flushAndClear();
+
+        assertThat(notificationRepository.findAll().get(0).getMessage()).contains("50 Xu");
+    }
+
+    @Test
+    @DisplayName("chương không ai mua thì không sinh thông báo nào")
+    void chuongKhongAiMuaThiKhongBaoAi() {
+        chapterService.delete(chapter.getId());
+        flushAndClear();
+
+        // Quyền được cấp tay hay chương miễn phí thì không có tiền nào đổi chỗ,
+        // và một hộp thư đầy tin "chương X đã bị gỡ" là thứ không ai đọc.
+        assertThat(notificationRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("gỡ cả truyện: một người mua ba mươi chương chỉ nhận một thông báo")
+    void goCaTruyenChiBaoMotLan() {
+        Chapter second = chapterRepository.save(Chapter.builder()
+                .story(story).title("Chương 2").content("Nội dung 2.").chapterNumber(2)
+                .accessLevel(AccessLevel.MEMBER).coinPrice(30)
+                .publishedAt(Instant.now().minusSeconds(60)).build());
+
+        buy(reader, chapter, 50);
+        buy(reader, second, 30);
+        flushAndClear();
+
+        storyService.delete(story.getId());
+        flushAndClear();
+
+        // Sổ cái ghi hai dòng — nó là chứng từ. Hộp thư nói với một *người*.
+        assertThat(transactionRepository.findAll())
+                .filteredOn(row -> row.getType() == WalletTransactionType.REFUND_CHAPTER)
+                .hasSize(2);
+
+        assertThat(notificationRepository.findAll()).singleElement().satisfies(sent -> {
+            assertThat(sent.getMessage()).contains("80 Xu");
+            assertThat(sent.getMessage()).contains("2 chương");
+            // Truyện cũng đã biến mất, nên không có chỗ nào để quay về.
+            assertThat(sent.getRelatedEntityType()).isNull();
+        });
+    }
+
+    @Test
+    @DisplayName("xử lý lại cùng một lần gỡ không sinh thông báo thứ hai")
+    void xuLyLaiKhongSinhThongBaoThuHai() {
+        buy(reader, chapter, 50);
+        flushAndClear();
+
+        chapterService.delete(chapter.getId());
+        flushAndClear();
+
+        // Cùng khóa sự kiện `chapter-deleted:<chương>:<người>`. Một lượt xử lý
+        // lại — handler chạy hai lần, một lần thử lại — không được nhân đôi cả
+        // thông báo lẫn con số trên cái chuông.
+        notificationService.notify(NotificationDraft.to(reader.getId())
+                .type(NotificationType.CHAPTER_DELETED)
+                .title("Chương bạn đã mua đã bị gỡ")
+                .message("Lặp lại.")
+                .event("chapter-deleted:" + chapter.getId() + ":" + reader.getId())
+                .build());
+
+        assertThat(notificationRepository.count()).isEqualTo(1);
+        assertThat(notificationService.unreadCount(reader.getId()).unread()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("thông báo được phát ra để đẩy xuống trình duyệt, sau khi tiền đã về")
+    void thongBaoDuocPhatDeDayXuong() {
+        buy(reader, chapter, 50);
+        flushAndClear();
+
+        chapterService.delete(chapter.getId());
+        flushAndClear();
+
+        // Phát trong giao dịch, nhận ở AFTER_COMMIT: một lần xóa cuộn ngược thì
+        // không lời báo nào đi ra — xem NotificationService.
+        assertThat(events.stream(NotificationCreated.class)).singleElement()
+                .satisfies(announced -> {
+                    assertThat(announced.userId()).isEqualTo(reader.getId());
+                    assertThat(announced.unread()).isEqualTo(1);
+                });
     }
 
     /** Đúng một sự kiện xóa được phát, và đây là nó. */

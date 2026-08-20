@@ -11,6 +11,7 @@ import com.storytts.backend.exception.ResourceNotFoundException;
 import com.storytts.backend.repository.ChapterRepository;
 import com.storytts.backend.repository.StoryRepository;
 import com.storytts.backend.security.AppUserPrincipal;
+import com.storytts.backend.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,7 @@ import static org.mockito.Mockito.when;
  */
 @DataJpaTest
 @Import({ChapterService.class, PublicationService.class, ChapterAccessService.class,
-        AccessControlService.class})
+        AccessControlService.class, NotificationService.class})
 class PublicationJpaTest {
 
     @Autowired

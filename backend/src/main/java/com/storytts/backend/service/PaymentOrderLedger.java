@@ -1,6 +1,10 @@
 package com.storytts.backend.service;
 
 import com.storytts.backend.domain.CoinPackage;
+import com.storytts.backend.domain.NotificationAction;
+import com.storytts.backend.domain.NotificationEntityType;
+import com.storytts.backend.domain.NotificationPriority;
+import com.storytts.backend.domain.NotificationType;
 import com.storytts.backend.domain.User;
 import com.storytts.backend.domain.PaymentOrder;
 import com.storytts.backend.domain.PaymentOrderKind;
@@ -13,6 +17,8 @@ import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.ResourceNotFoundException;
 import com.storytts.backend.repository.UserRepository;
 import com.storytts.backend.repository.PaymentOrderRepository;
+import com.storytts.backend.service.notification.NotificationDraft;
+import com.storytts.backend.service.notification.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -20,6 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Sổ đơn thanh toán: mọi lần ghi vào {@code payment_orders} đi qua đây, mỗi lần
@@ -55,6 +63,7 @@ public class PaymentOrderLedger {
     private final VipPlanService planService;
     private final CoinPackageService coinPackageService;
     private final WalletService walletService;
+    private final NotificationService notificationService;
 
     private final SecureRandom random = new SecureRandom();
 
@@ -278,6 +287,17 @@ public class PaymentOrderLedger {
 
         log.info("Đơn {} đã thanh toán — {} được VIP tới {}",
                 order.getOrderCode(), user.getUsername(), vipUntil);
+
+        // Hạn lấy từ chính phép cộng vừa chạy ở trên, không phải từ một con số
+        // trình duyệt gửi lên: đây là thứ người mua sẽ đọc để biết mình đã mua
+        // được gì, nên nó phải đến từ cùng chỗ với sự thật.
+        notify(order, NotificationType.VIP_GRANTED, NotificationAction.VIEW_VIP,
+                "Chúc mừng, bạn đã là thành viên VIP",
+                "Đơn “%s” đã thanh toán thành công. Quyền VIP của bạn có hiệu lực tới %s."
+                        .formatted(order.getItemName(), formatExpiry(vipUntil)),
+                draft -> draft
+                        .meta("vipUntil", vipUntil.toString())
+                        .meta("months", order.getMonths()));
     }
 
     /**
@@ -303,6 +323,56 @@ public class PaymentOrderLedger {
 
         log.info("Đơn {} đã thanh toán — {} nhận {} Xu, số dư {}",
                 order.getOrderCode(), user.getUsername(), coins, balance);
+
+        // Cố ý không nhắc số dư trong câu chữ: nó đổi sau mỗi lần mở khóa một
+        // chương, nên một con số chép cứng vào hộp thư sẽ sai ngay hôm sau và
+        // trông như hệ thống đang mâu thuẫn với chính nó. Số Xu *của lần nạp
+        // này* thì không bao giờ đổi, nên nó nói được.
+        notify(order, NotificationType.PAYMENT, NotificationAction.VIEW_WALLET,
+                "Nạp Xu thành công",
+                "Đơn “%s” đã thanh toán thành công. %d Xu đã được cộng vào ví của bạn."
+                        .formatted(order.getItemName(), coins),
+                draft -> draft.meta("coins", coins));
+    }
+
+    /**
+     * Ghi một thông báo cho chủ đơn, trong cùng giao dịch với việc giao hàng.
+     *
+     * <h3>Vì sao {@code eventId} là id đơn</h3>
+     * PayOS gọi webhook nhiều lần cho cùng một đơn, và trang kết quả cũng đổ về
+     * đây. Câu UPDATE có điều kiện ở {@link #fulfil} đã giữ cho hàng chỉ được
+     * giao một lần; khóa này giữ cho lời báo cũng vậy, và nó làm điều đó bằng
+     * một ràng buộc của cơ sở dữ liệu chứ không bằng việc tin rằng nhánh trên
+     * luôn đúng.
+     */
+    private void notify(PaymentOrder order, NotificationType type, NotificationAction action,
+                        String title, String message,
+                        java.util.function.UnaryOperator<NotificationDraft> extras) {
+        NotificationDraft draft = NotificationDraft.to(order.getUser().getId())
+                .type(type)
+                .priority(NotificationPriority.IMPORTANT)
+                .title(title)
+                .message(message)
+                .action(action)
+                .about(NotificationEntityType.PAYMENT_ORDER, order.getId())
+                .meta("orderCode", order.getOrderCode())
+                .meta("amountVnd", order.getAmountVnd())
+                .event("payment:" + order.getId());
+
+        notificationService.notify(extras.apply(draft).build());
+    }
+
+    /**
+     * Hạn VIP thành câu chữ người đọc hiểu được.
+     *
+     * <p>Đổi sang giờ Việt Nam ở đây chứ không để nguyên {@code Instant}: câu này
+     * đi thẳng vào một cột {@code varchar} và sẽ không được dựng lại lần nào nữa,
+     * nên nó phải đúng ngay lúc viết. Con số máy đọc thì vẫn có, ở {@code metadata}.
+     */
+    private static String formatExpiry(Instant vipUntil) {
+        return DateTimeFormatter.ofPattern("dd/MM/yyyy")
+                .withZone(ZoneId.of("Asia/Ho_Chi_Minh"))
+                .format(vipUntil);
     }
 
     /**

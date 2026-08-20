@@ -7,13 +7,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
 import java.time.Duration;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Đường một chiều từ máy chủ tới những trình duyệt đang mở một chương.
@@ -33,6 +27,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * {@code SseEmitter} là ghi vào bộ đệm response, không phải một vòng mạng, nên
  * làm ngay tại chỗ là rẻ; đổi lại là mỗi lần gửi được bọc riêng, để một trình
  * duyệt đã chết không kéo theo lần lưu chương của Admin.
+ *
+ * <h3>Quan hệ với luồng thông báo cá nhân</h3>
+ * Phần sổ sách kết nối nằm ở {@link SseHub} và được dùng chung với
+ * {@link UserEventStream} — cùng một cơ chế thời gian thực, hai cách đánh khóa.
+ * Lớp này giữ phần riêng của nó: khóa là chương, và hai loại khung tin dưới đây.
  */
 @Component
 @Slf4j
@@ -47,22 +46,12 @@ public class ChapterEventStream {
      */
     private static final Duration EMITTER_TTL = Duration.ofMinutes(15);
 
-    /**
-     * Trần số kết nối đang mở của cả máy chủ.
-     *
-     * <p>Mỗi kết nối là một request bất đồng bộ đang treo. Servlet bất đồng bộ đã
-     * trả luồng Tomcat về rồi nên chúng không ăn vào 20 luồng ấy, nhưng vẫn tốn
-     * một socket và một chỗ trong bộ nhớ — và heap ở đây là 224MB. Chạm trần thì
-     * từ chối kết nối mới chứ không đá kết nối cũ ra: người đang đọc dở không
-     * đáng bị mất thông báo vì có người mới mở tab.
-     */
     private static final int MAX_SUBSCRIBERS = 500;
 
     /** Nhịp giữ kết nối, ngắn hơn hạn chờ của mọi proxy thường gặp. */
     private static final long HEARTBEAT_MS = 25_000L;
 
-    private final Map<Long, Set<SseEmitter>> byChapter = new ConcurrentHashMap<>();
-    private final AtomicInteger openCount = new AtomicInteger();
+    private final SseHub<Long> hub = new SseHub<>("chuong", MAX_SUBSCRIBERS, EMITTER_TTL);
 
     /**
      * Một trình duyệt bắt đầu theo dõi một chương.
@@ -71,34 +60,7 @@ public class ChapterEventStream {
      *         không có thông báo tức thời, chứ không hỏng
      */
     public SseEmitter subscribe(Long chapterId) {
-        if (openCount.get() >= MAX_SUBSCRIBERS) {
-            log.warn("Từ chối theo dõi chương {}: đã có {} kết nối đang mở", chapterId, openCount.get());
-            return null;
-        }
-
-        SseEmitter emitter = new SseEmitter(EMITTER_TTL.toMillis());
-        Set<SseEmitter> listeners =
-                byChapter.computeIfAbsent(chapterId, key -> new CopyOnWriteArraySet<>());
-        listeners.add(emitter);
-        openCount.incrementAndGet();
-
-        // Cả ba đường kết thúc đều phải dọn: đóng bình thường, hết hạn, và lỗi
-        // đường truyền. Thiếu một đường là rò rỉ chậm cho tới lúc chạm trần.
-        emitter.onCompletion(() -> remove(chapterId, emitter));
-        emitter.onTimeout(() -> remove(chapterId, emitter));
-        emitter.onError(error -> remove(chapterId, emitter));
-
-        // Một khung mở màn, để trình duyệt biết kết nối đã thật sự thông. Không
-        // có nó, một proxy đệm lại response sẽ khiến trang đọc tưởng mình đang
-        // được theo dõi trong khi chưa có gì tới nơi.
-        try {
-            emitter.send(SseEmitter.event().name("subscribed").data(chapterId));
-        } catch (IOException | IllegalStateException ex) {
-            remove(chapterId, emitter);
-            return null;
-        }
-
-        return emitter;
+        return hub.subscribe(chapterId, "subscribed");
     }
 
     /**
@@ -110,29 +72,17 @@ public class ChapterEventStream {
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onChapterUpdated(ChapterContentUpdated event) {
-        Set<SseEmitter> listeners = byChapter.get(event.chapterId());
-        if (listeners == null || listeners.isEmpty()) {
-            return;
+        int told = hub.send(event.chapterId(), "chapter-updated",
+                new ChapterUpdatedPayload(
+                        "CHAPTER_UPDATED",
+                        event.chapterId(),
+                        event.storyId(),
+                        event.contentVersion()));
+
+        if (told > 0) {
+            log.info("Báo chương {} lên phiên bản {} cho {} trình duyệt",
+                    event.chapterId(), event.contentVersion(), told);
         }
-
-        log.info("Báo chương {} lên phiên bản {} cho {} trình duyệt",
-                event.chapterId(), event.contentVersion(), listeners.size());
-
-        listeners.forEach(emitter -> {
-            try {
-                emitter.send(SseEmitter.event()
-                        .name("chapter-updated")
-                        .data(new ChapterUpdatedPayload(
-                                "CHAPTER_UPDATED",
-                                event.chapterId(),
-                                event.storyId(),
-                                event.contentVersion())));
-            } catch (IOException | IllegalStateException ex) {
-                // Trình duyệt đã đi khỏi mà máy chủ chưa kịp biết. Không phải lỗi
-                // đáng báo, chỉ là một kết nối cần dọn.
-                remove(event.chapterId(), emitter);
-            }
-        });
     }
 
     /**
@@ -152,51 +102,18 @@ public class ChapterEventStream {
      * việc ấy: xem {@code useChapterUpdates}. Không làm được thì cái giá chỉ là
      * một kết nối vô ích tới một chương đã chết, không phải một vòng lặp.
      *
-     * <p>Thứ tự bắt buộc là gửi trước, đóng sau. Đóng trước thì khung tin không
-     * bao giờ rời khỏi máy chủ, và người đang nghe dở sẽ ngồi lại trên một trang
-     * đọc một chương không còn tồn tại — đúng cái tình huống mà cả sự kiện này
-     * sinh ra để chấm dứt.
+     * <p>Thứ tự bắt buộc là gửi trước, đóng sau — xem {@link SseHub#sendAndClose}.
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onContentDeleted(ContentDeleted event) {
         String type = event.wholeStory() ? "STORY_DELETED" : "CHAPTER_DELETED";
 
         for (Long chapterId : event.chapterIds()) {
-            Set<SseEmitter> listeners = byChapter.get(chapterId);
-            if (listeners == null || listeners.isEmpty()) {
-                // Trường hợp thường gặp nhất khi xóa cả một truyện dài: hàng
-                // trăm chương không có ai đang mở. Một lần tra bản đồ, không tốn
-                // gì thêm.
-                continue;
-            }
+            int told = hub.sendAndClose(chapterId, "content-deleted",
+                    new ContentDeletedPayload(type, chapterId, event.storyId(), event.refunded()));
 
-            log.info("Báo chương {} đã bị gỡ ({}) cho {} trình duyệt",
-                    chapterId, type, listeners.size());
-
-            for (SseEmitter emitter : listeners) {
-                try {
-                    emitter.send(SseEmitter.event()
-                            .name("content-deleted")
-                            .data(new ContentDeletedPayload(
-                                    type, chapterId, event.storyId(), event.refunded())));
-                    emitter.complete();
-                } catch (IOException | IllegalStateException ex) {
-                    // Trình duyệt đã đi khỏi mà máy chủ chưa kịp biết. Không phải
-                    // lỗi đáng báo, chỉ là một kết nối cần dọn — và ở đây nó cũng
-                    // là kết cục mong muốn.
-                    log.debug("Không gửi được lời báo gỡ tới một kết nối của chương {}", chapterId);
-                } finally {
-                    // Bỏ sổ ngay tại đây thay vì đợi callback onCompletion mà
-                    // complete() ở trên sẽ kích hoạt.
-                    //
-                    // Callback ấy do vùng chứa servlet gọi, và nó *sẽ* tới —
-                    // nhưng "sẽ tới" không phải là "đã tới": tới lúc đó bộ đếm
-                    // vẫn tính những kết nối này vào trần MAX_SUBSCRIBERS. Gọi
-                    // thẳng thì sổ sách đúng ngay tại dòng này, không phụ thuộc
-                    // vào nhịp của vùng chứa. remove() bỏ qua lần gọi thứ hai,
-                    // nên callback tới sau không trừ bộ đếm lần nữa.
-                    remove(chapterId, emitter);
-                }
+            if (told > 0) {
+                log.info("Báo chương {} đã bị gỡ ({}) cho {} trình duyệt", chapterId, type, told);
             }
         }
     }
@@ -211,35 +128,12 @@ public class ChapterEventStream {
      */
     @Scheduled(fixedRate = HEARTBEAT_MS)
     void heartbeat() {
-        byChapter.forEach((chapterId, listeners) -> listeners.forEach(emitter -> {
-            try {
-                emitter.send(SseEmitter.event().comment("nhip"));
-            } catch (IOException | IllegalStateException ex) {
-                remove(chapterId, emitter);
-            }
-        }));
+        hub.heartbeat();
     }
 
     /** Số kết nối đang mở — dùng cho kiểm thử và cho log lúc chạm trần. */
     public int openConnections() {
-        return openCount.get();
-    }
-
-    private void remove(Long chapterId, SseEmitter emitter) {
-        Set<SseEmitter> listeners = byChapter.get(chapterId);
-        if (listeners == null || !listeners.remove(emitter)) {
-            // Đã bị dọn bởi một đường khác — hai callback cùng bắn là chuyện
-            // thường. Không giảm bộ đếm lần thứ hai.
-            return;
-        }
-        openCount.decrementAndGet();
-
-        // Bỏ luôn khóa rỗng: một máy chủ chạy lâu sẽ đi qua hàng nghìn chương, và
-        // giữ lại một Set rỗng cho mỗi chương là một rò rỉ chậm.
-        listeners = byChapter.get(chapterId);
-        if (listeners != null && listeners.isEmpty()) {
-            byChapter.remove(chapterId, listeners);
-        }
+        return hub.openConnections();
     }
 
     /**
@@ -259,11 +153,12 @@ public class ChapterEventStream {
      * không: chương mất thì danh sách chương vẫn còn, cả truyện mất thì không.
      *
      * <p>{@code refunded} nói rằng <b>có người</b> được hoàn Xu, không nói người
-     * nhận khung tin này có phải một trong số đó không. Luồng SSE là đường công
-     * khai — nó không đòi đăng nhập, vì nó không mang gì riêng tư — nên nó không
-     * biết mình đang nói với ai. Trang đọc dùng cờ này để nói một câu có điều
-     * kiện ("nếu bạn đã mua chương này…") thay vì một lời khẳng định mà nó không
-     * có cơ sở để đưa ra. Số dư thật thì vẫn nằm ở ví, sau lớp xác thực.
+     * nhận khung tin này có phải một trong số đó không. Luồng SSE này là đường
+     * công khai — nó không đòi đăng nhập, vì nó không mang gì riêng tư — nên nó
+     * không biết mình đang nói với ai. Trang đọc dùng cờ này để nói một câu có
+     * điều kiện ("nếu bạn đã mua chương này…") thay vì một lời khẳng định mà nó
+     * không có cơ sở để đưa ra. Câu khẳng định — kèm đúng số Xu — đi đường khác:
+     * một thông báo cá nhân trên {@link UserEventStream}, sau lớp xác thực.
      */
     public record ContentDeletedPayload(String type, Long chapterId, Long storyId,
                                         boolean refunded) {

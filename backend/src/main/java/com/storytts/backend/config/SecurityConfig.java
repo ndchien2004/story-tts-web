@@ -140,6 +140,26 @@ public class SecurityConfig {
                         // là của ai.
                         .requestMatchers(HttpMethod.GET, "/api/ai/status").permitAll()
 
+                        // --- Luồng thông báo cá nhân ---
+                        // Ngoại lệ hẹp nhất trong danh sách này, và là ngoại lệ
+                        // duy nhất mở ra một đường chở dữ liệu riêng tư — nên nó
+                        // đáng được đọc kỹ.
+                        //
+                        // EventSource của trình duyệt không gửi được header, nên
+                        // chuỗi lọc xác thực không có gì để đọc và sẽ từ chối
+                        // trước khi controller kịp chạy. Việc kiểm quyền vì thế
+                        // chuyển vào bên trong: đường này đòi một cái vé dùng một
+                        // lần, sống 60 giây, phát ra ở POST /stream-ticket — vốn
+                        // đi bằng header như mọi lời gọi khác và vẫn nằm sau
+                        // anyRequest().authenticated() bên dưới.
+                        //
+                        // Nói cách khác, "permitAll" ở đây chỉ có nghĩa là chuỗi
+                        // lọc không chặn trước; không cầm vé thì đường này trả
+                        // 401 và không gửi đi gì cả. Xem NotificationController
+                        // và NotificationStreamTickets về lý do không nới danh
+                        // sách ?access_token= của JwtAuthenticationFilter.
+                        .requestMatchers(HttpMethod.GET, "/api/notifications/stream").permitAll()
+
                         .anyRequest().authenticated())
                 .authenticationProvider(authenticationProvider(passwordEncoder()))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

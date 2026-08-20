@@ -5,6 +5,10 @@ import com.storytts.backend.domain.AudioFile;
 import com.storytts.backend.domain.AudioSource;
 import com.storytts.backend.domain.AudioStatus;
 import com.storytts.backend.domain.Chapter;
+import com.storytts.backend.domain.NotificationAction;
+import com.storytts.backend.domain.NotificationEntityType;
+import com.storytts.backend.domain.NotificationPriority;
+import com.storytts.backend.domain.NotificationType;
 import com.storytts.backend.domain.ReadingProgress;
 import com.storytts.backend.domain.Story;
 import com.storytts.backend.dto.admin.ContentDeletionDto;
@@ -16,9 +20,12 @@ import com.storytts.backend.dto.common.PageResponse;
 import com.storytts.backend.exception.BadRequestException;
 import com.storytts.backend.exception.ResourceNotFoundException;
 import com.storytts.backend.repository.AudioFileRepository;
+import com.storytts.backend.repository.ChapterEntitlementRepository;
 import com.storytts.backend.repository.ChapterRepository;
 import com.storytts.backend.repository.ReadingProgressRepository;
 import com.storytts.backend.repository.StoryRepository;
+import com.storytts.backend.service.notification.NotificationDraft;
+import com.storytts.backend.service.notification.NotificationService;
 import com.storytts.backend.service.realtime.ChapterContentUpdated;
 import com.storytts.backend.service.realtime.ContentDeleted;
 import lombok.RequiredArgsConstructor;
@@ -58,6 +65,8 @@ public class ChapterService {
     private final PublicationService publicationService;
     private final StoredAudioCleanup storedAudioCleanup;
     private final ChapterRefundService chapterRefundService;
+    private final ChapterEntitlementRepository entitlementRepository;
+    private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
 
     /** Số chương mặc định mỗi trang — đủ rộng cho gần hết truyện, đủ hẹp cho truyện dài. */
@@ -294,6 +303,8 @@ public class ChapterService {
             // dịch này hỏng thì không lời báo nào đi ra. Xem ChapterEventStream.
             eventPublisher.publishEvent(
                     new ChapterContentUpdated(chapterId, storyId, saved.getContentVersion()));
+
+            notifyUnlockedReaders(saved, storyId);
         }
 
         boolean hasAudio = audioFileRepository.hasCurrentReadyAudio(chapterId);
@@ -344,6 +355,54 @@ public class ChapterService {
 
         log.info("Admin xóa chương {} của truyện {}", chapterId, storyId);
         return new ContentDeletionDto(refunds.coins(), refunds.readers());
+    }
+
+    /**
+     * Báo cho những ai đã mở khóa chương rằng nội dung họ đang giữ đã cũ.
+     *
+     * <h3>Vì sao chỉ báo cho người đã mở khóa, không báo cho mọi người từng đọc</h3>
+     * Một chương công khai có thể đã đi qua hàng nghìn lượt đọc, và phần lớn
+     * trong số đó là người đọc một lần rồi đi. Ghi một hàng vào hộp thư của từng
+     * người là biến một lần sửa chính tả thành hàng nghìn lượt ghi, cho một tin
+     * mà gần hết số người nhận không quan tâm.
+     *
+     * <p>Người đã mở khóa thì khác: họ đã bỏ Xu — hoặc được cấp quyền — cho đúng
+     * chương ấy, tập ấy nhỏ và có giới hạn tự nhiên, và họ là những người có lý
+     * do thật để biết bản mình đọc không còn là bản mới nhất.
+     *
+     * <p>Người <i>đang mở</i> chương ngay lúc này thì đã có đường riêng và nhanh
+     * hơn: một dòng ngay trên trang đọc, qua {@link ChapterContentUpdated}. Hai
+     * đường không chồng lên nhau một cách vô lý — cái kia là lời mời tải lại
+     * ngay, cái này là một dòng trong hộp thư để đọc lúc nào cũng được.
+     *
+     * <h3>Mức INFO, và cố ý</h3>
+     * Không có gì bị mất và không có tiền nào đổi chỗ. Đây là loại tin mà đặc tả
+     * gọi là "đừng làm mọi thông báo đều chói mắt".
+     */
+    private void notifyUnlockedReaders(Chapter chapter, Long storyId) {
+        List<Long> readers = entitlementRepository.findUserIdsByChapter(chapter.getId());
+        if (readers.isEmpty()) {
+            return;
+        }
+
+        int version = chapter.getContentVersion();
+        notificationService.notifyAll(readers.stream()
+                .map(userId -> NotificationDraft.to(userId)
+                        .type(NotificationType.CHAPTER_UPDATED)
+                        .priority(NotificationPriority.INFO)
+                        .title("Chương bạn đã mở khóa vừa được cập nhật")
+                        .message(("Nội dung chương “%s” vừa được quản trị viên sửa lại. "
+                                + "Mở lại chương để đọc bản mới nhất.")
+                                .formatted(chapter.getTitle()))
+                        .action(NotificationAction.VIEW_CHAPTER)
+                        .about(NotificationEntityType.CHAPTER, chapter.getId())
+                        .meta("storyId", storyId)
+                        .meta("contentVersion", version)
+                        // Khóa tự nhiên: cùng một chương ở cùng một phiên bản chỉ
+                        // báo được một lần, dù đường ghi này có chạy lại.
+                        .event("chapter-updated:" + chapter.getId() + ":" + version + ":" + userId)
+                        .build())
+                .toList());
     }
 
     /** Đổi riêng mức khóa của một chương — thao tác nhanh trong trang quản trị. */

@@ -57,6 +57,19 @@ public interface ChapterEntitlementRepository extends JpaRepository<ChapterEntit
             """)
     List<ChapterEntitlement> findPaidByStory(@Param("storyId") Long storyId);
 
+    /**
+     * Ai đang giữ quyền đọc một chương — dùng khi nội dung chương vừa đổi.
+     *
+     * <p>Không lọc {@code coinsSpent > 0} như hai câu ở trên, và sự khác nhau ấy
+     * theo đúng câu hỏi đang hỏi: hai câu kia hỏi "ai phải được trả lại tiền",
+     * còn câu này hỏi "ai đang giữ một bản chương đã cũ". Người được quản trị
+     * viên tặng quyền cũng đang đọc đúng chương ấy.
+     *
+     * <p>Chỉ id, không nạp thực thể: bên gọi chỉ cần khóa ngoại để ghi thông báo.
+     */
+    @Query("SELECT e.user.id FROM ChapterEntitlement e WHERE e.chapter.id = :chapterId")
+    List<Long> findUserIdsByChapter(@Param("chapterId") Long chapterId);
+
     /** Xóa truyện kéo theo chương; quyền trỏ tới chương ấy phải đi trước. */
     void deleteByChapterId(Long chapterId);
 }

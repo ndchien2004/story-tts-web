@@ -358,6 +358,20 @@ export const adminApi = {
   setEnabled: (id, value) => client.patch(`/api/admin/users/${id}/enabled`, { value }).then((r) => r.data),
   setRole: (id, role) => client.patch(`/api/admin/users/${id}/role`, { role }).then((r) => r.data),
 
+  /**
+   * Gửi một thông báo do quản trị viên soạn.
+   *
+   * `target` là "ALL" hoặc "USER"; `userId` chỉ dùng cho cái thứ hai. Câu trả
+   * lời nói cả số người nhận lẫn số dòng thật sự được ghi — hai con số ấy lệch
+   * nhau khi cùng nội dung đã được gửi trong ngày, vì máy chủ dựng khóa chống
+   * trùng từ chính nội dung. Bấm hai lần vì thế không gửi hai lần.
+   *
+   * Đây là đường duy nhất tạo thông báo từ bên ngoài: bốn loại còn lại sinh ra
+   * bên trong giao dịch nghiệp vụ của chúng, nơi chúng không thể nói dối.
+   */
+  sendNotification: (payload) =>
+    client.post("/api/admin/notifications", payload).then((r) => r.data),
+
   /** Counts for the console's overview screen. */
   stats: () => client.get("/api/admin/stats").then((r) => r.data),
 
@@ -567,4 +581,55 @@ export const vipApi = {
 
   cancelOrder: (orderCode) =>
     client.post(`/api/vip/orders/${orderCode}/cancel`).then((r) => r.data),
+};
+
+/* ------------------------------------------------------------------ */
+/* Thông báo                                                           */
+/* ------------------------------------------------------------------ */
+
+export const notificationApi = {
+  /**
+   * Một trang hộp thư, mới nhất trước. `params` nhận page và size.
+   *
+   * Cùng một đường cho cả cái chuông (`size=10`) lẫn trang lịch sử đầy đủ: hộp
+   * thư của một người đọc lâu năm có hàng nghìn dòng, và không có màn hình nào
+   * cần tất cả chúng cùng lúc.
+   */
+  list: (params) => client.get("/api/notifications", { params }).then((r) => r.data),
+
+  /**
+   * Chỉ con số trên chuông.
+   *
+   * Đường riêng chứ không đọc `totalElements` của danh sách: mọi trang đều cần
+   * con số này lúc mở, còn danh sách thì chỉ cần khi người ta bấm vào chuông.
+   */
+  unreadCount: () => client.get("/api/notifications/unread-count").then((r) => r.data),
+
+  /** Trả về số chưa đọc mới — con số cuối cùng luôn đến từ máy chủ. */
+  markRead: (id) => client.patch(`/api/notifications/${id}/read`).then((r) => r.data),
+
+  markAllRead: () => client.patch("/api/notifications/read-all").then((r) => r.data),
+
+  /**
+   * Xin một vé rồi dựng URL luồng SSE từ nó.
+   *
+   * `EventSource` không đặt được header `Authorization`, nên danh tính phải đi
+   * trên URL bằng cách nào đó. Cách này không phải là token phiên: lời gọi xin
+   * vé dưới đây đi bằng header như mọi lời gọi khác, và thứ nó trả về là một vé
+   * dùng một lần, sống 60 giây, chỉ mở được đúng luồng này. Một chuỗi như thế
+   * lọt vào access log hay lịch sử trình duyệt thì đã hết hạn từ lâu.
+   *
+   * Vé dùng một lần cũng nghĩa là cơ chế tự nối lại của `EventSource` sẽ bị từ
+   * chối — và đó là điều mong muốn: mỗi lần nối lại phải kèm một lần đồng bộ
+   * hộp thư, nên nó phải đi qua mã của chúng ta. Xem `NotificationProvider`.
+   */
+  streamUrl: async () => {
+    const { ticket } = await client
+      .post("/api/notifications/stream-ticket")
+      .then((r) => r.data);
+
+    const url = new URL("/api/notifications/stream", API_BASE_URL);
+    url.searchParams.set("ticket", ticket);
+    return url.toString();
+  },
 };

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { favoriteApi, progressApi, vipApi, walletApi } from "../api/endpoints";
+import { Link, useSearchParams } from "react-router-dom";
+import { favoriteApi, notificationApi, progressApi, vipApi, walletApi } from "../api/endpoints";
 import Avatar from "../components/Avatar";
 import AvatarUpload from "../components/AvatarUpload";
 import GiftCodeRedeem from "../components/GiftCodeRedeem";
+import { NotificationRow } from "../components/NotificationBell";
 import Pagination from "../components/Pagination";
 import StoryCard from "../components/StoryCard";
 import { useAuth } from "../context/auth-context";
+import { useNotifications } from "../context/notification-context";
 import { formatCoinDelta, formatCoins, formatDate, formatDateTime, formatVnd } from "../utils/format";
 import { Alert, Badge, Button, ButtonLink, EmptyState, Spinner } from "../components/ui";
 
@@ -16,10 +18,14 @@ const TABS = [
   { id: "favorites", label: "Yêu thích" },
   { id: "wallet", label: "Lịch sử Xu" },
   { id: "orders", label: "Đơn đã mua" },
+  // Cùng chỗ với bốn cái kia vì cùng trả lời một câu: "của tôi". Cái chuông
+  // trên thanh điều hướng giữ mười dòng mới nhất; lịch sử đầy đủ ở đây.
+  { id: "notifications", label: "Thông báo" },
 ];
 
 const FAVORITES_PAGE_SIZE = 12;
 const WALLET_PAGE_SIZE = 20;
+const NOTIFICATION_PAGE_SIZE = 20;
 
 function formatWhen(value) {
   if (!value) return "";
@@ -44,7 +50,37 @@ function formatWhen(value) {
  */
 export default function AccountPage() {
   const { user, isAdmin, isVip } = useAuth();
-  const [tab, setTab] = useState("reading");
+
+  /*
+   * Tab mở sẵn đọc từ địa chỉ, không chỉ từ state trong bộ nhớ.
+   *
+   * Một thông báo "chương của bạn đã bị gỡ" mời người đọc đi xem lại sổ Xu, và
+   * cái nút ấy phải mở đúng tab chứ không đổ họ xuống "Đang đọc dở" rồi để họ
+   * tự tìm. Đó cũng là lý do đường dẫn được dựng từ ý định ở một chỗ duy nhất —
+   * xem `notificationRoutes.js`.
+   *
+   * Giá trị lạ thì rơi về tab mặc định: địa chỉ là thứ người ta gõ tay được.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+
+  /*
+   * Suy thẳng từ địa chỉ, không giữ thêm một bản trong state.
+   *
+   * Hai nguồn sự thật ở đây sẽ lệch nhau ở đúng một trường hợp, và nó là trường
+   * hợp thật: đang mở tab "Lịch sử Xu" rồi bấm "Xem tất cả thông báo" trong
+   * chuông. Địa chỉ đổi mà trang không bị dựng lại, nên một state khởi tạo một
+   * lần từ URL sẽ ở lại nguyên chỗ cũ và cái liên kết trông như hỏng.
+   */
+  const tab = TABS.some((entry) => entry.id === requestedTab) ? requestedTab : "reading";
+
+  // Đổi tab thì địa chỉ đổi theo, để một lần tải lại trang không quay về đầu.
+  // `replace` chứ không đẩy thêm mục lịch sử: bấm Back sau khi xem ba tab nên
+  // đưa người ta rời khỏi trang tài khoản, không phải đi ngược ba bước tại chỗ.
+  const openTab = useCallback(
+    (id) => setSearchParams(id === "reading" ? {} : { tab: id }, { replace: true }),
+    [setSearchParams],
+  );
 
   const [shelf, setShelf] = useState(null);
   const [shelfError, setShelfError] = useState(null);
@@ -114,7 +150,15 @@ export default function AccountPage() {
   }, [shelf]);
 
   const name = user.displayName || user.username;
-  const counts = { reading: reading?.length, finished: finished?.length };
+
+  // Cùng con số với cái chuông trên thanh điều hướng, lấy từ cùng một chỗ —
+  // không phải một phép đếm thứ hai chạy song song và lệch dần với nó.
+  const { unread } = useNotifications();
+  const counts = {
+    reading: reading?.length,
+    finished: finished?.length,
+    notifications: unread,
+  };
 
   return (
     <div className="account">
@@ -206,7 +250,7 @@ export default function AccountPage() {
               type="button"
               className={`story-tab ${tab === entry.id ? "active" : ""}`}
               aria-selected={tab === entry.id}
-              onClick={() => setTab(entry.id)}
+              onClick={() => openTab(entry.id)}
             >
               {entry.label}
               {counts[entry.id] > 0 && <span className="story-tab-count">{counts[entry.id]}</span>}
@@ -243,6 +287,8 @@ export default function AccountPage() {
           {tab === "wallet" && <WalletHistory balance={balance} />}
 
           {tab === "orders" && <OrderList />}
+
+          {tab === "notifications" && <NotificationHistory />}
 
           {tab === "favorites" && (
             <>
@@ -358,6 +404,111 @@ function WalletHistory({ balance }) {
       </ul>
 
       <Pagination page={history.page} totalPages={history.totalPages} onChange={setPage} />
+    </div>
+  );
+}
+
+/**
+ * Toàn bộ hộp thư, có phân trang.
+ *
+ * <h3>Vì sao có màn hình này khi đã có cái chuông</h3>
+ * Cái chuông giữ mười dòng mới nhất — vừa đủ để trả lời "có gì mới không" mà
+ * không kéo cả lịch sử về theo mỗi lần tải trang. Nhưng một lời báo hoàn Xu từ
+ * tháng trước vẫn là thứ người ta cần tìm lại được, và một danh sách mười dòng
+ * thì không có chỗ cho nó.
+ *
+ * <h3>Số chưa đọc vẫn do provider giữ</h3>
+ * Trang này không đếm lại: nó bấm vào cùng `markRead` mà cái chuông dùng, nên
+ * đánh dấu ở đây làm con số trên thanh điều hướng đổi ngay, và làm nó đổi ở tab
+ * khác nữa — máy chủ đẩy tin ấy đi. Một bộ đếm riêng ở màn hình này sẽ là nguồn
+ * sự thật thứ ba cho một con số vốn chỉ có một.
+ */
+function NotificationHistory() {
+  const { markRead, markAllRead, unread } = useNotifications();
+
+  const [page, setPage] = useState(0);
+  const [inbox, setInbox] = useState(null);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(() => {
+    let cancelled = false;
+    notificationApi
+      .list({ page, size: NOTIFICATION_PAGE_SIZE })
+      .then((data) => {
+        if (cancelled) return;
+        setInbox(data);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page]);
+
+  useEffect(load, [load]);
+
+  const handleMarkRead = useCallback(
+    (id) => {
+      // Đổi ngay tại chỗ rồi mới gọi: danh sách này không nghe luồng đẩy, nên
+      // đợi response mới đổi màu sẽ thành một khoảng trễ nhìn thấy được.
+      setInbox((current) =>
+        current
+          ? {
+              ...current,
+              content: current.content.map((item) =>
+                item.id === id ? { ...item, read: true } : item,
+              ),
+            }
+          : current,
+      );
+      markRead(id);
+    },
+    [markRead],
+  );
+
+  const handleMarkAll = useCallback(async () => {
+    await markAllRead();
+    load();
+  }, [markAllRead, load]);
+
+  if (error) return <Alert tone="error">{error}</Alert>;
+  if (!inbox) return <Spinner label="Đang tải thông báo…" />;
+
+  if (inbox.content.length === 0) {
+    return (
+      <EmptyState title="Chưa có thông báo nào">
+        Những việc liên quan tới tài khoản của bạn — VIP, hoàn Xu, thanh toán, nội dung bị gỡ —
+        sẽ được ghi lại ở đây.
+      </EmptyState>
+    );
+  }
+
+  return (
+    <div className="stack" style={{ gap: "var(--space-4)" }}>
+      {unread > 0 && (
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <span className="muted">{unread} thông báo chưa đọc</span>
+          <Button size="sm" onClick={handleMarkAll}>
+            Đánh dấu tất cả đã đọc
+          </Button>
+        </div>
+      )}
+
+      <div className="notif-history">
+        {inbox.content.map((notification) => (
+          <NotificationRow
+            key={notification.id}
+            notification={notification}
+            onOpen={handleMarkRead}
+            onNavigate={() => {}}
+          />
+        ))}
+      </div>
+
+      <Pagination page={inbox.page} totalPages={inbox.totalPages} onChange={setPage} />
     </div>
   );
 }

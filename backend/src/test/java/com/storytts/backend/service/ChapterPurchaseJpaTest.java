@@ -16,6 +16,7 @@ import com.storytts.backend.repository.ChapterRepository;
 import com.storytts.backend.repository.StoryRepository;
 import com.storytts.backend.repository.UserRepository;
 import com.storytts.backend.security.AppUserPrincipal;
+import com.storytts.backend.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,7 +45,8 @@ import static org.mockito.Mockito.when;
  */
 @DataJpaTest
 @Import({ChapterEntitlementStore.class, ChapterAccessService.class, AccessControlService.class,
-        WalletService.class, ChapterService.class, PublicationService.class})
+        WalletService.class, ChapterService.class, PublicationService.class,
+        NotificationService.class})
 class ChapterPurchaseJpaTest {
 
     private static final long PRICE = 50L;

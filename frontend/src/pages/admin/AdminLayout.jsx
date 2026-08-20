@@ -60,6 +60,15 @@ function CommentIcon() {
   );
 }
 
+function BellIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M18 8.4a6 6 0 1 0-12 0c0 5.2-1.8 6.6-1.8 6.6h15.6S18 13.6 18 8.4" />
+      <path d="M10.3 19a2 2 0 0 0 3.4 0" />
+    </svg>
+  );
+}
+
 function CardIcon() {
   return (
     <svg {...iconProps}>
@@ -177,6 +186,17 @@ const NAV_GROUPS = [
         label: "Thành viên",
         Icon: UsersIcon,
         isActive: (pathname) => pathname.startsWith("/admin/thanh-vien"),
+      },
+      // Ở nhóm này chứ không ở "Bảng điều khiển": đây là cách nói chuyện với
+      // người đọc, cùng hạng với bình luận, chứ không phải một con số về hệ
+      // thống. Bốn loại thông báo khác của trang không có mục nào ở đây, vì
+      // chúng không phải thứ ai đó ngồi soạn — chúng sinh ra bên trong giao
+      // dịch cấp VIP, gỡ chương hay ghi nhận thanh toán.
+      {
+        to: "/admin/thong-bao",
+        label: "Thông báo",
+        Icon: BellIcon,
+        isActive: (pathname) => pathname.startsWith("/admin/thong-bao"),
       },
     ],
   },
