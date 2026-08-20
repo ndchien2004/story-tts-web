@@ -106,6 +106,22 @@ function TagsIcon() {
   );
 }
 
+/*
+ * Bong bóng hội thoại — hai chiều, khác hẳn cái chuông một chiều ngay trên nó.
+ *
+ * Cùng bộ số với những hình còn lại trong tệp này (xem `iconProps`), nên nó
+ * không lệch nét khi đứng cạnh chúng trong thanh bên.
+ */
+function ChatIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M20 12.5a7 7 0 0 1-7 7H8.6L4.5 22v-4.3A7 7 0 0 1 3.5 13V12a7 7 0 0 1 7-7h2.5a7 7 0 0 1 7 7z" />
+      <path d="M8.5 11.5h7" />
+      <path d="M8.5 14.5h4" />
+    </svg>
+  );
+}
+
 function ExternalIcon() {
   return (
     <svg {...iconProps}>
@@ -197,6 +213,16 @@ const NAV_GROUPS = [
         label: "Thông báo",
         Icon: BellIcon,
         isActive: (pathname) => pathname.startsWith("/admin/thong-bao"),
+      },
+      // Cạnh "Thông báo" chứ không thành nhóm riêng, và sự gần nhau ấy có
+      // nghĩa: hai mục này là hai chiều của cùng một việc — nói với người đọc.
+      // Thông báo là một chiều và do quản trị viên chủ động; hỗ trợ là hai
+      // chiều và do người đọc bắt đầu.
+      {
+        to: "/admin/ho-tro",
+        label: "Hỗ trợ",
+        Icon: ChatIcon,
+        isActive: (pathname) => pathname.startsWith("/admin/ho-tro"),
       },
     ],
   },

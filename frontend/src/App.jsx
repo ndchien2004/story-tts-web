@@ -5,8 +5,10 @@ import ReaderLayout from "./components/ReaderLayout";
 import { RequireAdmin, RequireAuth, RequireGuest } from "./components/RouteGuards";
 import RouteVeil from "./components/RouteVeil";
 import SessionGuard from "./components/SessionGuard";
+import SupportWidget from "./components/support/SupportWidget";
 import AuthProvider from "./context/AuthProvider";
 import NotificationProvider from "./context/NotificationProvider";
+import SupportSocketProvider from "./context/SupportSocketProvider";
 import ThemeProvider from "./context/ThemeProvider";
 
 import HomePage from "./pages/HomePage";
@@ -34,6 +36,7 @@ import AdminCatalogPage from "./pages/admin/AdminCatalogPage";
 import AdminBgmPage from "./pages/admin/AdminBgmPage";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
 import AdminNotificationsPage from "./pages/admin/AdminNotificationsPage";
+import AdminSupportPage from "./pages/admin/AdminSupportPage";
 import AdminVipPage from "./pages/admin/AdminVipPage";
 import AdminVipPlansPage from "./pages/admin/AdminVipPlansPage";
 import AdminCoinPackagesPage from "./pages/admin/AdminCoinPackagesPage";
@@ -49,6 +52,13 @@ export default function App() {
             the signed-in account, so signing out clears it and signing in as
             someone else rebuilds it from scratch. */}
         <NotificationProvider>
+          {/* Một kết nối WebSocket hỗ trợ cho cả tab, nằm trên mọi tuyến.
+              Ba bên dùng chung nó: bong bóng chat ở góc màn hình, hộp thư của
+              quản trị viên, và khung hội thoại đang mở. Mỗi bên tự mở lấy một
+              kết nối thì chỉ vài tab là chạm trần theo tài khoản — và quan
+              trọng hơn: kết nối sẽ chỉ sống khi có khung chat đang mở, nên
+              trang quản trị ngồi nhìn danh sách sẽ không nhận được gì. */}
+          <SupportSocketProvider>
           <BrowserRouter>
             {/* Outside <Routes> on purpose: it has to survive the route swap it
                 is covering, and it spans all four layouts. */}
@@ -59,6 +69,12 @@ export default function App() {
                 session the server has ended, so it must sit above every route
                 rather than inside any of them. */}
             <SessionGuard />
+
+            {/* Cùng lý do với hai thứ trên: nó ở góc mọi trang và phải sống
+                qua mọi lần đổi tuyến. Nó tự ẩn với khách, với quản trị viên,
+                và trên trang đọc chương — nơi trợ lý AI đã chiếm đúng góc
+                này. Xem SupportWidget. */}
+            <SupportWidget />
 
             <Routes>
               <Route element={<Layout />}>
@@ -131,6 +147,10 @@ export default function App() {
                       có màn hình nào: chúng sinh ra bên trong giao dịch nghiệp
                       vụ đã tạo ra chúng. */}
                   <Route path="thong-bao" element={<AdminNotificationsPage />} />
+                  {/* Hộp thư hỗ trợ dùng chung của cả đội — hàng đợi, không phải
+                      hộp thư riêng của từng người. Mirrored by hasRole('ADMIN')
+                      on the server, which guards all of /api/admin. */}
+                  <Route path="ho-tro" element={<AdminSupportPage />} />
                   <Route path="vip" element={<AdminVipPage />} />
                   {/* The price list on its own page — see AdminVipPlansPage. */}
                   <Route path="vip/goi" element={<AdminVipPlansPage />} />
@@ -148,6 +168,7 @@ export default function App() {
               </Route>
             </Routes>
           </BrowserRouter>
+          </SupportSocketProvider>
         </NotificationProvider>
       </AuthProvider>
     </ThemeProvider>

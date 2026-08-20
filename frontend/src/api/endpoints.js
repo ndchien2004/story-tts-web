@@ -633,3 +633,91 @@ export const notificationApi = {
     return url.toString();
   },
 };
+
+/* ------------------------------------------------------------------ */
+/* Hỗ trợ                                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Địa chỉ WebSocket của hộp thư hỗ trợ, dựng từ địa chỉ API.
+ *
+ * Cùng một gốc cho cả hai, cố ý: một hằng số thứ hai cho WebSocket là một chỗ
+ * để quên sửa khi đổi nơi triển khai, và cái quên ấy chỉ lộ ra ở chức năng nhắn
+ * tin chứ không ở đâu khác. `http` → `ws`, `https` → `wss`.
+ */
+function websocketUrl(path, params) {
+  const url = new URL(path, API_BASE_URL);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  for (const [key, value] of Object.entries(params ?? {})) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
+export const supportApi = {
+  /**
+   * Luồng hỗ trợ của người đang đăng nhập, kèm một trang tin nhắn.
+   *
+   * `params` nhận `before` (cuộn lên), `after` (lấy phần bỏ lỡ) và `limit`.
+   * Không tham số = trang mới nhất, và đó cũng là thứ được gọi ở *mỗi* lần nối
+   * lại — xem `useSupportThread` về lý do không dùng `after` cho việc ấy.
+   */
+  thread: (params) => client.get("/api/support/conversation", { params }).then((r) => r.data),
+
+  /**
+   * Gửi một tin.
+   *
+   * `clientMessageId` bắt buộc và phải giữ nguyên qua mọi lần thử lại: nó là
+   * thứ khiến một lần mất mạng giữa chừng không sinh ra hai tin nhắn giống hệt
+   * nhau. Máy chủ trả về `duplicate: true` cho lần thử thứ hai, và đó vẫn là
+   * thành công.
+   */
+  send: (payload) => client.post("/api/support/messages", payload).then((r) => r.data),
+
+  /** Đánh dấu đã đọc tới một tin. Mốc chỉ tiến, không lùi. */
+  markRead: (lastMessageId) =>
+    client.patch("/api/support/read", { lastMessageId }).then((r) => r.data),
+
+  /**
+   * Xin một vé rồi dựng địa chỉ WebSocket từ nó.
+   *
+   * Cùng cơ chế và cùng lý lẽ với `notificationApi.streamUrl`: API `WebSocket`
+   * của trình duyệt là một hàm dựng nhận một URL và không đặt được header, y hệt
+   * `EventSource`. Nên danh tính đi trên URL bằng một cái vé dùng một lần, sống
+   * 90 giây — không phải bằng token phiên, thứ sống 24 giờ và mở được mọi thứ.
+   *
+   * Vé dùng một lần cũng nghĩa là mỗi lần nối lại phải xin vé mới, và đó là
+   * điều mong muốn: nó buộc việc nối lại đi qua mã của chúng ta, nơi có một lần
+   * đồng bộ lại đi kèm.
+   */
+  socketUrl: async () => {
+    const { ticket } = await client.post("/api/support/ws-ticket").then((r) => r.data);
+    return websocketUrl("/ws/support", { ticket });
+  },
+};
+
+export const adminSupportApi = {
+  /** `params` nhận status, q, page, size. Xếp theo hoạt động mới nhất. */
+  conversations: (params) =>
+    client.get("/api/admin/support/conversations", { params }).then((r) => r.data),
+
+  /** Số luồng đang chờ trả lời, và số kết nối thời gian thực đang mở. */
+  summary: () => client.get("/api/admin/support/summary").then((r) => r.data),
+
+  conversation: (id) =>
+    client.get(`/api/admin/support/conversations/${id}`).then((r) => r.data),
+
+  /** Cùng ba cách gọi với đường của người đọc. */
+  messages: (id, params) =>
+    client.get(`/api/admin/support/conversations/${id}/messages`, { params }).then((r) => r.data),
+
+  reply: (id, payload) =>
+    client.post(`/api/admin/support/conversations/${id}/messages`, payload).then((r) => r.data),
+
+  markRead: (id, lastMessageId) =>
+    client.patch(`/api/admin/support/conversations/${id}/read`, { lastMessageId }).then((r) => r.data),
+
+  /** OPEN vừa là "mở lại" vừa là "bỏ khóa" — cùng một đích. */
+  setStatus: (id, status) =>
+    client.patch(`/api/admin/support/conversations/${id}/status`, { status }).then((r) => r.data),
+};

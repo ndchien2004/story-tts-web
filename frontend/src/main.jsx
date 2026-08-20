@@ -10,6 +10,7 @@ import "./styles/bgm.css";
 import "./styles/karaoke.css";
 import "./styles/assistant.css";
 import "./styles/auth.css";
+import "./styles/support.css";
 import "./styles/admin.css";
 
 createRoot(document.getElementById("root")).render(
