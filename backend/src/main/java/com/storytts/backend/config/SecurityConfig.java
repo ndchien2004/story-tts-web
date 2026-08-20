@@ -160,6 +160,29 @@ public class SecurityConfig {
                         // sách ?access_token= của JwtAuthenticationFilter.
                         .requestMatchers(HttpMethod.GET, "/api/notifications/stream").permitAll()
 
+                        // --- Kết nối WebSocket của hộp thư hỗ trợ ---
+                        // Ngoại lệ thứ hai cùng loại với đường ngay trên, và
+                        // cùng lý lẽ: API WebSocket của trình duyệt là một hàm
+                        // dựng nhận một URL — không có chỗ nào đặt header
+                        // Authorization, y hệt EventSource. Nên chuỗi lọc không
+                        // có gì để đọc và sẽ từ chối trước khi phần bắt tay kịp
+                        // chạy.
+                        //
+                        // Việc kiểm quyền chuyển vào SupportHandshakeInterceptor:
+                        // nó đổi một cái vé dùng một lần (phát ở POST
+                        // /api/support/ws-ticket, vốn đi bằng header như mọi lời
+                        // gọi khác) lấy danh tính, rồi đối chiếu tài khoản với
+                        // cơ sở dữ liệu. Không có vé hợp lệ thì không có kết nối
+                        // nào được mở — interceptor trả 401 và phần nâng cấp
+                        // giao thức không bao giờ xảy ra.
+                        //
+                        // Nói cách khác, "permitAll" ở đây chỉ có nghĩa là chuỗi
+                        // lọc không chặn trước. Và cần nói thêm một chuyện mà
+                        // đường SSE không có: trình duyệt KHÔNG áp CORS lên
+                        // WebSocket, nên danh sách nguồn hợp lệ phải được kiểm ở
+                        // phía máy chủ — xem WebSocketConfig.setAllowedOrigins.
+                        .requestMatchers(HttpMethod.GET, "/ws/support").permitAll()
+
                         .anyRequest().authenticated())
                 .authenticationProvider(authenticationProvider(passwordEncoder()))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

@@ -44,6 +44,24 @@
 			<artifactId>spring-boot-starter-aop</artifactId>
 		</dependency>
 		<!--
+			WebSocket: đường thời gian thực hai chiều cho hộp thư hỗ trợ.
+
+			SSE đã có sẵn (xem SseHub) và vẫn là đúng thứ cho thông báo — nó một
+			chiều. Nhắn tin thì không: người dùng gửi lên bằng chính đường ấy, và
+			mỗi lượt gửi cần một lời báo nhận đi ngược về đúng phiên đã gửi. Dựng
+			việc đó trên SSE cộng POST là dựng lại một nửa WebSocket bằng tay.
+
+			Cố ý *không* kéo theo STOMP/SockJS: chúng mang theo một tầng môi giới
+			tin, một mô hình bảo mật riêng và một lớp chuyển đổi thông điệp — tất
+			cả để giải quyết những vấn đề mà một hộp thư hỗ trợ hai bên không có.
+			Ở đây chỉ dùng WebSocketHandler thô với khung JSON, cùng hình dạng
+			với SseHub: một sổ kết nối, một bộ khung tin, và không gì khác.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-websocket</artifactId>
+		</dependency>
+		<!--
 			Health check cua nen tang trien khai goi vao /actuator/health.
 			SecurityConfig da mo san duong ay tu truoc, nhung thieu thu vien nay
 			thi no tra 404 - cong kiem tra luc nao cung bao "khong tim thay".

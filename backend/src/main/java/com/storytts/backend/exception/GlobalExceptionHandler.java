@@ -165,6 +165,28 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, AccountLockedException.CODE, ex.getMessage(), request);
     }
 
+    /**
+     * Hộp thư hỗ trợ từ chối một lệnh.
+     *
+     * <h3>Mã trạng thái đến từ chính enum, không từ chỗ này</h3>
+     * Vì tính năng ấy có <b>hai</b> cửa vào — REST và WebSocket — và đặc tả nói
+     * rõ chúng phải từ chối giống hệt nhau. Một bảng ánh xạ ở đây sẽ là bản duy
+     * nhất, và bộ xử lý WebSocket (vốn không đi qua Spring MVC) sẽ phải có bản
+     * thứ hai để lệch với nó.
+     *
+     * <p>Nên {@link SupportException.Reason} mang theo cả mã HTTP lẫn mã máy đọc
+     * được, và cả hai cửa cùng đọc từ đó. Xem lớp ấy.
+     *
+     * <p>Không ghi log ở mức cảnh báo cho nhóm 4xx: gõ một tin quá dài hay gửi
+     * vào một luồng vừa bị khóa là chuyện bình thường của người dùng, không phải
+     * sự cố của máy chủ.
+     */
+    @ExceptionHandler(SupportException.class)
+    public ResponseEntity<ApiErrorResponse> handleSupport(SupportException ex,
+                                                          HttpServletRequest request) {
+        return build(ex.status(), ex.code(), ex.getMessage(), request);
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ApiErrorResponse> handleBadCredentials(BadCredentialsException ex,
                                                                  HttpServletRequest request) {

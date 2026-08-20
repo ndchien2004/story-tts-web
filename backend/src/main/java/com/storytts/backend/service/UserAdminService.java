@@ -14,6 +14,7 @@ import com.storytts.backend.service.notification.NotificationDraft;
 import com.storytts.backend.service.notification.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,7 @@ public class UserAdminService {
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public PageResponse<UserDto> list(String keyword, Pageable pageable) {
@@ -118,16 +120,54 @@ public class UserAdminService {
                     "Đây là quản trị viên cuối cùng. Hãy cấp quyền cho người khác trước khi hạ quyền tài khoản này.");
         }
 
+        boolean changed = user.getRole() != role;
+
         user.setRole(role);
         if (role == Role.ADMIN) {
             user.setVipGranted(false);
         }
 
         log.info("Đổi quyền tài khoản {} thành {}", user.getUsername(), role);
-        return UserDto.from(userRepository.save(user));
+        UserDto result = UserDto.from(userRepository.save(user));
+
+        // Cắt mọi kết nối thời gian thực của tài khoản này.
+        //
+        // Một kết nối WebSocket ghi nhớ vai trò của nó lúc bắt tay, và vai trò
+        // ấy quyết định *nhận được khung tin nào*. Người vừa bị hạ quyền không
+        // còn *làm* được việc của quản trị viên — mọi lệnh đều đọc lại quyền từ
+        // cơ sở dữ liệu — nhưng kết nối cũ của họ vẫn nằm trong nhóm "phía hỗ
+        // trợ" và vẫn nhận được tin nhắn của mọi luồng. Đóng nó là cách duy
+        // nhất sửa việc ấy ngay; nối lại cho họ đúng vai trò mới.
+        //
+        // Phát cả khi nâng quyền lên ADMIN, vì lý do đối xứng: kết nối cũ vai
+        // người đọc sẽ không nhận được gì của khu quản trị cho tới khi mở lại.
+        //
+        // Nhưng chỉ khi quyền THẬT SỰ đổi. Bấm "đặt làm thành viên" trên một
+        // thành viên là lệnh rỗng, và một lệnh rỗng không có lý do gì để cắt
+        // ngang cuộc trò chuyện mà người ấy đang gõ dở.
+        if (changed) {
+            eventPublisher.publishEvent(AccountAccessRevoked.roleChanged(userId));
+        }
+
+        return result;
     }
 
-    /** Khóa/mở khóa tài khoản. Không cho Admin tự khóa chính mình. */
+    /**
+     * Khóa/mở khóa tài khoản. Không cho Admin tự khóa chính mình.
+     *
+     * <h3>Khóa tài khoản phải cắt cả những đường đang mở</h3>
+     * Với HTTP thì việc ấy đã xong từ trước và không cần gì thêm:
+     * {@code JwtAuthenticationFilter} nạp lại người dùng ở mỗi request, nên một
+     * tài khoản bị khóa mất quyền ngay ở request kế tiếp.
+     *
+     * <p>WebSocket thì không có "request kế tiếp". Một kết nối đã mở nằm đó và
+     * vẫn nhận được tin nhắn mới cho tới khi có ai đó đóng nó. Sự kiện dưới đây
+     * là người đóng nó — xem {@code SupportRealtime.onAccessRevoked}.
+     *
+     * <p>Nó được phát <i>bên trong</i> giao dịch và bên nhận đăng ký ở
+     * {@code AFTER_COMMIT}: một giao dịch cuộn ngược không được phép đá ai ra vì
+     * một lệnh khóa chưa từng xảy ra.
+     */
     @Transactional
     public UserDto setEnabled(Long userId, boolean enabled) {
         User user = findUser(userId);
@@ -136,7 +176,13 @@ public class UserAdminService {
             throw new BadRequestException("Bạn không thể tự khóa tài khoản của chính mình.");
         }
         user.setEnabled(enabled);
-        return UserDto.from(userRepository.save(user));
+        UserDto result = UserDto.from(userRepository.save(user));
+
+        if (!enabled) {
+            eventPublisher.publishEvent(AccountAccessRevoked.locked(userId));
+        }
+
+        return result;
     }
 
     private User findUser(Long userId) {
