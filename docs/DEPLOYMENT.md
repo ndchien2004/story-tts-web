@@ -152,6 +152,45 @@ nào của tầng nghiệp vụ phải sửa.
 
 ---
 
+## WebSocket (hộp thư hỗ trợ)
+
+Kết nối chạy ở `/ws/support`. Không có API key nào phải điền — mọi thứ có mặc
+định, và để trống toàn bộ `SUPPORT_*` thì tính năng vẫn chạy. Bốn điều phải biết
+trước khi triển khai:
+
+**1. Render hỗ trợ WebSocket sẵn, kể cả gói free.** Không cần bật gì. Nhưng nó
+đóng một kết nối im lặng quá lâu, nên nhịp ping mặc định là **25 giây** — ngắn
+hơn hạn chờ của cả Render lẫn hầu hết proxy. Đứng sau một proxy chặt hơn thì hạ
+`SUPPORT_HEARTBEAT_INTERVAL`; đứng sau Nginx tự dựng thì nhớ
+`proxy_set_header Upgrade` / `Connection` và một `proxy_read_timeout` rộng hơn
+nhịp ping.
+
+**2. `CORS_ALLOWED_ORIGINS` áp cho cả WebSocket**, và ở đó nó là hàng rào *duy
+nhất*: trình duyệt **không** áp CORS lên WebSocket, nên một tên miền không nằm
+trong danh sách bị chặn ở phía máy chủ chứ không phải phía trình duyệt. Đổi tên
+miền frontend mà quên biến này thì hộp thư hỗ trợ ngừng kết nối trong khi mọi
+thứ khác vẫn chạy bình thường — một cách hỏng rất khó đoán nếu không biết trước.
+
+**3. Dịch vụ ngủ sau 15 phút vắng khách** — kết nối đứt hết, và trình duyệt tự
+nối lại (quãng nghỉ tăng dần, có ngẫu nhiên để nhiều tab không cùng quay lại một
+lúc). Không mất tin nhắn nào: cơ sở dữ liệu là nguồn sự thật, và mỗi lần nối lại
+kèm một lượt đồng bộ.
+
+**4. Sổ kết nối nằm trong bộ nhớ của một tiến trình.** Trang này chạy **một
+instance**, nên đây là giới hạn đã biết chứ không phải lỗi đang có. Ngày chạy
+nhiều instance, tin nhắn *vẫn được ghi và vẫn tới nơi* — chỉ là không tức thời
+khi hai bên nằm ở hai bản khác nhau. Hai chỗ phải đổi khi ấy: một lớp chuyển
+tiếp Redis pub/sub cho `SupportSocketRegistry`, và sticky session cho cái vé (vé
+phát ở bản A không đổi được ở bản B). Chi tiết ở
+[SUPPORT_MESSAGING.md](SUPPORT_MESSAGING.md).
+
+Theo dõi số kết nối đang mở ở `GET /api/admin/support/summary` — con số duy nhất
+phát hiện được rò rỉ kết nối và bão nối lại. Nó nằm sau `hasRole('ADMIN')` chứ
+không ở `/actuator`, vì các endpoint actuator khác đọc được biến môi trường, tức
+là đọc được cả API key lẫn mật khẩu cơ sở dữ liệu.
+
+---
+
 ## Sao lưu
 
 Xem [BACKUP.md](BACKUP.md).

@@ -56,6 +56,7 @@ nhau bằng JWT.
 | Nâng cấp VIP | Mua gói VIP theo tháng, **thanh toán thật qua PayOS** (chuyển khoản / QR); hạn được cộng dồn khi gia hạn sớm |
 | Gift code | Nhập mã để nhận Xu, ngay cạnh số dư ở trang tài khoản và dưới bảng giá ở trang nạp Xu. Mã không phân biệt hoa thường; **mỗi tài khoản đổi một mã đúng một lần**, và số Xu luôn lấy từ mã trong cơ sở dữ liệu chứ không từ thứ trình duyệt gửi lên |
 | Thông báo | Cái chuông cạnh ảnh đại diện, kèm số chưa đọc. Được cấp VIP, thanh toán xong, chương đã mua bị gỡ (kèm **đúng số Xu đã hoàn**), chương đã mua được sửa, tin chung của quản trị viên — tất cả vào một hộp thư có phân trang trong trang tài khoản. Thông báo **được ghi vào cơ sở dữ liệu trong cùng giao dịch với việc nó nói về**, nên người đang offline vẫn thấy khi đăng nhập lại; luồng SSE chỉ để nó tới ngay. Đọc ở tab này thì tab kia và điện thoại cùng tài khoản tự cập nhật theo |
+| Hỗ trợ | Nhắn thẳng cho quản trị viên từ trang **Liên hệ hỗ trợ**, trả lời tới **ngay lập tức** qua WebSocket. Tin nhắn được **ghi xuống cơ sở dữ liệu trước khi bất cứ gì được đẩy đi**, nên mất mạng giữa chừng, đóng tab hay máy chủ khởi động lại đều không mất câu nào — mỗi lần nối lại, trang tự lấy về phần nó bỏ lỡ. Một lần bấm gửi là **một** tin nhắn kể cả khi mạng đứt đúng lúc và trình duyệt thử lại. Tin chưa gửi được hiện rõ kèm nút gửi lại, thay vì trông như đã gửi |
 
 ### Quản trị viên
 
@@ -70,6 +71,7 @@ nhau bằng JWT.
 | Bình luận | Kiểm duyệt toàn bộ bình luận của mọi truyện, tìm kiếm và xóa |
 | Thành viên | Cấp/thu hồi VIP vĩnh viễn, khóa/mở tài khoản, nâng/hạ quyền quản trị. Cấp VIP thành công thì người ấy nhận ngay một lời chúc mừng trong hộp thư — cùng giao dịch, nên một lần cấp bị cuộn ngược không để lại lời chúc nào |
 | Thông báo | Soạn tin gửi **một thành viên** (tìm theo username/email) hoặc **loan cho tất cả**. Bấm gửi hai lần cùng nội dung trong ngày chỉ tạo một thông báo mỗi người, và câu trả lời nói rõ đã ghi được bao nhiêu trên tổng số. Không có ô nhập đường dẫn: nút bấm trong thông báo dựng từ một tập ý định cố định, và nội dung luôn hiện ra dưới dạng chữ thuần |
+| Hỗ trợ | Hộp thư **dùng chung của cả đội**, xếp theo hoạt động mới nhất, kèm số chưa đọc và bản xem trước. Một người đã đọc thì việc ấy đã xong với mọi người — không có hai quản trị viên cùng nhảy vào một câu. Đóng, mở lại hoặc **khóa** một cuộc trò chuyện; mỗi lần đổi để lại một dòng trong chính luồng ấy nên người đọc luôn biết vì sao. Đóng không chặn gửi (một tin mới mở lại nó) — khóa mới là công cụ chặn |
 | Gói VIP & thanh toán | Tự đặt gói bán ra (số tháng và giá tùy ý), bật/tắt bán; xem mọi đơn và đối chiếu lại đơn còn treo với cổng thanh toán |
 | Gói Xu & ví | Đặt bảng giá gói nạp Xu, cộng/trừ Xu tay cho một tài khoản, xem sổ cái từng giao dịch |
 | Gift code | Tab thứ hai của mục Gói nạp Xu. Tạo mã (gõ tay hoặc **sinh ngẫu nhiên**) với số Xu, giờ bắt đầu, giờ hết hạn và số lượt tối đa — bỏ trống ba thứ sau nghĩa là hiệu lực ngay / không hết hạn / không giới hạn. Bảng có tìm kiếm, lọc theo tình trạng và theo ngày tạo, sắp theo cột, phân trang; mở một mã ra xem danh sách tài khoản đã đổi và tổng Xu đã phát. Mã đã có người đổi thì **tắt được nhưng không xóa được** — lịch sử Xu của họ trỏ về nó |
@@ -747,7 +749,7 @@ story-tts-web/
 │     ├─ utils/          Định dạng tiền/ngày, chuẩn hóa Unicode, đích đến sau đăng nhập
 │     └─ brand.js        URL logo và ảnh banner trên Cloudinary
 ├─ content/              Gói nội dung để nhập truyện/chương/audio (xem README trong đó)
-├─ docs/                 DEPLOYMENT.md, BACKUP.md
+├─ docs/                 DEPLOYMENT.md, BACKUP.md, SUPPORT_MESSAGING.md
 ├─ ops/                  backup.sh, restore.sh
 ├─ render.yaml           Cấu hình dịch vụ trên Render
 ├─ docker-compose.yml    MySQL 8 cho máy cá nhân
@@ -1083,6 +1085,7 @@ chương trong bộ nhớ để trả về một khúc giữa của nó. Tua v�
 |---|---|
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Biến môi trường, luồng triển khai, hạn mức từng dịch vụ |
 | [docs/BACKUP.md](docs/BACKUP.md) | Sao lưu, phục hồi, và chỗ cất khóa mã hóa |
+| [docs/SUPPORT_MESSAGING.md](docs/SUPPORT_MESSAGING.md) | Hộp thư hỗ trợ: hợp đồng WebSocket, ranh giới giao dịch, đồng bộ khi nối lại, và giới hạn khi chạy nhiều bản ứng dụng |
 | [content/README.md](content/README.md) | Nhập truyện/chương/audio từ tệp trên đĩa |
 | `render.yaml` | Cấu hình Render, để trong Git thay vì chỉ ở dashboard |
 
@@ -1158,6 +1161,7 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | GET | `/api/wallet/packages` | Bảng giá các gói nạp Xu đang bán |
 | POST | `/api/payments/payos/webhook` | PayOS gọi về — bảo vệ bằng chữ ký HMAC, không phải JWT |
 | GET | `/api/notifications/stream?ticket=…` | Luồng SSE thông báo cá nhân. Công khai ở tầng URL vì `EventSource` không gửi được header; danh tính đến từ cái vé, và **không có vé thì trả 401** |
+| GET | `/ws/support?ticket=…` | Kết nối WebSocket hộp thư hỗ trợ. Cùng lý do công khai ở tầng URL: API `WebSocket` của trình duyệt là một hàm dựng nhận URL và không đặt được header. Việc kiểm quyền nằm ở phần bắt tay — đổi vé lấy danh tính, rồi đối chiếu tài khoản với cơ sở dữ liệu; **hỏng một trong hai thì không kết nối nào được mở**. Trình duyệt không áp CORS lên WebSocket, nên danh sách nguồn hợp lệ được kiểm ở phía máy chủ |
 
 ### Cần đăng nhập
 
@@ -1187,6 +1191,10 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | PATCH | `/api/notifications/{id}/read` | Đánh dấu một thông báo đã đọc; **id của người khác trả 404** |
 | PATCH | `/api/notifications/read-all` | Dọn sạch cái chuông |
 | POST | `/api/notifications/stream-ticket` | Vé một lần, sống 60 giây, để mở luồng SSE ở bảng trên |
+| GET | `/api/support/conversation` | Luồng hỗ trợ của chính người gọi, kèm một trang tin nhắn. **Không đường hỗ trợ nào của người đọc nhận `conversationId`** — luồng suy từ quyền sở hữu, nên không có tham số nào để tấn công. `before` cuộn lên, `after` lấy phần bỏ lỡ, không tham số là trang mới nhất |
+| POST | `/api/support/messages` | Gửi tin cho bộ phận hỗ trợ. Gửi lại cùng `clientMessageId` **không tạo tin thứ hai** — trả về đúng tin đã ghi |
+| PATCH | `/api/support/read` | Đánh dấu đã đọc tới một tin. Mốc chỉ tiến, không lùi |
+| POST | `/api/support/ws-ticket` | Vé một lần, sống 90 giây, để mở WebSocket ở bảng trên |
 
 ### Chỉ Admin (`/api/admin/**`)
 
@@ -1221,6 +1229,11 @@ Tài liệu đầy đủ có tương tác: **`http://localhost:8080/swagger-ui.h
 | GET/POST/PUT | `/api/admin/wallet/packages` | Xem và cấu hình các gói nạp Xu |
 | POST | `/api/admin/wallet/users/{id}/adjust` | Cộng/trừ Xu tay, kèm lý do vào sổ cái |
 | POST | `/api/admin/notifications` | Gửi thông báo cho một người hoặc loan cho tất cả; gửi trùng nội dung trong ngày không nhân đôi |
+| GET | `/api/admin/support/conversations` | Hộp thư hỗ trợ dùng chung của cả đội, xếp theo hoạt động mới nhất (`status`, `q`, `page`, `size`). Số chưa đọc của cả trang tính trong **một** câu truy vấn, không phải một câu cho mỗi dòng |
+| GET | `/api/admin/support/summary` | Số luồng đang chờ trả lời, và số kết nối WebSocket đang mở |
+| GET/POST | `/api/admin/support/conversations/{id}/messages` | Đọc và trả lời một luồng |
+| PATCH | `/api/admin/support/conversations/{id}/read` | Mốc đã đọc **dùng chung cho cả đội**: một người đã đọc thì việc ấy đã xong với mọi người |
+| PATCH | `/api/admin/support/conversations/{id}/status` | Đóng, mở lại, khóa hoặc bỏ khóa. `CLOSED` không chặn gửi — một tin mới mở lại luồng; `BLOCKED` mới là công cụ chặn |
 | GET | `/api/admin/storage/audit` · `POST /repair` | Đối chiếu cơ sở dữ liệu với nơi lưu file |
 
 ---
