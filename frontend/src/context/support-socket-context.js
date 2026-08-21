@@ -58,3 +58,21 @@ export const CONNECTING = "CONNECTING";
 export const CONNECTED = "CONNECTED";
 export const RECONNECTING = "RECONNECTING";
 export const ERROR = "ERROR";
+
+/**
+ * Máy chủ này không có đường thời gian thực — và sẽ không có nó trong phiên
+ * làm việc này.
+ *
+ * <h3>Vì sao đây là một trạng thái riêng chứ không phải một lần `ERROR` nữa</h3>
+ * Vì nó đòi một hành vi khác hẳn: <b>ngừng thử lại</b>. `RECONNECTING` nghĩa là
+ * "đường đứt, sẽ thông lại"; cái này nghĩa là "không có đường ấy ở đây", và thử
+ * lại chỉ dẫn tới đúng lời từ chối cũ, mãi mãi.
+ *
+ * <p>Nó có thật, không phải phòng xa. Bản backend triển khai trên Render từng
+ * cũ hơn bản frontend trên Vercel, nên `POST /api/support/ws-ticket` trả 404 ở
+ * đó. Trình duyệt xin vé, hỏng, hẹn giờ, xin lại — mỗi ba mươi giây một lần,
+ * trên mọi tab đang mở, và không một chữ nào hiện ra ở đâu để nói vì sao khung
+ * chat im lặng. Một vòng lặp không bao giờ thành công mà cũng không bao giờ
+ * kêu lên là thứ khó tìm nhất trong tất cả.
+ */
+export const UNAVAILABLE = "UNAVAILABLE";

@@ -1,5 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CONNECTED, CONNECTING, FAILED, PENDING, RECONNECTING } from "../../hooks/useSupportThread";
+import {
+  CONNECTED,
+  CONNECTING,
+  FAILED,
+  PENDING,
+  RECONNECTING,
+  UNAVAILABLE,
+} from "../../hooks/useSupportThread";
 import { formatDate, formatDateTime } from "../../utils/format";
 import { Button, Spinner } from "../ui";
 
@@ -220,6 +227,22 @@ function ConnectionBanner({ connection, error }) {
     return (
       <p className="support-banner">
         Mất kết nối tức thời — đang kết nối lại. Tin nhắn của bạn vẫn gửi được.
+      </p>
+    );
+  }
+  /*
+   * Máy chủ không có đường thời gian thực, và sẽ không có nó trong phiên này.
+   *
+   * Câu chữ khác hẳn `RECONNECTING` vì sự thật khác hẳn: ở kia còn có gì đó
+   * đang diễn ra và chỉ cần chờ, ở đây thì không — nên nó không được phép hứa
+   * một lần nối lại sẽ không bao giờ tới. Điều nó nói ra là điều duy nhất còn
+   * đúng và còn có ích: ô soạn tin vẫn dùng được.
+   */
+  if (connection === UNAVAILABLE) {
+    return (
+      <p className="support-banner warn">
+        Máy chủ đang không bật kênh tin nhắn tức thời. Bạn vẫn gửi và xem được
+        tin, nhưng phải tải lại trang mới thấy trả lời mới.
       </p>
     );
   }

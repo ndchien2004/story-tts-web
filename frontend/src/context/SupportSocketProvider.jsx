@@ -9,6 +9,7 @@ import {
   ERROR,
   RECONNECTING,
   SupportSocketContext,
+  UNAVAILABLE,
 } from "./support-socket-context";
 
 /**
@@ -103,7 +104,17 @@ export default function SupportSocketProvider({ children }) {
       let url;
       try {
         url = await supportApi.socketUrl();
-      } catch {
+      } catch (ex) {
+        // Một lời từ chối dứt khoát thì thử lại là vô nghĩa — xem `isPermanent`.
+        if (isPermanent(ex)) {
+          console.warn(
+            "Hộp thư hỗ trợ: máy chủ không cấp được vé WebSocket "
+              + `(HTTP ${ex?.status}). Ngừng thử lại; hộp thư vẫn gửi và đọc `
+              + "được qua REST, chỉ không tức thời.",
+          );
+          setConnection(UNAVAILABLE);
+          return;
+        }
         scheduleRetry();
         return;
       }
@@ -230,4 +241,37 @@ function parse(data) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Lời từ chối này có thử lại được không.
+ *
+ * <h3>Vì sao phải phân biệt, thay vì cứ thử lại cho chắc</h3>
+ * Vì hai nhóm lỗi đòi hai việc trái ngược nhau, và gộp chúng lại thì một trong
+ * hai luôn bị làm sai:
+ *
+ * <pre>
+ *   404  đường không tồn tại   → backend cũ hơn frontend. Thử lại mãi mãi hỏng.
+ *   401  chưa/hết đăng nhập    → `SessionGuard` lo; nối lại không sửa được gì.
+ *   403  không có quyền        → như trên.
+ *   501  máy chủ không hỗ trợ  → một câu trả lời dứt khoát.
+ *
+ *   0    mất mạng              → thử lại. Wi-Fi rớt là chuyện của vài giây.
+ *   503  đang từ chối tạm      → thử lại: hết chỗ giữ vé, sẽ có lại.
+ *   5xx  máy chủ đang hỏng     → thử lại: bản Render ngủ dậy mất gần một phút,
+ *                                và mọi request trong quãng ấy đều hỏng.
+ *   429  quá tần suất          → thử lại, sau quãng nghỉ tăng dần.
+ * </pre>
+ *
+ * <p>Nhóm dưới là lý do không thể chọn "cứ dừng khi có lỗi": một bản Render gói
+ * miễn phí ngủ sau mười lăm phút vắng khách, và người đầu tiên quay lại luôn
+ * gặp một loạt lỗi trong lúc nó thức dậy. Dừng ở đó là tắt tính năng vì một
+ * chuyện tự khỏi sau bốn mươi giây.
+ *
+ * <p>Nhóm trên là lý do không thể chọn "cứ thử lại mãi": nó biến một lỗi triển
+ * khai nhìn thấy được thành một sự im lặng.
+ */
+function isPermanent(error) {
+  const status = error?.status;
+  return status === 401 || status === 403 || status === 404 || status === 501;
 }

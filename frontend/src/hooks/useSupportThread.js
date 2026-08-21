@@ -6,6 +6,7 @@ import {
   DISCONNECTED,
   ERROR,
   RECONNECTING,
+  UNAVAILABLE,
   useSupportSocket,
 } from "../context/support-socket-context";
 
@@ -427,7 +428,7 @@ export function useSupportThread({ mode = "user", conversationId = null, enabled
 /* ------------------------------------------------------------------ */
 
 /* Tái xuất để màn hình chat chỉ phải nhập từ một chỗ. */
-export { CONNECTED, CONNECTING, DISCONNECTED, ERROR, RECONNECTING };
+export { CONNECTED, CONNECTING, DISCONNECTED, ERROR, RECONNECTING, UNAVAILABLE };
 
 export const PENDING = "PENDING";
 export const SENT = "SENT";
