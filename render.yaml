@@ -23,7 +23,24 @@ services:
     # truoc khi chuyen luu luong sang.
     healthCheckPath: /actuator/health
 
+    # Moi lan day len nhanh `main` la mot ban moi. Ghi ra day thay vi de mac
+    # dinh, vi da co mot lan no khong xay ra va khong ai biet: backend tren
+    # Render con dung o ban truoc tinh nang Ho tro, trong khi frontend tren
+    # Vercel da co day du - nen POST /api/support/ws-ticket goi vao mot duong
+    # khong ton tai. Frontend va backend nam o hai noi khac nhau, trien khai
+    # theo hai nhip khac nhau; thu duy nhat giu chung di cung nhau la cho ca hai
+    # tu dong chay theo cung mot nhanh.
+    autoDeploy: true
+
     envVars:
+      # ---------- Dung sau proxy ----------
+      # Render go TLS o bien roi chuyen tiep bang HTTP thuong, nen ung dung phai
+      # doc X-Forwarded-* moi biet trinh duyet that su goi toi dia chi nao. An
+      # toan o day vi proxy cua Render ghi de header ay truoc khi chuyen tiep.
+      # Xem ghi chu day du trong application.properties.
+      - key: FORWARD_HEADERS_STRATEGY
+        value: framework
+
       # ---------- Luu tru file: BAT BUOC tren Render ----------
       # He tep cua Render goi mien phi la tam thoi - bi xoa sach moi lan trien
       # khai lai, moi lan khoi dong lai, va moi lan dich vu ngu sau 15 phut vang
