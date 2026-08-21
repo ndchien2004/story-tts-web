@@ -94,6 +94,31 @@ export function useSupportThread({ mode = "user", conversationId = null, enabled
   const messagesRef = useRef([]);
   messagesRef.current = messages;
 
+  /* ---------------- Trợ lý AI ---------------- */
+
+  // Một bản sao trong ref, không phải trong danh sách phụ thuộc của `deliver`.
+  //
+  // Lý do: chế độ của luồng đổi *giữa chừng* — người đọc bấm "Chat với tư vấn
+  // viên" trong lúc một lượt gửi đang bay. Một `useCallback` chốt giá trị cũ
+  // vào bao đóng sẽ gửi lượt kế tiếp qua đúng đường vừa bị đóng lại. Ref thì
+  // luôn đọc ra giá trị của lúc gọi.
+  const conversationRef = useRef(null);
+  conversationRef.current = conversation;
+
+  // Trợ lý đang soạn. Tách khỏi `sending` của ô soạn tin: cái kia đo một lượt
+  // POST vài chục mili giây, cái này đo một lời gọi Gemini có thể tới ba mươi
+  // giây — và đó là quãng bắt buộc phải nhìn thấy được, nếu không thì ô chat
+  // trông như đã chết.
+  const [thinking, setThinking] = useState(false);
+
+  // Câu giải thích khi trợ lý không trả lời được, và lời mời chuyển tiếp.
+  //
+  // Không phải một tin nhắn trong luồng: nó không được ghi vào cơ sở dữ liệu,
+  // nên ghép nó vào danh sách tin sẽ là một dòng biến mất sau khi tải lại
+  // trang. Nó sống đúng một phiên, ở ngay trên ô soạn tin.
+  const [assistantNotice, setAssistantNotice] = useState(null);
+  const [suggestHandoff, setSuggestHandoff] = useState(false);
+
   /* ---------------------------------------------------------------- */
   /* Gộp tin nhắn                                                      */
   /* ---------------------------------------------------------------- */
@@ -289,7 +314,48 @@ export function useSupportThread({ mode = "user", conversationId = null, enabled
    * vận chuyển. Nên một tin gửi hụt qua WebSocket rồi thử lại qua REST — hoặc
    * ngược lại — vẫn chỉ thành một tin nhắn.
    */
+  /**
+   * Một lượt hỏi trợ lý.
+   *
+   * <p>Cố ý KHÔNG đi qua WebSocket, khác hẳn lượt gửi thường: máy chủ phải chờ
+   * Gemini rồi mới trả lời, và giữ một luồng xử lý socket đứng chờ quãng ấy là
+   * chuyện không làm. Đổi lại, câu trả lời về theo *hai* đường — trong phản hồi
+   * HTTP này, và trong một khung `message:new` cho các tab khác — nên `merge`
+   * phải chịu được việc thấy cùng một tin hai lần. Nó chịu được: gộp theo `id`.
+   */
+  const askAssistant = useCallback(async (clientMessageId, content) => {
+    setThinking(true);
+    setAssistantNotice(null);
+    try {
+      const result = await supportApi.askAssistant({ clientMessageId, content });
+      if (scopeRef.current == null) return;
+
+      // Câu hỏi trước, câu trả lời sau, trong một lần gộp: hai lần setState
+      // liên tiếp sẽ vẽ một khung hình có câu hỏi mà chưa có câu trả lời, và
+      // mắt bắt được cái nháy ấy.
+      mergeMessages([result.message, result.reply].filter(Boolean));
+      if (result.conversation) setConversation(result.conversation);
+      setAssistantNotice(result.notice ?? null);
+      setSuggestHandoff(Boolean(result.suggestHandoff));
+    } catch (ex) {
+      // 409 ở đây nghĩa là luồng đã rời khỏi tay trợ lý trong lúc lượt này bay
+      // — người đọc bấm chuyển tư vấn viên ở một tab khác, hoặc một quản trị
+      // viên vừa nhảy vào. Máy chủ là nguồn sự thật, nên đọc lại nó thay vì
+      // đoán: một lần đồng bộ đổi luôn cả chế độ lẫn ô soạn tin.
+      resync();
+      throw ex;
+    } finally {
+      if (scopeRef.current != null) setThinking(false);
+    }
+  }, [mergeMessages, resync]);
+
   const deliver = useCallback(async (clientMessageId, content) => {
+    // Luồng đang do trợ lý phụ trách thì lượt gửi là một lượt hỏi. Đọc từ ref,
+    // không từ bao đóng — xem ghi chú ở `conversationRef`.
+    if (!isAdmin && conversationRef.current?.assistantMode === "AI") {
+      return askAssistant(clientMessageId, content);
+    }
+
     const sentOverSocket = socket?.send({
       type: "message:send",
       clientMessageId,
@@ -307,7 +373,7 @@ export function useSupportThread({ mode = "user", conversationId = null, enabled
     if (scopeRef.current == null) return;
     mergeMessages([result.message]);
     if (result.conversation) setConversation(result.conversation);
-  }, [socket, isAdmin, conversationId, mergeMessages]);
+  }, [socket, isAdmin, conversationId, mergeMessages, askAssistant]);
 
   const send = useCallback(async (raw) => {
     const content = (raw ?? "").trim();
@@ -405,6 +471,67 @@ export function useSupportThread({ mode = "user", conversationId = null, enabled
     sentReadMark.current = 0;
   }, [scope]);
 
+  /**
+   * Người đọc chọn "Chat với AI".
+   *
+   * Máy chủ trả về cả một trang tin nhắn, nên một lần gọi là đủ để đổi màn
+   * hình — không có bước "đổi chế độ rồi tải lại" nào nhìn thấy được.
+   */
+  const startAssistant = useCallback(async () => {
+    const mine = scopeRef.current;
+    if (!mine) return false;
+    setLoading(true);
+    try {
+      const slice = await supportApi.startAssistant();
+      if (scopeRef.current !== mine) return false;
+      setConversation(slice.conversation);
+      mergeMessages(slice.messages ?? []);
+      setHasMore(slice.hasMore ?? false);
+      setAssistantNotice(null);
+      setSuggestHandoff(false);
+      setError(null);
+      return true;
+    } catch (ex) {
+      if (scopeRef.current === mine) {
+        setError(ex?.message ?? "Không mở được cuộc trò chuyện với trợ lý.");
+      }
+      return false;
+    } finally {
+      if (scopeRef.current === mine) setLoading(false);
+    }
+  }, [mergeMessages]);
+
+  /**
+   * Người đọc chọn "Chat với tư vấn viên".
+   *
+   * Bất biến ở phía máy chủ, nên bấm hai lần không sinh hai phiếu — bên này
+   * không cần một cái cờ "đang gửi" cho đúng, chỉ cần cho đẹp. Xem
+   * `SupportStore.requestHandoff`.
+   */
+  const handoff = useCallback(async (reason) => {
+    const mine = scopeRef.current;
+    if (!mine) return false;
+    try {
+      const slice = await supportApi.handoff(reason);
+      if (scopeRef.current !== mine) return false;
+      setConversation(slice.conversation);
+      mergeMessages(slice.messages ?? []);
+      setHasMore(slice.hasMore ?? false);
+      // Lời mời chuyển tiếp đã được nhận. Để nó nằm lại dưới ô soạn tin sau khi
+      // người ta đã bấm là mời họ bấm lần nữa cho một việc đã xong.
+      setAssistantNotice(null);
+      setSuggestHandoff(false);
+      return true;
+    } catch (ex) {
+      if (scopeRef.current === mine) {
+        setError(ex?.message ?? "Không chuyển được cho tư vấn viên.");
+      }
+      return false;
+    }
+  }, [mergeMessages]);
+
+  const dismissNotice = useCallback(() => setAssistantNotice(null), []);
+
   return {
     connection: socket?.connection ?? DISCONNECTED,
     live,
@@ -420,6 +547,15 @@ export function useSupportThread({ mode = "user", conversationId = null, enabled
     loadOlder,
     markRead,
     refresh: resync,
+
+    /* Trợ lý AI */
+    assistantMode: conversation?.assistantMode ?? null,
+    thinking,
+    assistantNotice,
+    suggestHandoff,
+    startAssistant,
+    handoff,
+    dismissNotice,
   };
 }
 

@@ -761,3 +761,274 @@
     max-width: 88%;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Trợ lý AI                                                           */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Ba thứ cần phân biệt bằng mắt ở đây: câu của mình, câu của tư vấn viên, và
+ * câu của trợ lý. Hai cái đầu đã có sẵn ngôn ngữ của tệp này — mảng tô màu mực
+ * cho mình, giấy chìm một nấc cho bên kia.
+ *
+ * Cái thứ ba KHÔNG được thêm một màu mới. Phần đầu tệp đã ghi rõ nguyên tắc:
+ * đơn sắc, cấu trúc dựng bằng đường kẻ mảnh, và màu chỉ dành cho lỗi. Nên trợ
+ * lý được nhận ra bằng một vạch dọc mảnh ở mép trái cộng một dấu nhỏ cạnh tên —
+ * cùng loại tín hiệu với vạch ngăn ngày và với đường kẻ dưới thanh tiêu đề.
+ *
+ * Đây không phải chuyện thẩm mỹ thuần túy. Đặc tả cấm trợ lý giả làm tư vấn
+ * viên, và một bong bóng giống hệt bong bóng của tư vấn viên là cách vi phạm
+ * điều ấy mà không ai phải nói dối một câu nào.
+ */
+
+.support-bubble.assistant {
+  border-left: 3px solid var(--line-strong);
+  border-top-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.support-sender.assistant {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.support-sender-mark {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: none;
+}
+
+/* ----- Trợ lý đang soạn ----- */
+
+/*
+ * Ba chấm, không phải một vòng xoay.
+ *
+ * Lượt này có thể mất tới ba mươi giây, và thứ giữ được người ta ngồi lại quãng
+ * ấy là một dấu hiệu nói rằng *ai đó đang trả lời* — đúng thứ ngôn ngữ mà mọi
+ * ứng dụng nhắn tin đã dạy sẵn. Một vòng xoay chỉ nói "hệ thống đang bận".
+ */
+.support-bubble.support-typing {
+  padding-block: 0.65rem;
+}
+
+.support-typing-dots {
+  display: inline-flex;
+  gap: 0.28rem;
+  align-items: center;
+}
+
+.support-typing-dots i {
+  width: 0.36rem;
+  height: 0.36rem;
+  border-radius: var(--radius-pill);
+  background: var(--ink-muted);
+  animation: support-typing 1.1s ease-in-out infinite;
+}
+
+.support-typing-dots i:nth-child(2) { animation-delay: 0.15s; }
+.support-typing-dots i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes support-typing {
+  0%, 60%, 100% { opacity: 0.28; transform: translateY(0); }
+  30%           { opacity: 1;    transform: translateY(-0.16rem); }
+}
+
+/* Người tắt hiệu ứng chuyển động vẫn phải biết là có gì đó đang chạy, nên các
+   chấm ở lại — chỉ đứng yên. Xóa hẳn chúng sẽ là một khung chat im lặng. */
+@media (prefers-reduced-motion: reduce) {
+  .support-typing-dots i { animation: none; opacity: 0.55; }
+}
+
+/* ----- Dải băng "bạn đang nói với ai" ----- */
+
+/*
+ * Luôn có mặt trong lúc trợ lý đang bật, không chỉ lúc vừa đổi chế độ: câu hỏi
+ * "tôi đang nói với người hay với máy?" không mất đi sau vài giây, và người
+ * đọc mở lại hộp thoại sau hai tiếng phải thấy câu trả lời ở ngay đó.
+ */
+.support-modebar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+  background: var(--surface-sunken);
+  border-bottom: var(--outline-width) solid var(--outline);
+}
+
+.support-modebar-label {
+  flex: 1 1 auto;
+  line-height: 1.45;
+}
+
+/*
+ * Lối thoát, và nó nằm ngay đây chứ không sau một cái menu ba chấm.
+ *
+ * Đó là điều kiện của cả tính năng — người dùng không bao giờ được kẹt lại với
+ * trợ lý — và một lối thoát mà phần lớn người ta không tìm thấy thì không phải
+ * một lối thoát.
+ */
+.support-modebar-action {
+  flex: none;
+  padding: 0.2rem 0.6rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.support-modebar-action:hover:not(:disabled) {
+  background: var(--bg-alt);
+  border-color: var(--line-strong);
+}
+
+.support-modebar-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.support-modebar-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ----- Câu giải thích khi trợ lý không trả lời được ----- */
+
+/*
+ * Trên ô soạn tin, không nằm trong luồng tin. Nó không được ghi vào cơ sở dữ
+ * liệu, nên đặt nó giữa các tin nhắn sẽ là một dòng biến mất sau khi tải lại
+ * trang — và một dòng biến mất thì tệ hơn là không có dòng nào.
+ */
+.support-assistant-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--surface-sunken);
+  border-top: var(--outline-width) solid var(--outline);
+}
+
+.support-assistant-notice p {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+/* ------------------------------------------------------------------ */
+/* Bảng chọn đầu tiên                                                  */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Hai lựa chọn NGANG HÀNG nhau, cùng kích thước, cùng sức nặng thị giác.
+ *
+ * Dựng cái nút AI to hơn, tô màu hơn, hay đặt cái nút kia thành một dòng chữ
+ * nhỏ bên dưới là cách quen thuộc để đẩy người ta về phía rẻ tiền hơn. Nó cũng
+ * là cách người ta học được rằng khung chat này không dẫn tới ai cả — và bài
+ * học ấy tốn nhiều hơn số tiền nó tiết kiệm được.
+ */
+.support-chooser {
+  flex: 1 1 auto;
+}
+
+.support-chooser-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  min-height: 16rem;
+  justify-content: center;
+}
+
+.support-chooser-hello {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.support-chooser-ask {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.support-chooser-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.support-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--outline-width) solid var(--outline);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.support-choice:hover:not(:disabled) {
+  background: var(--bg-alt);
+  border-color: var(--line-strong);
+}
+
+.support-choice:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.support-choice:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.support-choice-icon {
+  flex: none;
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.support-choice-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.support-choice-title {
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.support-choice-note {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--ink-muted);
+}
+
+/*
+ * Khoang giữ chỗ trong lúc chưa biết vẽ màn hình nào.
+ *
+ * Rỗng có chủ đích, và cao đúng bằng khung chat: vẽ khung chat ngay rồi đổi
+ * sang bảng chọn một nhịp sau là một cái nháy mà mắt bắt được, và nó xảy ra ở
+ * đúng lần mở đầu tiên của mỗi người — lần duy nhất họ chưa biết cái hộp này
+ * làm gì.
+ */
+.support-panel-wait {
+  min-height: 16rem;
+}

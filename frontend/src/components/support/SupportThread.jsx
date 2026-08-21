@@ -50,7 +50,10 @@ export default function SupportThread({
   const {
     connection, conversation, messages, hasMore, loading, loadingOlder,
     error, limits, send, retry, loadOlder, markRead,
+    thinking, assistantNotice, suggestHandoff, handoff,
   } = thread;
+
+  const assistantMode = conversation?.assistantMode ?? null;
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -170,8 +173,28 @@ export default function SupportThread({
             : <MessageBubble key={key} {...row} onRetry={retry} />
         ))}
 
+        {/* Nằm trong vùng cuộn, ngay dưới tin cuối, chứ không phải một dải băng
+            cố định ở đâu đó: chỗ người ta đang nhìn khi chờ một câu trả lời là
+            chỗ câu trả lời sắp hiện ra. */}
+        {thinking && <AssistantTyping />}
+
         <div ref={bottomRef} />
       </div>
+
+      {/* Câu giải thích khi trợ lý không trả lời được, kèm đường đi tiếp.
+          Trên ô soạn tin chứ không nằm trong luồng tin: nó không được ghi vào
+          cơ sở dữ liệu, nên đặt nó giữa các tin nhắn sẽ là một dòng biến mất
+          sau khi tải lại trang — và một dòng biến mất thì tệ hơn là không có. */}
+      {assistantNotice && (
+        <div className="support-assistant-notice">
+          <p>{assistantNotice}</p>
+          {suggestHandoff && handoff && assistantMode === "AI" && (
+            <Button size="sm" onClick={() => handoff(null)}>
+              Chat với tư vấn viên
+            </Button>
+          )}
+        </div>
+      )}
 
       {disabledNotice && <p className="support-notice">{disabledNotice}</p>}
 
@@ -209,6 +232,46 @@ export default function SupportThread({
     </div>
   );
 }
+
+/**
+ * Trợ lý đang soạn câu trả lời.
+ *
+ * <p>Ba chấm nhấp nháy chứ không phải một vòng xoay, và không phải một dòng chữ
+ * "đang tải": lượt này có thể mất tới ba mươi giây, và thứ duy nhất giữ được
+ * người ta ngồi lại quãng ấy là một dấu hiệu nói rằng <i>ai đó đang trả lời</i>
+ * — đúng thứ ngôn ngữ mà mọi ứng dụng nhắn tin đã dạy sẵn.
+ *
+ * <p>{@code aria-live="polite"} để trình đọc màn hình đọc nó lên một lần, thay
+ * vì để người không nhìn thấy ngồi trước một khung im lặng.
+ */
+function AssistantTyping() {
+  return (
+    <div className="support-row theirs" aria-live="polite">
+      <span className="support-sender assistant">
+        <AssistantMark />
+        Trợ lý AI
+      </span>
+      <div className="support-bubble theirs assistant support-typing">
+        <span className="support-typing-dots" aria-hidden="true">
+          <i /><i /><i />
+        </span>
+        <span className="sr-only">Trợ lý đang soạn câu trả lời</span>
+      </div>
+    </div>
+  );
+}
+
+/** Dấu nhận biết trợ lý, đi kèm tên người gửi. */
+const AssistantMark = () => (
+  <svg className="support-sender-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="4" y="7.5" width="16" height="12" rx="3.5" />
+    <path d="M12 7.5V4.5" />
+    <circle cx="12" cy="3.2" r="1.3" />
+    <path d="M9 12.5h.01M15 12.5h.01" />
+    <path d="M9.5 16h5" />
+  </svg>
+);
 
 /**
  * Trạng thái đường truyền, nói ra chỉ khi nó không bình thường.
@@ -277,11 +340,23 @@ function MessageBubble({ message, mine, showName, showTime, showSeen, onRetry })
 
   const failed = message.status === FAILED;
 
+  // Câu của trợ lý phải nhìn ra được là của trợ lý mà không cần đọc tên người
+  // gửi. Đặc tả gọi "giả làm tư vấn viên" là một điều cấm, và một bong bóng
+  // giống hệt bong bóng của tư vấn viên chính là cách vi phạm nó mà không ai
+  // phải nói dối một câu nào.
+  const assistant = message.senderRole === "AI";
+
   return (
     <div className={`support-row ${mine ? "mine" : "theirs"} ${showTime ? "run-end" : ""}`}>
-      {showName && <span className="support-sender">{message.senderName ?? "—"}</span>}
+      {showName && (
+        <span className={`support-sender ${assistant ? "assistant" : ""}`}>
+          {assistant && <AssistantMark />}
+          {message.senderName ?? "—"}
+        </span>
+      )}
 
-      <div className={`support-bubble ${mine ? "mine" : "theirs"} ${failed ? "failed" : ""}`}>
+      <div className={`support-bubble ${mine ? "mine" : "theirs"} `
+        + `${assistant ? "assistant" : ""} ${failed ? "failed" : ""}`}>
         {/* Text node, không phải HTML. Xuống dòng do CSS giữ. */}
         {message.content}
       </div>

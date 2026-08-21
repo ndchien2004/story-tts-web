@@ -228,6 +228,7 @@ export default function AdminSupportPage() {
                           nhau là thứ khiến một danh sách trông xộc xệch. */}
                       {hasTags(item) && (
                         <span className="support-inbox-tags">
+                          <ModeBadge mode={item.conversation.assistantMode} />
                           {item.conversation.status !== "OPEN" && (
                             <StatusBadge status={item.conversation.status} />
                           )}
@@ -323,7 +324,37 @@ const STATUS_TABS = [
  * dày danh sách. Nhãn ở đây dành cho những gì <i>khác</i> thường.
  */
 function hasTags(item) {
-  return item.conversation.status !== "OPEN" || !item.user.enabled || item.user.vip;
+  return item.conversation.status !== "OPEN"
+    || item.conversation.assistantMode !== "HUMAN"
+    || !item.user.enabled
+    || item.user.vip;
+}
+
+/**
+ * Ai đang phụ trách luồng, nhìn từ phía người trực.
+ *
+ * <h3>Hai nhãn, và cái thứ ba cố ý không có</h3>
+ * <pre>
+ *   AI      → "Trợ lý AI"      — không phải việc của bạn
+ *   HANDOFF → "Chờ tư vấn viên" — đang có người chờ, chưa ai nhận
+ *   HUMAN   → (không nhãn)      — trạng thái bình thường
+ * </pre>
+ *
+ * {@code HUMAN} không có nhãn vì nó là mặc định của mọi luồng có từ trước V16
+ * và của mọi luồng đã có người nhận. Gắn nhãn cho cái bình thường là làm loãng
+ * hai cái bất thường — cùng lập luận với việc {@code StatusBadge} bỏ qua
+ * {@code OPEN}.
+ *
+ * <p>Nhãn {@code AI} quan trọng hơn vẻ ngoài của nó: một luồng đang do trợ lý
+ * phụ trách <i>không</i> hiện số chưa đọc và <i>không</i> vào phép đếm chờ trả
+ * lời — xem {@code SupportConversationRepository}. Không có nhãn thì người trực
+ * sẽ thấy một cuộc trò chuyện có tin mới mà không có con số nào bên cạnh, và
+ * tưởng là hỏng.
+ */
+function ModeBadge({ mode }) {
+  if (mode === "AI") return <Badge tone="info">Trợ lý AI</Badge>;
+  if (mode === "HANDOFF") return <Badge tone="warning">Chờ tư vấn viên</Badge>;
+  return null;
 }
 
 function StatusBadge({ status }) {

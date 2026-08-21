@@ -678,6 +678,55 @@ export const supportApi = {
   markRead: (lastMessageId) =>
     client.patch("/api/support/read", { lastMessageId }).then((r) => r.data),
 
+  /* ---------------- Trợ lý AI ---------------- */
+
+  /**
+   * Trợ lý có dùng được không, và còn bao nhiêu lượt hôm nay.
+   *
+   * Không tạo luồng hỗ trợ nào — cùng lý lẽ với `summary`. `enabled: false`
+   * nghĩa là bảng chọn "AI hay tư vấn viên?" không hiện ra và hộp thư chạy y
+   * như trước: nhắn thẳng cho tư vấn viên.
+   */
+  assistantStatus: () => client.get("/api/support/ai/status").then((r) => r.data),
+
+  /**
+   * Chọn trò chuyện với trợ lý.
+   *
+   * Trả về cả một trang tin nhắn chứ không chỉ trạng thái, cố ý: hộp thoại vẽ
+   * ngay tin hệ thống vừa được ghi thay vì đợi khung tin WebSocket tới. Trên
+   * một bản triển khai không bật được WebSocket thì "đợi" là vĩnh viễn.
+   */
+  startAssistant: () => client.post("/api/support/ai/session").then((r) => r.data),
+
+  /**
+   * Hỏi trợ lý một câu.
+   *
+   * Chậm có chủ đích: nó chờ Gemini trả lời rồi mới về, nên bên gọi phải vẽ
+   * một trạng thái "đang soạn". Không đi qua WebSocket vì giữ một luồng xử lý
+   * socket đứng chờ ba mươi giây là chuyện không làm.
+   *
+   * `clientMessageId` bắt buộc và phải giữ nguyên qua mọi lần thử lại, y như
+   * `send` — và ở đây nó còn làm thêm một việc: câu trả lời được đánh dấu bằng
+   * một định danh suy ra từ id câu hỏi, nên một lần bấm gửi không bao giờ sinh
+   * ra hai câu trả lời khác nhau.
+   *
+   * Câu trả lời có thể là null trong một lượt thành công — Gemini hỏng, hết
+   * lượt, hoặc người dùng vừa bấm chuyển tư vấn viên. Khi ấy `notice` mang câu
+   * để hiện lên và `suggestHandoff` bật. Câu hỏi thì luôn được ghi.
+   */
+  askAssistant: (payload) =>
+    client.post("/api/support/ai/messages", payload).then((r) => r.data),
+
+  /**
+   * Chuyển cuộc trò chuyện cho tư vấn viên.
+   *
+   * Bất biến ở phía máy chủ: bấm nhiều lần, hai tab bấm cùng lúc, hay một lần
+   * thử lại sau khi mất mạng đều chỉ ra một lần chuyển giao. Bên gọi vì thế
+   * không cần chống bấm trùng cho đúng — chỉ cần chống cho đẹp.
+   */
+  handoff: (reason) =>
+    client.post("/api/support/handoff", { reason: reason ?? null }).then((r) => r.data),
+
   /**
    * Xin một vé rồi dựng địa chỉ WebSocket từ nó.
    *

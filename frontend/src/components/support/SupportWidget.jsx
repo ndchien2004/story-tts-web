@@ -50,6 +50,20 @@ export default function SupportWidget() {
   /** Số chưa đọc trước lần mở đầu tiên. Sau đó khung chat là nguồn chính xác hơn. */
   const [summary, setSummary] = useState(null);
 
+  /**
+   * Trợ lý AI có dùng được không, và còn bao nhiêu lượt hôm nay.
+   *
+   * <p>{@code null} nghĩa là chưa hỏi xong. Nó được hỏi <i>một lần</i> lúc mở
+   * hộp thoại lần đầu chứ không phải ở mỗi lần vẽ: đây là một câu trả lời gần
+   * như không đổi trong một phiên, và cái nó quyết định — có hiện bảng chọn
+   * "AI hay tư vấn viên?" hay không — cũng thế.
+   *
+   * <p>Hỏng thì coi như tắt, và đó là đường lui đúng: hộp thư quay về hành vi
+   * trước V16 — nhắn thẳng cho tư vấn viên — thay vì kẹt ở một bảng chọn không
+   * bấm được.
+   */
+  const [assistant, setAssistant] = useState(null);
+
   const panelRef = useRef(null);
   const launcherRef = useRef(null);
 
@@ -97,6 +111,26 @@ export default function SupportWidget() {
     }
     refreshSummary();
   }, [enabled, refreshSummary]);
+
+  /*
+   * Hỏi một lần, lúc mở hộp thoại lần đầu.
+   *
+   * Không hỏi ở lần vẽ đầu tiên của trang: đường này chạy trên mọi trang của
+   * mọi người đã đăng nhập, và phần lớn trong số họ không mở hộp thoại ra lần
+   * nào. Một request cho mỗi lượt xem trang là cái giá không đổi lại được gì.
+   */
+  useEffect(() => {
+    if (!enabled || !everOpened || assistant != null) return;
+    let cancelled = false;
+    supportApi.assistantStatus()
+      .then((status) => { if (!cancelled) setAssistant(status); })
+      .catch(() => {
+        // Coi như tắt. Hộp thư quay về hành vi trước V16 thay vì kẹt ở một
+        // bảng chọn mà một nửa số nút không dẫn đi đâu.
+        if (!cancelled) setAssistant({ enabled: false });
+      });
+    return () => { cancelled = true; };
+  }, [enabled, everOpened, assistant]);
 
   /*
    * Một tin mới của phía hỗ trợ trong lúc hộp thoại đang đóng.
@@ -165,6 +199,35 @@ export default function SupportWidget() {
 
   const blocked = (everOpened ? thread.conversation?.status : summary?.status) === "BLOCKED";
 
+  /*
+   * Ba màn hình, và điều kiện chọn giữa chúng.
+   *
+   *   chooser → trợ lý đang bật, luồng chưa ai nói câu nào, và chưa chọn gì
+   *   thread  → mọi trường hợp còn lại
+   *   (chờ)   → chưa biết đủ để chọn, nên chưa vẽ gì
+   *
+   * "Chưa chọn gì" đọc từ `assistantMode === "HUMAN"` cộng `lastMessageId ==
+   * null`, không từ một trạng thái được lưu riêng — xem `SupportAssistantMode`
+   * ở phía máy chủ về lý do không dựng thêm một giá trị enum cho nó.
+   *
+   * Điều kiện `lastMessageId == null` là phần gánh nặng: một luồng hỗ trợ cũ,
+   * có từ trước V16, luôn có tin nhắn — nên nó đi thẳng vào khung chat như
+   * trước, không bao giờ thấy bảng chọn. Đó chính là phần tương thích ngược.
+   */
+  const mode = thread.conversation?.assistantMode ?? summary?.assistantMode ?? null;
+  const assistantOn = assistant?.enabled === true;
+  const untouched = everOpened
+    ? thread.conversation != null && thread.conversation.lastMessageId == null
+    : summary?.exists !== true || summary?.lastMessageId == null;
+
+  const showChooser = assistantOn && mode === "HUMAN" && untouched && !blocked;
+
+  // Chưa biết đủ để chọn màn hình: trợ lý chưa trả lời, hoặc luồng chưa tải
+  // xong. Vẽ khung chat ngay rồi đổi sang bảng chọn một nhịp sau là một cái
+  // nháy mà mắt bắt được, và nó xảy ra ở đúng lần mở đầu tiên của mỗi người.
+  const undecided = open && everOpened
+    && (assistant == null || (thread.loading && thread.conversation == null));
+
   return (
     <div className={`support-widget ${open ? "open" : ""}`}>
       {open && (
@@ -187,16 +250,34 @@ export default function SupportWidget() {
             </button>
           </header>
 
-          <SupportThread
-            thread={thread}
-            mySide="USER"
-            canSend={!blocked}
-            emptyHint="Chào bạn! Hãy mô tả vấn đề bạn gặp phải — càng cụ thể càng nhanh được giúp."
-            composerPlaceholder="Nhập tin nhắn…"
-            disabledNotice={blocked
-              ? "Quản trị viên đã khóa cuộc trò chuyện này. Bạn vẫn xem được lịch sử."
-              : null}
-          />
+          {undecided && <div className="support-thread support-panel-wait" />}
+
+          {!undecided && showChooser && (
+            <SupportChooser
+              onPickAssistant={thread.startAssistant}
+              onPickHuman={() => thread.handoff(null)}
+            />
+          )}
+
+          {!undecided && !showChooser && (
+            <>
+              {assistantOn && <ModeBar mode={mode} onRequestHuman={thread.handoff} />}
+              <SupportThread
+                thread={thread}
+                mySide="USER"
+                canSend={!blocked}
+                emptyHint={mode === "AI"
+                  ? "Bạn cứ hỏi tự nhiên — ví dụ cách mở khóa chương, cách nạp Xu, hay VIP gồm những gì."
+                  : "Chào bạn! Hãy mô tả vấn đề bạn gặp phải — càng cụ thể càng nhanh được giúp."}
+                composerPlaceholder={mode === "AI"
+                  ? "Hỏi trợ lý AI…"
+                  : "Nhập tin nhắn…"}
+                disabledNotice={blocked
+                  ? "Quản trị viên đã khóa cuộc trò chuyện này. Bạn vẫn xem được lịch sử."
+                  : null}
+              />
+            </>
+          )}
         </section>
       )}
 
@@ -230,6 +311,146 @@ export default function SupportWidget() {
  * nối lại" chiếm mất chỗ của nội dung, và dải băng bên trong khung chat đã nói
  * điều đó khi nó thật sự quan trọng. Cái chấm chỉ để liếc.
  */
+/**
+ * Màn hình đầu tiên: chat với AI, hay gặp tư vấn viên.
+ *
+ * <h3>Hai nút ngang hàng nhau, và đó là một quyết định sản phẩm</h3>
+ * Dựng cái nút AI to hơn, tô màu hơn, hay đặt cái nút kia thành một dòng chữ
+ * nhỏ bên dưới là cách quen thuộc để đẩy người ta về phía rẻ tiền hơn. Nó cũng
+ * là cách người ta học được rằng khung chat này không dẫn tới ai cả — và bài
+ * học ấy tốn nhiều hơn số tiền nó tiết kiệm được.
+ *
+ * <p>Lời chào ở đây là chữ của giao diện, không phải một tin nhắn được ghi vào
+ * cơ sở dữ liệu. Ghi nó xuống sẽ là một dòng nằm mãi ở đầu mọi bản ghi hội
+ * thoại mà tư vấn viên phải cuộn qua, cho một câu không ai nói với ai.
+ */
+function SupportChooser({ onPickAssistant, onPickHuman }) {
+  const [busy, setBusy] = useState(null);
+
+  const pick = async (which, action) => {
+    if (busy) return;
+    setBusy(which);
+    try {
+      await action();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="support-thread support-chooser">
+      <div className="support-chooser-body">
+        <p className="support-chooser-hello">
+          Xin chào! Tôi có thể hỗ trợ bạn giải đáp các vấn đề thường gặp về tài
+          khoản, truyện, VIP, Xu, mở khóa chương và cách sử dụng website.
+        </p>
+        <p className="support-chooser-ask">Bạn muốn chat với AI hay gặp tư vấn viên?</p>
+
+        <div className="support-chooser-options">
+          <button
+            type="button"
+            className="support-choice"
+            disabled={busy != null}
+            onClick={() => pick("ai", onPickAssistant)}
+          >
+            <span className="support-choice-icon" aria-hidden="true">🤖</span>
+            <span className="support-choice-main">
+              <span className="support-choice-title">
+                {busy === "ai" ? "Đang mở…" : "Chat với AI"}
+              </span>
+              <span className="support-choice-note">
+                Trả lời ngay, miễn phí. Đổi sang tư vấn viên lúc nào cũng được.
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="support-choice"
+            disabled={busy != null}
+            onClick={() => pick("human", onPickHuman)}
+          >
+            <span className="support-choice-icon" aria-hidden="true">👨‍💻</span>
+            <span className="support-choice-main">
+              <span className="support-choice-title">
+                {busy === "human" ? "Đang kết nối…" : "Chat với tư vấn viên"}
+              </span>
+              <span className="support-choice-note">
+                Dành cho thanh toán, tài khoản, và những việc cần người thật xử lý.
+              </span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Một dải băng nói rõ đang nói chuyện với ai.
+ *
+ * <h3>Vì sao nó luôn có mặt, không chỉ lúc đổi chế độ</h3>
+ * Vì câu hỏi "tôi đang nói với người hay với máy?" không mất đi sau vài giây.
+ * Người đọc mở lại hộp thoại sau hai tiếng, hoặc từ một tab khác, và câu trả
+ * lời phải ở ngay đó — không phải trong một thông báo đã trôi qua.
+ *
+ * <h3>Nút "Gặp tư vấn viên" nằm ở đây, không nằm trong một menu</h3>
+ * Đó là điều kiện của cả tính năng: người dùng không bao giờ được kẹt lại với
+ * trợ lý. Một lối thoát nằm sau một cái menu ba chấm là một lối thoát mà phần
+ * lớn người ta không tìm thấy.
+ */
+function ModeBar({ mode, onRequestHuman }) {
+  const [asking, setAsking] = useState(false);
+
+  if (mode === "AI") {
+    return (
+      <div className="support-modebar ai">
+        <span className="support-modebar-label">
+          <span aria-hidden="true">🤖</span> Bạn đang chat với trợ lý AI
+        </span>
+        <button
+          type="button"
+          className="support-modebar-action"
+          disabled={asking}
+          onClick={async () => {
+            setAsking(true);
+            try {
+              await onRequestHuman(null);
+            } finally {
+              setAsking(false);
+            }
+          }}
+        >
+          {asking ? "Đang chuyển…" : "Gặp tư vấn viên"}
+        </button>
+      </div>
+    );
+  }
+
+  if (mode === "HANDOFF") {
+    return (
+      <div className="support-modebar waiting" aria-live="polite">
+        <span className="support-modebar-label">
+          Đang kết nối với tư vấn viên… Bạn cứ để lại câu hỏi, tư vấn viên sẽ
+          đọc được toàn bộ nội dung phía trên.
+        </span>
+      </div>
+    );
+  }
+
+  if (mode === "HUMAN") {
+    return (
+      <div className="support-modebar human">
+        <span className="support-modebar-label">
+          <span aria-hidden="true">👨‍💻</span> Bạn đang được hỗ trợ bởi tư vấn viên
+        </span>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 function ConnectionDot({ live }) {
   return (
     <span
