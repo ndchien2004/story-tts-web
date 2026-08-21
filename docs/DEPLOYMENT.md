@@ -191,6 +191,76 @@ là đọc được cả API key lẫn mật khẩu cơ sở dữ liệu.
 
 ---
 
+## Khi WebSocket "chạy ở máy mình mà hỏng trên bản deploy"
+
+Đã xảy ra một lần, và nguyên nhân **không** nằm ở WebSocket. Ghi lại đầy đủ vì
+mọi dấu hiệu ban đầu đều chỉ sai hướng.
+
+### Triệu chứng
+
+Hộp thư hỗ trợ im lặng trên bản deploy. Trong DevTools không có dòng WS nào —
+vì `POST /api/support/ws-ticket` trả **500 Internal Server Error**, nên trình
+duyệt không bao giờ tới bước gọi `new WebSocket(...)`.
+
+### Nguyên nhân thật
+
+**Backend trên Render còn cũ hơn frontend trên Vercel.** Frontend đã có tính
+năng Hỗ trợ; backend thì chưa, nên đường `/api/support/ws-ticket` **không tồn
+tại ở đó**. Câu trả lời đúng phải là 404.
+
+Nó ra ngoài thành 500 vì `GlobalExceptionHandler` có một bộ bắt
+`Exception.class` và khi ấy chưa có gì hẹp hơn cho `NoResourceFoundException` —
+thứ Spring ném khi không đường nào khớp. Một mã trạng thái sai không chỉ là một
+con số sai: nó là tấm biển chỉ đường sai. "500" nói *máy chủ hỏng*, nên cuộc
+điều tra đi tìm ở cấu hình WebSocket, danh sách CORS, proxy của Render, biến môi
+trường và chuyện `ws`/`wss` — năm chỗ không có gì.
+
+Cả hai đã được sửa: 404 giờ ra đúng là 404 (kèm một dòng WARN
+`KHONG_CO_DUONG` trong log Render), và `render.yaml` ghi rõ `autoDeploy: true`.
+Bài kiểm giữ chỗ: `ErrorStatusTest`.
+
+### Cách kiểm tra trong ba mươi giây
+
+`/v3/api-docs` để `permitAll`, nên nó trả lời được câu "bản đang chạy có những
+đường nào" mà không cần đăng nhập:
+
+```bash
+# Backend co tinh nang Ho tro khong?
+curl -s https://<app>.onrender.com/v3/api-docs | grep -c '/api/support'
+#   0  → backend cu hon frontend. Vao Render → Manual Deploy → Deploy latest commit.
+#   >0 → backend da co; van hong thi doc bang duoi.
+
+# Duong khong ton tai phai tra 404, khong duoc tra 500.
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://<app>.onrender.com/swagger-ui/khong-co-that.html
+```
+
+### Bảng tra: `/api/support/ws-ticket` trả về gì
+
+| Mã | Nghĩa | Việc phải làm |
+|---|---|---|
+| **404** | Bản backend này chưa có tính năng Hỗ trợ | Triển khai lại backend |
+| **401** | Token hết hạn, hoặc tài khoản bị khóa | Đăng nhập lại |
+| **503** | Hết chỗ giữ vé (`OneTimeTicketStore` đầy) | Tự khỏi; vé sống 90 giây |
+| **5xx** khác | Máy chủ đang thức dậy sau 15 phút ngủ | Đợi ~1 phút |
+| **200** nhưng WS vẫn hỏng | Vé phát được, bắt tay bị chặn | Xem hai dòng dưới |
+
+Bắt tay hỏng thì log của Render nói thẳng lý do — cả hai dòng đều ở mức INFO,
+không phải DEBUG:
+
+```text
+WEBSOCKET_ORIGIN_REJECTED ho-tro: nguồn … không nằm trong danh sách cho phép …
+        → thêm tên miền vào CORS_ALLOWED_ORIGINS
+WEBSOCKET_AUTH_FAILED ho-tro: vé không hợp lệ hoặc đã dùng
+        → vé hết hạn (90 giây), hoặc đang chạy nhiều instance mà không sticky
+```
+
+> Trình duyệt **không bao giờ** nói cho JavaScript biết vì sao một lần bắt tay
+> WebSocket bị từ chối — `onclose` không mang mã HTTP. Nên với đường này, log
+> của máy chủ không phải một cách chẩn đoán tiện tay; nó là cách **duy nhất**.
+
+---
+
 ## Sao lưu
 
 Xem [BACKUP.md](BACKUP.md).

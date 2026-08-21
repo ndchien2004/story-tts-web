@@ -283,6 +283,52 @@ tab quay lại        → tải trang mới nhất → phần bỏ lỡ lúc tr�
 Đường thứ ba tồn tại vì trình duyệt trên điện thoại đóng băng cả tab lẫn kết nối
 của nó khi người dùng chuyển ứng dụng, và nó không báo cho ai biết.
 
+### Huy hiệu trên tab "Hỗ trợ"
+
+Con số đỏ trên thanh bên của khu quản trị. Nó phải hiện ra ở chỗ mà màn hình Hỗ
+trợ **không** tồn tại — quản trị viên đang ở tab Thành viên, tab Bình luận, tab
+Tổng quan — nên nó không thể là state của màn hình ấy. Nó sống ở
+`AdminSupportProvider`, đặt ngay trong `AdminLayout`: mọi màn hình quản trị nằm
+dưới nó, không màn hình nào của người đọc nằm dưới nó.
+
+```text
+awaitingReply  ← GET /api/admin/support/summary, KHÔNG phải phép cộng ở trình duyệt
+```
+
+Đó là điểm chính, và là điều kiện để nó đúng khi có **nhiều quản trị viên**: mốc
+"đã đọc" của phía hỗ trợ là *một* mốc dùng chung, nên người này mở luồng ra đọc
+thì huy hiệu của người kia cũng phải tụt — thứ mà một bộ đếm cục bộ không có
+cách nào biết. Khung tin chỉ là tín hiệu "đi hỏi lại đi"; con số luôn từ máy chủ.
+
+Đếm **luồng**, không đếm **tin**: đây là hàng đợi việc, và ba câu liên tiếp của
+cùng một người vẫn là một việc phải làm. Số tin nằm ở chỗ nó có nghĩa — cái chấm
+bên phải mỗi dòng trong danh sách hộp thư.
+
+| Đường làm mới | Nó lo chuyện gì |
+|---|---|
+| mở bảng quản trị | F5, hoặc vừa đăng nhập |
+| `message:new` | tin mới, tức thời |
+| `message:read` với `reader = ADMIN` | ai đó vừa đọc — kể cả người ngồi máy khác |
+| socket nối lại | phần bỏ lỡ lúc mất mạng |
+| tab quay lại tiền cảnh | trình duyệt điện thoại đóng băng tab |
+| nhịp 45 giây | lưới đỡ cuối, và trường hợp nhiều bản ứng dụng |
+
+Hai chi tiết dễ làm sai, cả hai đều đã cắn một lần:
+
+- **`message:new` phải làm mới kể cả khi người gửi là quản trị viên.** Lượt ghi
+  đẩy luôn mốc đã đọc của chính phía gửi (`SupportStore.append` →
+  `advanceReadMark`), nên *trả lời* một luồng là *đọc nốt* nó. Lọc theo
+  `senderRole === "USER"` để lại một huy hiệu không bao giờ tắt sau khi vừa trả
+  lời xong.
+- **`message:read` với `reader = USER` thì không.** Người đọc xem tới đâu không
+  liên quan gì tới việc phía hỗ trợ còn bao nhiêu việc. Khung tin ấy vẫn tới mọi
+  cửa sổ quản trị (một hình dạng khung tin cho cả hai phía), nên bỏ qua nó là bỏ
+  một lượt gọi API cho mỗi lần bất kỳ người đọc nào mở hộp thoại chat.
+
+Một đợt tin dồn dập được **gom trong 250ms** thành một lượt hỏi, và mỗi câu trả
+lời mang một số thứ tự: response cũ về sau response mới thì bị bỏ, thay vì ghi
+đè một con số mới bằng một con số cũ cho tới nhịp 45 giây kế tiếp.
+
 ### Nối lại
 
 Quãng nghỉ tăng dần (1s → 30s) **kèm ngẫu nhiên**. Ngẫu nhiên không phải để cho
@@ -351,6 +397,33 @@ Trang này hiện chạy **một bản** (`render.yaml`, gói free), nên đó l
   danh sách để lệch nhau.
 - Đường `/ws/support` để `permitAll` ở tầng URL vì chuỗi lọc không có header nào
   để đọc; việc kiểm quyền nằm trong interceptor bắt tay.
+- Đứng sau một proxy gỡ TLS (Render, Cloudflare), đặt
+  `FORWARD_HEADERS_STRATEGY=framework` để máy chủ đọc `X-Forwarded-*` và biết
+  địa chỉ thật mà trình duyệt đã gọi tới. Mặc định là `none`: header ấy chỉ tin
+  được khi có một proxy ghi đè nó, và chạy thẳng ra Internet mà bật nó là tự cho
+  người lạ khai báo hộ mình đang gọi từ đâu.
+
+### Thứ tự phép kiểm lúc bắt tay
+
+Có một cái bẫy trong chính Spring, và nó đã được vá:
+`AbstractWebSocketHandlerRegistration.getInterceptors()` nối
+`OriginHandshakeInterceptor` vào **cuối** danh sách — *sau* interceptor của ứng
+dụng. Thứ tự mặc định vì thế là "đổi vé trước, kiểm nguồn sau", và điều đó hỏng
+theo hai cách cùng lúc:
+
+1. **Vé bị tiêu oan.** Vé dùng một lần, `redeem` xóa nó khỏi bản đồ. Nguồn bị từ
+   chối *sau* đó nghĩa là mỗi lần trình duyệt thử lại đốt thêm một vé cho một
+   kết nối không bao giờ mở được.
+2. **Không có dòng nhật ký nào.** `OriginHandshakeInterceptor` chỉ ghi ở mức
+   `DEBUG`, nên trên bản chạy thật một nguồn bị từ chối đi ra thành một con số
+   403 trần trụi — trong khi đây là hàng rào *duy nhất* đứng trước đường này.
+
+`SupportHandshakeInterceptor` nay tự gọi phép kiểm nguồn **trước** khi đổi vé,
+bằng cách ủy quyền cho chính lớp của Spring (không chép tay luật cắt dấu gạch
+chéo cuối, bỏ qua khi vắng header `Origin`, so không phân biệt hoa thường), rồi
+ghi một dòng `WEBSOCKET_ORIGIN_REJECTED` ở mức **INFO** kèm nguồn bị từ chối và
+danh sách đang áp dụng. Bài kiểm giữ chỗ:
+`SupportHandshakeAccessTest.aRejectedOriginDoesNotSpendTheTicket`.
 
 ### Cấu hình
 
@@ -366,8 +439,15 @@ SupportJpaTest             32 bài  ghi/đọc, chống trùng, phân quyền, c
 SupportConcurrencyTest      6 bài  giao dịch chạy thật sự song song
 SupportContentTest         10 bài  làm sạch nội dung, từng ký tự
 SupportSocketRegistryTest  14 bài  định tuyến, trần, dọn dẹp, đá ra
-SupportHandshakeAccessTest  7 bài  ai mở được kết nối
+SupportHandshakeAccessTest 10 bài  ai mở được kết nối, và nguồn nào mở được
+ErrorStatusTest             4 bài  máy chủ nói thật về lỗi của chính nó
 ```
+
+`ErrorStatusTest` không kiểm một tính năng nào của sản phẩm, và nó đáng nói
+riêng vì thế. Nó kiểm rằng một đường không tồn tại trả **404** chứ không phải
+500 — thứ đã một lần biến "backend chưa được triển khai lại" thành một cuộc điều
+tra dài về WebSocket, CORS và proxy. Xem
+[DEPLOYMENT.md](DEPLOYMENT.md#khi-websocket-chạy-ở-máy-mình-mà-hỏng-trên-bản-deploy).
 
 `SupportConcurrencyTest` là `@SpringBootTest` chứ không `@DataJpaTest`, và đó là
 điều kiện: `@DataJpaTest` gói mọi lệnh ghi trong *một* giao dịch, nên không có
