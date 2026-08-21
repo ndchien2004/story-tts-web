@@ -37,7 +37,7 @@ public class WalletQueryService {
     @Transactional(readOnly = true)
     public PageResponse<WalletTransactionDto> myTransactions(int page, int size) {
         return PageResponse.from(
-                transactionRepository.findByUserIdOrderByCreatedAtDesc(
+                transactionRepository.findByUserIdOrderByCreatedAtDescIdDesc(
                         currentUserId(),
                         PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE))),
                 WalletTransactionDto::from);

@@ -163,7 +163,7 @@ class GiftCodeJpaTest {
         flushAndClear();
 
         var row = transactionRepository
-                .findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, 5))
+                .findByUserIdOrderByCreatedAtDescIdDesc(userId, PageRequest.of(0, 5))
                 .getContent().getFirst();
 
         assertThat(row.getType()).isEqualTo(WalletTransactionType.GIFT_CODE);

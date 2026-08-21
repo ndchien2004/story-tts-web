@@ -82,7 +82,7 @@ class WalletJpaTest {
         // +100 -10 -20 +50 = 120
         assertThat(balanceFromDatabase()).isEqualTo(120L);
         assertThat(walletService.ledgerTotalOf(userId)).isEqualTo(120L);
-        assertThat(transactionRepository.findByUserIdOrderByCreatedAtDesc(
+        assertThat(transactionRepository.findByUserIdOrderByCreatedAtDescIdDesc(
                 userId, org.springframework.data.domain.PageRequest.of(0, 10)).getTotalElements())
                 .isEqualTo(4L);
     }
@@ -94,7 +94,7 @@ class WalletJpaTest {
         debit(30);
         credit(5);
 
-        var rows = transactionRepository.findByUserIdOrderByCreatedAtDesc(
+        var rows = transactionRepository.findByUserIdOrderByCreatedAtDescIdDesc(
                         userId, org.springframework.data.domain.PageRequest.of(0, 10))
                 .getContent();
 
