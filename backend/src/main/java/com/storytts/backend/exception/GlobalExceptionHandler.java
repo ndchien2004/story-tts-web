@@ -6,14 +6,24 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.ErrorResponse;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.HttpMediaTypeException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -311,6 +321,120 @@ public class GlobalExceptionHandler {
                                                            HttpServletRequest request) {
         return build(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE",
                 "File tải lên vượt quá dung lượng cho phép.", request);
+    }
+
+    /**
+     * Lỗi do <i>chính Spring MVC</i> ném ra: sai đường, sai phương thức, sai
+     * kiểu nội dung, thiếu tham số.
+     *
+     * <h3>Vì sao khối này tồn tại, và cái giá của việc nó từng không tồn tại</h3>
+     * Lớp này là {@code @RestControllerAdvice} thuần, <b>không</b> kế thừa
+     * {@code ResponseEntityExceptionHandler} — cố ý, vì kế thừa nó sẽ trả về
+     * {@code ProblemDetail} với hình dạng khác hẳn {@link ApiErrorResponse}, và
+     * frontend đọc lỗi bằng {@code data.error} chứ không bằng {@code type/title}
+     * của RFC 7807.
+     *
+     * <p>Hệ quả không ai để ý: mọi ngoại lệ khung của Spring rơi thẳng xuống
+     * {@link #handleOther}, và mọi thứ ra ngoài thành <b>500 INTERNAL_ERROR</b>.
+     * Trong đó có {@code NoResourceFoundException} — thứ Spring ném khi
+     * <i>không có đường nào khớp</i>.
+     *
+     * <p>Điều đó đã thật sự xảy ra và đã tốn rất nhiều thời gian: bản backend
+     * trên Render còn cũ hơn bản frontend trên Vercel, nên
+     * {@code POST /api/support/ws-ticket} không tồn tại ở đó. Câu trả lời đúng
+     * là <b>404</b> — "bản máy chủ này chưa có tính năng ấy", một câu chỉ thẳng
+     * vào việc phải làm là triển khai lại. Câu đi ra lại là <b>500</b> — "máy
+     * chủ hỏng", và mọi cuộc điều tra sau đó đi tìm lỗi trong WebSocket, CORS,
+     * proxy và biến môi trường, tức là đi tìm ở bốn chỗ không có gì.
+     *
+     * <p>Một mã trạng thái sai không chỉ là một con số sai. Nó là một câu chỉ
+     * đường sai, và người đọc nó sẽ đi đúng hướng ấy.
+     *
+     * <h3>Vì sao liệt kê lớp thay vì bắt {@code ErrorResponse}</h3>
+     * Vì {@code org.springframework.web.ErrorResponse} là một interface
+     * <i>không</i> kế thừa {@code Throwable}, nên nó không đặt được vào
+     * {@code @ExceptionHandler}. Danh sách dưới đây là những lớp gốc phủ hết
+     * họ ngoại lệ ấy; mã trạng thái vẫn lấy từ chính ngoại lệ qua interface,
+     * không từ một bảng ánh xạ chép tay ở đây.
+     *
+     * <h3>404 được ghi ở mức WARN, không phải DEBUG</h3>
+     * Vì trên bản chạy thật, một đường mà frontend gọi mà backend không có
+     * <b>luôn</b> có nghĩa: hai bên đang lệch phiên bản. Đó là thứ phải nhìn
+     * thấy trong nhật ký ngay, không phải thứ phải bật lại mức log mới thấy.
+     */
+    @ExceptionHandler({
+            NoResourceFoundException.class,
+            NoHandlerFoundException.class,
+            HttpRequestMethodNotSupportedException.class,
+            HttpMediaTypeException.class,
+            ServletRequestBindingException.class,
+            MissingServletRequestPartException.class,
+            ErrorResponseException.class,
+            HttpMessageNotReadableException.class,
+            MethodArgumentTypeMismatchException.class,
+    })
+    public ResponseEntity<ApiErrorResponse> handleFrameworkFailure(Exception ex,
+                                                                   HttpServletRequest request) {
+        // Mã trạng thái đến từ chính ngoại lệ khi nó biết mình là lỗi gì. Hai
+        // lớp cuối trong danh sách trên không cài ErrorResponse — chúng đều là
+        // "dữ liệu gửi lên không đọc được", tức là 400.
+        HttpStatus status = ex instanceof ErrorResponse described
+                ? HttpStatus.valueOf(described.getStatusCode().value())
+                : HttpStatus.BAD_REQUEST;
+
+        // Không phải mọi ngoại lệ trong danh sách trên đều là lỗi của người gọi.
+        // `MissingPathVariableException` chẳng hạn mang mã 500: nó nghĩa là một
+        // {tham số} trong @GetMapping không khớp với tham số của phương thức —
+        // một lỗi lập trình ở phía chúng ta, không phải một request viết sai.
+        //
+        // Trả nó về đúng đường 500: câu chữ đúng, và quan trọng hơn là ngăn xếp
+        // vào nhật ký. Nếu không, một lỗi của chính mình sẽ đi ra dưới dạng
+        // "dữ liệu gửi lên không hợp lệ" và không để lại dấu vết nào — đúng
+        // kiểu hỏng mà cả khối này sinh ra để chấm dứt.
+        if (status.is5xxServerError()) {
+            return handleOther(ex, request);
+        }
+
+        if (status == HttpStatus.NOT_FOUND) {
+            log.warn("KHONG_CO_DUONG {} {} — frontend gọi một đường mà bản máy chủ này "
+                            + "không có. Kiểm tra xem backend đã được triển khai lại chưa.",
+                    request.getMethod(), request.getRequestURI());
+        } else {
+            // 4xx còn lại là chuyện bình thường của một máy khách viết sai, hoặc
+            // của một cái quét cổng. Ghi ở mức thấp, không kèm ngăn xếp.
+            log.debug("Yêu cầu không hợp lệ {} {}: {}",
+                    request.getMethod(), request.getRequestURI(), ex.getMessage());
+        }
+
+        return build(status, codeFor(status), messageFor(status), request);
+    }
+
+    /** Mã máy đọc được, ổn định — frontend phân nhánh theo nó, không theo câu chữ. */
+    private static String codeFor(HttpStatus status) {
+        return switch (status) {
+            case NOT_FOUND -> "NOT_FOUND";
+            case METHOD_NOT_ALLOWED -> "METHOD_NOT_ALLOWED";
+            case UNSUPPORTED_MEDIA_TYPE -> "UNSUPPORTED_MEDIA_TYPE";
+            case NOT_ACCEPTABLE -> "NOT_ACCEPTABLE";
+            default -> "BAD_REQUEST";
+        };
+    }
+
+    /**
+     * Câu nói cho người dùng.
+     *
+     * <p>Không bao giờ nhắc lại {@code ex.getMessage()}: câu ấy của Spring mang
+     * theo tên tham số, tên kiểu Java và đôi khi cả một mẩu nội dung request —
+     * thứ không có nghĩa với người đọc và có nghĩa với người đang dò máy chủ.
+     */
+    private static String messageFor(HttpStatus status) {
+        return switch (status) {
+            case NOT_FOUND -> "Không tìm thấy đường dẫn này trên máy chủ.";
+            case METHOD_NOT_ALLOWED -> "Phương thức này không được hỗ trợ ở đường dẫn trên.";
+            case UNSUPPORTED_MEDIA_TYPE -> "Máy chủ không đọc được định dạng dữ liệu bạn gửi lên.";
+            case NOT_ACCEPTABLE -> "Máy chủ không trả về được định dạng mà bạn yêu cầu.";
+            default -> "Dữ liệu gửi lên không hợp lệ.";
+        };
     }
 
     @ExceptionHandler(Exception.class)
