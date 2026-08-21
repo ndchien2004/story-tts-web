@@ -1,0 +1,164 @@
+-- =====================================================================
+-- V16 — Trợ lý AI đứng trước hàng đợi hỗ trợ, và đường chuyển sang người
+-- thật.
+--
+-- <h3>Không có bảng nào mới ở đây, và đó là quyết định chính</h3>
+-- Một cuộc trò chuyện với AI *là* cuộc trò chuyện hỗ trợ của người ấy —
+-- cùng hàng trong `support_conversations`, cùng những hàng trong
+-- `support_messages`. Phương án tách riêng ("bảng hội thoại AI, rồi khi
+-- chuyển thì chép sang bảng hỗ trợ") bị bỏ vì nó biến việc chuyển giao
+-- thành một lệnh chép dữ liệu — thứ có thể chép thiếu, chép trùng, hoặc
+-- chép xong nửa chừng rồi hỏng. Ở đây việc chuyển giao chỉ đổi *một cột*:
+-- lịch sử không đi đâu cả, vì nó chưa từng ở chỗ khác.
+--
+-- Ràng buộc `UNIQUE (user_id)` của V15 làm nốt phần còn lại. Một người có
+-- đúng một luồng, vĩnh viễn, nên không có chuyện "phiếu hỗ trợ thứ hai
+-- được tạo ra lúc chuyển giao" — cái mà đặc tả gọi là chống trùng phiếu
+-- thì ở lược đồ này là một điều không diễn đạt được.
+-- =====================================================================
+
+
+-- ---------------------------------------------------------------------
+-- 1. Ai đang nợ câu trả lời: AI hay người thật.
+-- ---------------------------------------------------------------------
+--
+-- Cột này KHÔNG thay thế `status`, vì hai cột trả lời hai câu khác nhau
+-- và cả hai câu đều cần được trả lời cùng lúc:
+--
+--   status          — người đọc có gửi được không, quản trị viên đã coi
+--                     là xong chưa    (OPEN / CLOSED / BLOCKED)
+--   assistant_mode  — ai là bên trả lời (AI / HANDOFF / HUMAN)
+--
+-- Một luồng CLOSED mà mode = AI là chuyện có thật và hợp lệ: quản trị
+-- viên đã đóng hồ sơ, người đọc quay lại hỏi trợ lý một câu chung chung.
+-- Nhét cả hai vào một cột sẽ mất đúng những tổ hợp như thế.
+--
+-- <h4>Ba giá trị, mỗi giá trị đổi ít nhất một quy tắc</h4>
+-- Cùng cái thước đã dùng ở V15 khi từ chối ARCHIVED:
+--
+--   AI      — trợ lý được phép trả lời; tin của người đọc KHÔNG bật huy
+--             hiệu đỏ của quản trị viên. Đây là lý do cả tính năng tồn
+--             tại: một câu hỏi thường không được phép làm phiền ai.
+--   HANDOFF — đã xin gặp người thật, chưa ai nhận. Trợ lý im. Luồng *tự
+--             nó* đã là một việc đang chờ, nên nó bật huy hiệu mà không
+--             cần đợi có tin chưa đọc — xem ghi chú cuối mục này.
+--   HUMAN   — một quản trị viên đã nhận. Trợ lý im. Từ đây trở đi mọi
+--             quy tắc là quy tắc cũ của V15, không sai một ly.
+--
+-- Trạng thái RESOLVED mà đặc tả nhắc tới không có mặt ở đây: nó đã tồn
+-- tại từ V15 dưới tên `status = CLOSED`. Thêm một giá trị thứ tư mang
+-- đúng nghĩa ấy là dựng hai cột phải luôn bằng nhau, tức là hai cột có
+-- thể lệch nhau.
+--
+-- Còn "người đọc chưa chọn gì" cũng không phải một giá trị: nó đọc được
+-- từ `last_message_id IS NULL` (luồng đã tạo, chưa ai nói câu nào). Một
+-- giá trị enum không đổi quy tắc nào ở phía máy chủ thì không đáng có.
+--
+-- <h4>Vì sao HANDOFF tự nó đã bật huy hiệu</h4>
+-- Phép đếm "đang chờ trả lời" của V15 đếm những luồng CÓ TIN CHƯA ĐỌC
+-- của người đọc. Nó đúng cho mọi cảnh của V15, và nó bỏ sót đúng một cảnh
+-- mới: người đọc bấm thẳng "Chat với tư vấn viên" rồi chờ, chưa gõ câu
+-- nào. Không có tin chưa đọc nào, mà rõ ràng đang có người chờ.
+--
+-- Nên phép đếm mới là: mode = HANDOFF, HOẶC (mode <> AI và có tin chưa
+-- đọc). Nó cũng vá luôn một chỗ hơi lệch của cách cũ — trước đây quản
+-- trị viên *đọc* là huy hiệu tắt, dù chưa trả lời câu nào; một luồng
+-- HANDOFF chỉ rời khỏi phép đếm khi có người thật sự nhận nó.
+--
+-- <h4>Mặc định HUMAN, và vì sao không phải AI</h4>
+-- Mọi hàng đang có đều là hội thoại với người thật, nên HUMAN giữ nguyên
+-- hành vi của chúng tới từng chi tiết: cùng phép đếm chưa đọc, cùng huy
+-- hiệu, cùng đường gửi. Bản migration này không đổi gì với người đang
+-- dùng dở.
+--
+-- Mặc định ấy cũng là hàng rào cuối: nếu một đường ghi nào đó quên đặt
+-- mode, hàng sinh ra sẽ là một luồng hỗ trợ *bình thường* — tới được
+-- quản trị viên — chứ không phải một luồng AI im lặng nuốt mất câu hỏi.
+-- Hỏng về phía làm phiền người trực, không hỏng về phía bỏ rơi người hỏi.
+alter table support_conversations
+    add column assistant_mode varchar(20) not null default 'HUMAN' after status;
+
+-- Hộp thư quản trị lọc theo mode ("còn ai đang chờ tư vấn viên") rồi xếp
+-- theo hoạt động mới nhất — cùng hình dạng với idx_..._status_activity
+-- của V15, và cùng lý do: đây là câu chạy ở mỗi lần mở hộp thư.
+create index idx_support_conversations_mode_activity
+    on support_conversations (assistant_mode, last_message_at);
+
+
+-- ---------------------------------------------------------------------
+-- 2. Trợ lý là một BÊN GỬI, không phải một kiểu tin nhắn.
+-- ---------------------------------------------------------------------
+--
+-- `sender_role` từ nay gồm USER / ADMIN / AI. Không đụng tới
+-- `message_type`, vì V15 đã chia đúng: `sender_role` nói *ai* nói,
+-- `message_type` nói nói *kiểu gì*. Câu trả lời của trợ lý là một câu
+-- TEXT bình thường do một bên thứ ba nói ra — nên nó là một giá trị của
+-- cột thứ nhất.
+--
+-- Cột đã là varchar(20) nên không có lệnh nào cần chạy cho nó. Không có
+-- ràng buộc CHECK liệt kê ba giá trị, cùng lựa chọn với V15: Hibernate
+-- ghi enum dưới dạng chuỗi và tầng ứng dụng là nơi duy nhất sinh ra giá
+-- trị này; một CHECK ở đây sẽ phải sửa mỗi lần thêm giá trị.
+
+-- `sender_id` thành nullable, và đây là chỗ duy nhất của lần migration
+-- này cần cân nhắc kỹ.
+--
+-- V15 cố ý bắt cột này NOT NULL, với hai lý do được ghi lại rõ:
+--
+--   (a) mọi hàng phải truy được về một người thật;
+--   (b) MySQL coi mỗi NULL là một giá trị khác nhau, nên một cột nullable
+--       sẽ làm ràng buộc UNIQUE (conversation_id, sender_id,
+--       client_message_id) mất hiệu lực đúng ở những hàng cần chặn nhất.
+--
+-- Lý do (a) không áp dụng được cho trợ lý: nó không phải một người. Tạo
+-- một hàng giả trong `users` để trỏ tới thì tài khoản ma ấy sẽ hiện ra ở
+-- danh sách người dùng, ở ô tìm kiếm của hộp thư, và ở mọi phép đếm sau
+-- này. NULL nói đúng sự thật: câu này không của ai trong `users` cả.
+--
+-- Lý do (b) không mất đi, nhưng nó không chạm tới những hàng cần nó.
+-- Ràng buộc UNIQUE tồn tại để một lần bấm gửi của TRÌNH DUYỆT được thử
+-- lại không sinh ra hai tin — và với USER/ADMIN thì `sender_id` trên
+-- thực tế vẫn luôn có giá trị, nên ràng buộc giữ nguyên hiệu lực ở đúng
+-- chỗ nó được dựng ra để giữ. Hàng của trợ lý không có lần thử lại nào
+-- từ trình duyệt: chúng do máy chủ ghi, trong cùng giao dịch, sau khi đã
+-- khóa hàng cuộc trò chuyện.
+--
+-- Chống trùng cho hàng của trợ lý vì thế nằm ở chỗ khác, và nó chặt hơn
+-- một ràng buộc UNIQUE trên NULL: `client_message_id` của một câu trả
+-- lời được SUY RA từ id của chính câu hỏi ("ai-<id câu hỏi>"). Một câu
+-- hỏi sinh ra đúng một câu trả lời, và phép tra trước khi ghi diễn ra khi
+-- hàng cuộc trò chuyện đang bị `SELECT ... FOR UPDATE` giữ. Xem
+-- SupportAssistant.
+--
+-- Khóa ngoại fk_support_messages_sender giữ nguyên: MySQL cho phép NULL
+-- ở cột con của một khóa ngoại, và hàng nào có giá trị thì vẫn bị ràng
+-- buộc như cũ.
+alter table support_messages
+    modify column sender_id bigint null;
+
+
+-- ---------------------------------------------------------------------
+-- 3. Sổ đếm lượt dùng AI: thêm một loại, không thêm một bảng.
+-- ---------------------------------------------------------------------
+--
+-- V9 dựng `ai_usage` cho đúng câu hỏi này — "người này, hôm nay, bao
+-- nhiêu lượt loại này" — và dựng nó trên đĩa chứ không trong bộ nhớ, vì
+-- gói miễn phí của Render ngủ sau mười lăm phút vắng khách và tỉnh dậy
+-- là một tiến trình mới. Trợ lý hỗ trợ có đúng hình dạng ấy, nên nó dùng
+-- lại bảng ấy.
+--
+-- Một loại RIÊNG chứ không dùng chung ASSISTANT, và đây là một quyết
+-- định nghiệp vụ chứ không phải chuyện kế toán: nếu chung một bộ đếm thì
+-- một người vừa hỏi hết lượt về chương đang đọc sẽ bị từ chối khi cần
+-- hỏi một câu hỗ trợ. Hai việc không liên quan gì tới nhau, và cái thứ
+-- hai là đường người ta đi tìm giúp đỡ.
+--
+-- Hết lượt AI không bao giờ là ngõ cụt: nút "Chat với tư vấn viên" luôn
+-- ở đó và không tốn lượt nào. Đó là điều khiến trần này đặt được mà
+-- không sợ nhốt ai lại.
+--
+-- `modify` trên một cột enum khi giá trị mới nằm ở CUỐI danh sách là
+-- thao tác chỉ đụng metadata trên MySQL 8: không chép bảng, không khóa
+-- lâu, và những hàng đang có giữ nguyên giá trị của chúng.
+alter table ai_usage
+    modify column kind enum ('TTS','ASSISTANT','SUPPORT') not null;

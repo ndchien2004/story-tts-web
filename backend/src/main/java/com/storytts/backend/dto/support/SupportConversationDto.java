@@ -1,5 +1,6 @@
 package com.storytts.backend.dto.support;
 
+import com.storytts.backend.domain.SupportAssistantMode;
 import com.storytts.backend.domain.SupportConversation;
 import com.storytts.backend.domain.SupportConversationStatus;
 import com.storytts.backend.domain.SupportSenderRole;
@@ -43,6 +44,20 @@ import java.time.Instant;
 public record SupportConversationDto(
         Long id,
         SupportConversationStatus status,
+        /**
+         * Ai đang nợ câu trả lời: {@code AI}, {@code HANDOFF} hay {@code HUMAN}.
+         *
+         * <p>Trường thêm ở V16. Giao diện dùng nó cho ba việc: chọn ô soạn tin
+         * nào để vẽ, vẽ dải băng "đang kết nối tư vấn viên…", và biết có nên
+         * hỏi câu "bạn muốn chat với AI hay gặp tư vấn viên?" hay không — câu
+         * cuối cùng cần thêm {@link #lastMessageId} null, xem
+         * {@code SupportConversation#awaitingFirstWord}.
+         *
+         * <p>Một trường cũ không nào diễn đạt được nó, và đó là lý do nó có
+         * mặt: {@link #status} nói luồng đang ở giai đoạn nào, không nói ai
+         * đang trả lời.
+         */
+        SupportAssistantMode assistantMode,
         Long lastMessageId,
         Instant lastMessageAt,
         SupportSenderRole lastMessageSenderRole,
@@ -64,6 +79,7 @@ public record SupportConversationDto(
         return new SupportConversationDto(
                 conversation.getId(),
                 conversation.getStatus(),
+                conversation.getAssistantMode(),
                 conversation.getLastMessageId(),
                 conversation.getLastMessageAt(),
                 conversation.getLastMessageSenderRole(),

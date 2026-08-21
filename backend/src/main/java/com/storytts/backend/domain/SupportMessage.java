@@ -103,16 +103,33 @@ public class SupportMessage {
     private SupportConversation conversation;
 
     /**
-     * Người gửi, luôn có.
+     * Người gửi. Có với mọi tin của người thật; {@code null} với tin của trợ lý.
      *
-     * <p>Tin hệ thống cũng mang id của chính quản trị viên đã gây ra nó, nên
-     * không có hàng nào không truy được về một người thật — và cột giữ được
-     * {@code NOT NULL}, thứ mà ràng buộc duy nhất bên trên cần: MySQL coi mỗi
-     * {@code NULL} là một giá trị khác nhau, nên một cột nullable sẽ để lọt đúng
-     * những hàng cần chặn nhất.
+     * <p>Tin hệ thống cũng mang id của chính người đã gây ra nó — quản trị viên
+     * bấm đóng luồng, hoặc người đọc bấm xin gặp tư vấn viên — nên không có
+     * hàng nào <i>của người</i> mà không truy được về một tài khoản thật.
+     *
+     * <h4>Vì sao V16 nới cột này thành nullable</h4>
+     * V15 bắt {@code NOT NULL} vì ràng buộc duy nhất bên trên cần nó: MySQL coi
+     * mỗi {@code NULL} là một giá trị khác nhau, nên một cột nullable sẽ để lọt
+     * đúng những hàng cần chặn nhất. Lập luận ấy vẫn đúng — và nó vẫn có hiệu
+     * lực ở đúng chỗ nó được dựng ra để giữ, vì tin của {@code USER} và
+     * {@code ADMIN} trên thực tế luôn có {@code sender_id}.
+     *
+     * <p>Trợ lý thì không phải một người. Đường còn lại là dựng một hàng ma
+     * trong {@code users} để trỏ tới, và tài khoản ma ấy sẽ hiện ra ở danh sách
+     * người dùng, ở ô tìm kiếm của hộp thư, và ở mọi phép đếm về sau.
+     * {@code NULL} nói đúng sự thật: câu này không của ai trong {@code users}.
+     *
+     * <p>Chống trùng cho hàng của trợ lý vì thế nằm ở chỗ khác, và chỗ ấy chặt
+     * hơn: {@link #clientMessageId} của một câu trả lời được <i>suy ra</i> từ id
+     * của chính câu hỏi, và phép tra trước khi ghi diễn ra khi hàng cuộc trò
+     * chuyện đang bị khóa. Xem {@code SupportAssistant#replyIdFor}.
+     *
+     * @see #hasHumanSender()
      */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "sender_id", nullable = false,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sender_id",
             foreignKey = @ForeignKey(name = "fk_support_messages_sender"))
     private User sender;
 
@@ -154,5 +171,17 @@ public class SupportMessage {
     /** Tin này có tính vào số chưa đọc của bên kia không. Xem {@link SupportMessageType}. */
     public boolean countsAsUnread() {
         return messageType == SupportMessageType.TEXT;
+    }
+
+    /**
+     * Tin này do một tài khoản thật gửi, hay do trợ lý.
+     *
+     * <p>Một chỗ duy nhất cho phép kiểm ấy, vì mọi đường dựng DTO đều phải làm
+     * nó trước khi chạm tới {@link #sender} — và quên một chỗ thì hậu quả là
+     * một {@code NullPointerException} ở giữa hộp thư chứ không phải một dòng
+     * hiển thị lệch.
+     */
+    public boolean hasHumanSender() {
+        return sender != null && senderRole != SupportSenderRole.AI;
     }
 }

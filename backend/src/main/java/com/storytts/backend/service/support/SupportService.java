@@ -156,6 +156,7 @@ public class SupportService {
                         true,
                         store.unreadFor(conversation, SupportSenderRole.USER),
                         conversation.getStatus(),
+                        conversation.getAssistantMode(),
                         conversation.getLastMessageId()))
                 .orElseGet(SupportSummaryDto::none);
     }
@@ -232,6 +233,23 @@ public class SupportService {
      */
     public SupportStore.Appended sendAsUser(Actor actor, SupportSendRequest request) {
         SupportConversation conversation = conversationOf(actor);
+
+        // Một tin thường không được rơi vào luồng đang do trợ lý phụ trách: nó
+        // sẽ nằm đó không có câu trả lời nào bên dưới, và người gửi ngồi chờ
+        // mãi. Đường đúng là POST /api/support/ai/messages, thứ gọi Gemini rồi
+        // ghi cả hỏi lẫn đáp.
+        //
+        // Chốt chặn này ở đây chứ không ở controller vì cả REST lẫn WebSocket
+        // cùng đi qua chỗ này — và đường WebSocket thì *không* có lựa chọn nào
+        // khác: giữ một luồng xử lý socket đứng chờ Gemini ba mươi giây là
+        // chuyện không làm, nên nó chỉ có thể từ chối.
+        //
+        // Không tự động chuyển giao thay người dùng: đổi chế độ sau lưng họ là
+        // đúng thứ mà quy tắc 35 của đặc tả cấm.
+        if (conversation.getAssistantMode().answeredByAssistant()) {
+            throw new SupportException(SupportException.Reason.SUPPORT_ASSISTANT_IN_CHARGE);
+        }
+
         return send(actor, conversation.getId(), SupportSenderRole.USER, request);
     }
 
@@ -358,6 +376,37 @@ public class SupportService {
             throw new SupportException(SupportException.Reason.SUPPORT_RATE_LIMITED);
         }
 
+        return appendText(actor, conversationId, role, content, clientMessageId);
+    }
+
+    /**
+     * Ghi một câu hỏi gửi trợ lý AI như một tin nhắn thường của người đọc.
+     *
+     * <h3>Vì sao đường này tồn tại thay vì gọi thẳng {@code store.append}</h3>
+     * Vì phần đáng giá của {@link #send} không phải lệnh ghi — nó là cái
+     * {@code catch}: đường đọc lại sau khi ràng buộc duy nhất bắn, thứ phải nằm
+     * trong một giao dịch mới và vì thế phải đi qua một bean khác. Gọi thẳng
+     * {@code store.append} sẽ là một đường ghi thứ hai thiếu đúng cái nhánh khó
+     * nhất, và nó chỉ lộ ra ở một cảnh hiếm mà không ai dựng lại được.
+     *
+     * <p>Khác {@link #send} ở hai chỗ, cả hai đều vì bên gọi đã làm rồi: nội
+     * dung vào đây <i>đã</i> được làm sạch, và lớp kiểm tần suất <i>đã</i> tính
+     * một lượt. Tính hai lần cho một lần bấm gửi sẽ làm trần thật bằng một nửa
+     * con số ghi trong cấu hình.
+     *
+     * <p>Vai luôn là {@code USER} và kiểu luôn là {@code TEXT}: câu hỏi cho trợ
+     * lý là một câu người đọc gõ ra, không hơn không kém. Nó tính vào số chưa
+     * đọc, nó mở lại một luồng đã đóng, và tư vấn viên đọc được nó sau khi
+     * chuyển giao — cả ba đều đúng như mong muốn.
+     */
+    public SupportStore.Appended appendUserQuestion(Actor actor, Long conversationId,
+                                                    String content, String clientMessageId) {
+        return appendText(actor, conversationId, SupportSenderRole.USER, content, clientMessageId);
+    }
+
+    private SupportStore.Appended appendText(Actor actor, Long conversationId,
+                                             SupportSenderRole role, String content,
+                                             String clientMessageId) {
         try {
             return store.append(conversationId, actor.id(), role,
                     SupportMessageType.TEXT, content, clientMessageId);

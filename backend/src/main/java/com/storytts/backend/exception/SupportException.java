@@ -96,6 +96,42 @@ public class SupportException extends RuntimeException {
         SUPPORT_NOT_FOR_ADMIN(HttpStatus.BAD_REQUEST,
                 "Tài khoản quản trị viên dùng hộp thư hỗ trợ trong khu quản trị."),
 
+        /** Xin trò chuyện với trợ lý trong khi một tư vấn viên đang phụ trách dở. */
+        SUPPORT_HUMAN_IN_CHARGE(HttpStatus.CONFLICT,
+                "Cuộc trò chuyện này đang được tư vấn viên phụ trách. "
+                        + "Bạn cứ nhắn trực tiếp ở đây nhé."),
+
+        /**
+         * Trợ lý đang viết dở câu trả lời trước.
+         *
+         * <p>Đây là hàng rào giữ thứ tự: hai câu hỏi chạy song song thì hai câu
+         * trả lời về không theo thứ tự nào cả, và một cuộc trò chuyện đọc ra
+         * lộn xộn thì tệ hơn hẳn một lần phải chờ. Xem {@code SupportAssistant}.
+         */
+        SUPPORT_ASSISTANT_BUSY(HttpStatus.TOO_MANY_REQUESTS,
+                "Trợ lý đang trả lời câu trước. Bạn chờ một chút nhé."),
+
+        /** Luồng đã rời khỏi tay trợ lý — người đọc vừa xin gặp tư vấn viên. */
+        SUPPORT_ASSISTANT_NOT_ACTIVE(HttpStatus.CONFLICT,
+                "Cuộc trò chuyện này không còn do trợ lý AI phụ trách."),
+
+        /**
+         * Chiều ngược lại: gửi một tin thường vào luồng đang do trợ lý phụ trách.
+         *
+         * <p>Chốt chặn cho một trình duyệt đang mở từ trước khi chuyển chế độ,
+         * và cho đường WebSocket — vốn không gọi trợ lý được, vì giữ một luồng
+         * xử lý socket đứng chờ Gemini ba mươi giây là chuyện không làm.
+         *
+         * <p>Từ chối chứ không lặng lẽ ghi: một câu hỏi nằm trong luồng AI mà
+         * không có câu trả lời nào bên dưới là thứ người đọc sẽ ngồi chờ mãi.
+         */
+        SUPPORT_ASSISTANT_IN_CHARGE(HttpStatus.CONFLICT,
+                "Cuộc trò chuyện đang ở chế độ trợ lý AI. Vui lòng tải lại trang."),
+
+        /** Trợ lý bị tắt trên máy chủ, hoặc chưa có khóa Gemini. */
+        SUPPORT_ASSISTANT_DISABLED(HttpStatus.SERVICE_UNAVAILABLE,
+                "Trợ lý AI đang không khả dụng. Bạn có thể chat với tư vấn viên."),
+
         /**
          * Gửi quá nhanh.
          *

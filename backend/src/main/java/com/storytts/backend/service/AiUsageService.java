@@ -175,6 +175,39 @@ public class AiUsageService {
     }
 
     /**
+     * Hoàn một lượt đã giữ, theo id dòng sổ mà {@link #reserve} trả về.
+     *
+     * <h3>Vì sao cần đường này bên cạnh {@link #refundForAudio}</h3>
+     * Đường kia tra ngược từ bản audio, thứ chỉ có với {@link AiUsageKind#TTS}.
+     * Một câu hỏi gửi trợ lý không sinh ra tài sản nào để tra ngược — nó chỉ có
+     * đúng cái id mà bên gọi đang cầm — nên nó cần một đường thẳng.
+     *
+     * <p>Chỗ dùng: nhà cung cấp AI hỏng giữa chừng. Người đọc gõ một câu, hạn
+     * mức bị trừ, rồi Gemini hết giờ chờ. Giữ lại lượt ấy là bắt người ta trả
+     * tiền cho một lỗi không phải của họ — và ở đường hỗ trợ thì nó còn tệ hơn
+     * một bậc, vì người bị trừ oan là người đang cần giúp.
+     *
+     * <p>Không xóa dòng, đúng chính sách của V9: "đã hỏng nên trả lại lượt" là
+     * một sự kiện thứ hai, không phải bằng chứng rằng sự kiện thứ nhất chưa từng
+     * xảy ra. Phép đếm hạn mức bỏ qua những dòng đã có mốc hoàn.
+     *
+     * <p>Gọi lại nhiều lần không cộng thêm gì: dòng đã hoàn thì bỏ qua.
+     */
+    @Transactional
+    public void refundUsage(Long usageId, String reason) {
+        if (usageId == null) {
+            return;
+        }
+        repository.findById(usageId)
+                .filter(row -> row.getRefundedAt() == null)
+                .ifPresent(row -> {
+                    refund(row, reason);
+                    log.info("Hoàn lượt {} của người dùng {}: {}",
+                            row.getKind(), row.getUserId(), reason);
+                });
+    }
+
+    /**
      * Còn bao nhiêu lượt hôm nay.
      *
      * @return {@code null} khi không đặt hạn mức cá nhân nào

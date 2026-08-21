@@ -1,7 +1,9 @@
 package com.storytts.backend.service.support;
 
 import com.storytts.backend.domain.Role;
+import com.storytts.backend.domain.SupportAssistantMode;
 import com.storytts.backend.domain.SupportConversationStatus;
+import com.storytts.backend.domain.SupportSenderRole;
 import com.storytts.backend.domain.User;
 import com.storytts.backend.dto.support.SupportSendRequest;
 import com.storytts.backend.repository.SupportConversationRepository;
@@ -34,18 +36,22 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code @DataJpaTest} gói mỗi bài kiểm trong một giao dịch rồi cuộn nó lại ở
  * cuối. Tiện cho việc dọn dẹp, nhưng nó làm đúng một chuyện khiến nó vô dụng ở
  * đây: mọi lệnh ghi nằm trong <i>cùng một</i> giao dịch, nên không có hai giao
- * dịch nào để nhìn thấy nhau. Bốn cảnh cần dựng dưới đây đều là cảnh hai giao
+ * dịch nào để nhìn thấy nhau. Mọi cảnh cần dựng dưới đây đều là cảnh hai giao
  * dịch giành nhau một hàng, và không cảnh nào tồn tại được trong mô hình ấy.
  *
  * <p>Cùng lý lẽ và cùng hình dạng với {@code GiftCodeConcurrencyTest}, lớp đã
  * chứng minh những lời hứa tương tự cho việc đổi Xu.
  *
- * <h3>Bốn lời hứa được chứng minh ở đây</h3>
+ * <h3>Những lời hứa được chứng minh ở đây</h3>
  * <ol>
  *   <li>hai tab cùng mở hộp thư không tạo ra hai luồng cho một người;</li>
  *   <li>một lần bấm gửi được thử lại song song vẫn chỉ thành một tin nhắn;</li>
  *   <li>đóng luồng đúng lúc người ta đang gõ không nuốt mất câu vừa gõ;</li>
- *   <li>đọc và gửi cùng lúc không làm hỏng con số chưa đọc.</li>
+ *   <li>đọc và gửi cùng lúc không làm hỏng con số chưa đọc;</li>
+ *   <li>tám lần bấm "chuyển tư vấn viên" cùng lúc chỉ thành một lần chuyển
+ *       giao — quy tắc bất biến của đặc tả, dựng ở cảnh thật của nó;</li>
+ *   <li>câu trả lời của trợ lý đua với lần chuyển giao thì không bao giờ rơi
+ *       vào <i>sau</i> khi luồng đã sang tay người thật.</li>
  * </ol>
  *
  * <h3>Về H2</h3>
@@ -63,6 +69,10 @@ class SupportConcurrencyTest {
 
     @Autowired
     private SupportService supportService;
+    @Autowired
+    private SupportAssistant supportAssistant;
+    @Autowired
+    private SupportStore supportAssistantStore;
     @Autowired
     private SupportConversationRepository conversationRepository;
     @Autowired
@@ -249,6 +259,90 @@ class SupportConcurrencyTest {
         assertThat(messageRepository.findAll())
                 .extracting(m -> m.getContent())
                 .containsExactlyInAnyOrder("của người thứ nhất", "của người thứ hai");
+    }
+
+    /**
+     * Quy tắc 14 của đặc tả, dựng ở cảnh thật của nó.
+     *
+     * <p>Người đọc bấm "Chat với tư vấn viên" ở tám tab cùng lúc — hoặc bấm một
+     * lần rồi mạng đứt và trình duyệt thử lại bảy lần. Đặc tả đòi: lần thứ nhất
+     * chuyển giao, những lần sau <b>không</b> tạo thêm phiếu và không nhân đôi
+     * cuộc trò chuyện.
+     *
+     * <p>Ở lược đồ này, "không tạo thêm phiếu" là một điều không diễn đạt được:
+     * {@code UNIQUE (user_id)} của V15 đã bảo đảm một người có đúng một luồng
+     * vĩnh viễn. Nên thứ thật sự cần chứng minh là hai điều còn lại — đúng một
+     * lần đổi trạng thái, và đúng một tin hệ thống. Cả hai được giữ bởi
+     * {@code queueForHuman()} chạy bên trong khóa hàng, không bởi một cờ ở tầng
+     * gọi mà tám luồng song song đều vượt qua được.
+     */
+    @Test
+    @DisplayName("tám lần bấm chuyển tư vấn viên cùng lúc: đúng một lần chuyển giao")
+    void concurrentHandoffsCommitOnce() throws Exception {
+        Long conversationId = supportService.conversationOf(reader).getId();
+        supportAssistantStore.startAssistantSession(conversationId, reader.id());
+        long before = messageRepository.count();
+
+        runTogether(() -> supportAssistant.handoff(reader, "nạp Xu chưa nhận"));
+
+        var conversation = conversationRepository.findById(conversationId).orElseThrow();
+        assertThat(conversation.getAssistantMode()).isEqualTo(SupportAssistantMode.HANDOFF);
+
+        // Đúng một tin hệ thống được thêm vào, không phải tám.
+        assertThat(messageRepository.count()).isEqualTo(before + 1);
+        assertThat(conversationRepository.count()).isEqualTo(1);
+
+        // Và huy hiệu của người trực đếm một việc đang chờ, không phải tám.
+        assertThat(conversationRepository.countConversationsAwaitingReply()).isEqualTo(1);
+    }
+
+    /**
+     * Cuộc đua mà quy tắc 36 sinh ra để chặn, dựng bằng hai luồng thật.
+     *
+     * <p>Câu trả lời của trợ lý về đúng lúc người đọc vừa bấm chuyển giao. Hai
+     * kết cục đều hợp lệ và cả hai đều xác định: hoặc câu trả lời kịp ghi trước
+     * rồi mới chuyển giao, hoặc chuyển giao xong và câu trả lời bị bỏ. Điều
+     * KHÔNG được phép xảy ra là câu ấy rơi vào <i>sau</i> khi luồng đã sang tay
+     * người thật — vì khi ấy người đọc không còn biết mình đang nói với ai.
+     */
+    @Test
+    @DisplayName("câu trả lời của trợ lý đua với lần chuyển giao: không bao giờ rơi vào sau")
+    void anAssistantReplyNeverLandsAfterHandoff() throws Exception {
+        Long conversationId = supportService.conversationOf(reader).getId();
+        supportAssistantStore.startAssistantSession(conversationId, reader.id());
+        Long questionId = supportService.appendUserQuestion(reader, conversationId,
+                "tôi bị trừ tiền", UUID.randomUUID().toString()).userView().id();
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<?> handingOff = pool.submit(() -> {
+                await(start);
+                return supportAssistant.handoff(reader, null);
+            });
+            Future<?> answering = pool.submit(() -> {
+                await(start);
+                return supportAssistantStore.appendAssistantReply(conversationId,
+                        "ai-" + questionId, "Tôi đã hoàn Xu cho bạn rồi nhé");
+            });
+
+            start.countDown();
+            handingOff.get(10, TimeUnit.SECONDS);
+            answering.get(10, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+
+        var conversation = conversationRepository.findById(conversationId).orElseThrow();
+        assertThat(conversation.getAssistantMode()).isEqualTo(SupportAssistantMode.HANDOFF);
+
+        // Nếu câu trả lời được ghi, nó phải nằm TRƯỚC tin hệ thống của lần
+        // chuyển giao. Đó là toàn bộ nội dung của lời hứa: sau vạch ấy, trợ lý
+        // không nói thêm câu nào.
+        messageRepository.findAll().stream()
+                .filter(m -> m.getSenderRole() == SupportSenderRole.AI)
+                .forEach(reply -> assertThat(reply.getId())
+                        .isLessThan(conversation.getLastMessageId()));
     }
 
     /* ================================================================== */

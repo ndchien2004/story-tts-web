@@ -1,5 +1,6 @@
 package com.storytts.backend.service.support;
 
+import com.storytts.backend.domain.SupportAssistantMode;
 import com.storytts.backend.domain.SupportConversation;
 import com.storytts.backend.domain.SupportConversationStatus;
 import com.storytts.backend.domain.SupportMessage;
@@ -189,8 +190,7 @@ public class SupportStore {
      */
     @Transactional(readOnly = true)
     public long unreadFor(SupportConversation conversation, SupportSenderRole viewer) {
-        return messages.countUnread(conversation.getId(), viewer.other(),
-                conversation.readMarkOf(viewer));
+        return unreadOf(conversation, viewer);
     }
 
     /**
@@ -327,8 +327,18 @@ public class SupportStore {
             throw new SupportException(SupportException.Reason.CONVERSATION_BLOCKED);
         }
 
-        Optional<SupportMessage> existing =
-                messages.findByClientId(conversationId, senderId, clientMessageId);
+        // Hai đường tra, vì hai loại tin chống trùng bằng hai thứ khác nhau.
+        //
+        // Tin của người: khóa là (luồng, người gửi, định danh trình duyệt) —
+        // bản sao ở tầng truy vấn của ràng buộc UNIQUE trong lược đồ.
+        //
+        // Tin của trợ lý: không có người gửi để đưa vào khóa, nên khóa là
+        // (luồng, vai AI, định danh) — và định danh ấy được suy ra từ id của
+        // chính câu hỏi, nên nó chặt hơn chứ không lỏng hơn. Xem V16 và
+        // SupportAssistant#replyIdFor.
+        Optional<SupportMessage> existing = senderRole == SupportSenderRole.AI
+                ? messages.findAssistantMessage(conversationId, clientMessageId)
+                : messages.findByClientId(conversationId, senderId, clientMessageId);
         if (existing.isPresent()) {
             SupportMessage message = existing.get();
             log.info("MESSAGE_DUPLICATE ho-tro: luồng {}, người gửi {}, tin {}",
@@ -344,7 +354,9 @@ public class SupportStore {
 
         SupportMessage message = messages.saveAndFlush(SupportMessage.builder()
                 .conversation(conversation)
-                .sender(users.getReferenceById(senderId))
+                // null với tin của trợ lý, và chỉ với tin của trợ lý: nó không
+                // phải một người, nên cột trỏ tới `users` để trống. Xem V16.
+                .sender(senderId == null ? null : users.getReferenceById(senderId))
                 .senderRole(senderRole)
                 .messageType(type)
                 .content(content)
@@ -357,6 +369,22 @@ public class SupportStore {
         // "đóng cuộc trò chuyện" tự hủy chính nó: nó ghi một tin hệ thống ngay
         // sau khi đặt trạng thái CLOSED, và tin ấy sẽ kéo trạng thái về OPEN.
         boolean reopened = type == SupportMessageType.TEXT && conversation.reopenOnNewMessage();
+
+        // Quản trị viên động vào luồng là quản trị viên nhận luồng — kể cả khi
+        // việc họ làm là đóng nó lại. Không có nút "nhận việc" riêng, và đó là
+        // chủ ý: một nút như thế là một bước người trực có thể quên, và mỗi lần
+        // quên là một luồng nằm mãi trong phép đếm chờ trả lời dù đã được trả
+        // lời. Hành động thật sự đáng tin hơn một cái bấm nút.
+        //
+        // Nó cũng là đường AI → HUMAN: người thật nhảy vào một cuộc đang do trợ
+        // lý phụ trách thì quyền ưu tiên thuộc về người thật, và trợ lý im ngay
+        // từ câu ấy. Chiều ngược lại không bao giờ tự động — xem
+        // SupportConversation#startAssistantSession.
+        if (senderRole == SupportSenderRole.ADMIN && conversation.takenOverByHuman()) {
+            log.info("HANDOFF_TAKEN ho-tro: luồng {} chuyển sang quản trị viên {}",
+                    conversationId, senderId);
+        }
+
         conversation.rememberLastMessage(message);
 
         // Gửi một tin là đã nhìn thấy mọi thứ trước nó. Không đẩy mốc ở đây thì
@@ -433,8 +461,7 @@ public class SupportStore {
             conversations.saveAndFlush(conversation);
         }
 
-        long unread = messages.countUnread(conversationId, side.other(),
-                conversation.readMarkOf(side));
+        long unread = unreadOf(conversation, side);
 
         if (changed) {
             eventPublisher.publishEvent(new SupportReadUpdated(
@@ -501,6 +528,220 @@ public class SupportStore {
     }
 
     /* ------------------------------------------------------------------ */
+    /* Trợ lý AI: nhận luồng, và trả nó lại cho người thật                 */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Người đọc chọn trò chuyện với trợ lý.
+     *
+     * <p>Cùng hình dạng với {@link #changeStatus}: khóa hàng, đổi <i>một</i>
+     * cột, rồi ghi một tin hệ thống trong cùng giao dịch. Tin ấy không phải để
+     * trang trí — nó là dấu mốc mà quản trị viên đọc được về sau để biết đoạn
+     * nào của bản ghi là người nói với máy. Đọc một luồng đã chuyển giao mà
+     * không có mốc ấy thì mọi câu trông như nhau.
+     *
+     * <p>Lệnh rỗng là lệnh rỗng: chọn AI khi đang ở AI không ghi gì thêm.
+     *
+     * @throws SupportException nếu luồng đang bị khóa, hoặc đang do một tư vấn
+     *                          viên phụ trách dở
+     */
+    @Transactional
+    public Optional<Appended> startAssistantSession(Long conversationId, Long userId) {
+        SupportConversation conversation = conversations.lockById(conversationId)
+                .orElseThrow(() -> new SupportException(
+                        SupportException.Reason.CONVERSATION_NOT_FOUND));
+
+        SupportAssistantMode previous = conversation.getAssistantMode();
+        boolean changed;
+        try {
+            changed = conversation.startAssistantSession();
+        } catch (IllegalStateException ex) {
+            // Hai lý do từ chối khác nhau, hai mã lỗi khác nhau: một cái là
+            // "bạn bị khóa", một cái là "đang có người thật lo việc này".
+            throw new SupportException(
+                    conversation.getStatus() == SupportConversationStatus.BLOCKED
+                            ? SupportException.Reason.CONVERSATION_BLOCKED
+                            : SupportException.Reason.SUPPORT_HUMAN_IN_CHARGE);
+        }
+        if (!changed) {
+            return Optional.empty();
+        }
+
+        conversations.saveAndFlush(conversation);
+        log.info("AI_SESSION_STARTED ho-tro: luồng {}, người {}, {} → AI",
+                conversationId, userId, previous);
+
+        return Optional.of(append(conversationId, userId, SupportSenderRole.USER,
+                SupportMessageType.SYSTEM, ASSISTANT_STARTED_LINE,
+                UUID.randomUUID().toString()));
+    }
+
+    /**
+     * Xin chuyển cho tư vấn viên.
+     *
+     * <h3>Đây là toàn bộ phần "giao dịch chuyển giao" mà đặc tả mô tả</h3>
+     * Đặc tả hình dung một chuỗi việc: đánh dấu cần người thật, tạo hoặc dùng
+     * lại phiếu hỗ trợ, chống trùng phiếu, giữ nguyên lịch sử. Ở lược đồ này
+     * ba việc sau không tồn tại — {@code UNIQUE (user_id)} của V15 đã bảo đảm
+     * một người có đúng một luồng vĩnh viễn, nên phiếu <i>đã</i> ở đó, và lịch
+     * sử không đi đâu cả vì nó chưa từng ở chỗ khác. Còn lại đúng một việc: đổi
+     * một cột.
+     *
+     * <h3>Bất biến (idempotent), và chỗ giữ điều ấy</h3>
+     * Không phải một cờ trong bộ nhớ, cũng không phải một phép kiểm trước khi
+     * gọi. Nó là {@code queueForHuman()} chạy <i>bên trong</i> khóa hàng: bấm
+     * hai lần, hai tab bấm cùng lúc, hay một lần thử lại sau khi mạng đứt —
+     * lần thứ hai trở đi thấy mode đã là {@code HANDOFF} và trả về rỗng. Không
+     * có tin hệ thống thứ hai, không có khung tin thứ hai, không có phiếu thứ
+     * hai (thứ vốn không dựng được).
+     *
+     * <h3>Cơ sở dữ liệu là nguồn sự thật, và đó là điều cứu cảnh xấu nhất</h3>
+     * Sự kiện thời gian thực phát ở {@code AFTER_COMMIT}. Nếu nó không tới được
+     * ai — không quản trị viên nào đang mở trang, máy chủ vừa khởi động lại,
+     * mạng đứt giữa chừng — thì trạng thái vẫn đúng trên đĩa, và lần mở hộp thư
+     * kế tiếp tìm thấy nó qua {@code countConversationsAwaitingReply}. Không có
+     * hàng đợi gửi lại nào, vì không có lần gửi nào là lần cuối cùng.
+     *
+     * @param reason lý do người đọc nêu, hoặc null. Nó đi vào <i>nội dung</i>
+     *               tin hệ thống chứ không vào một cột riêng: đây là một câu
+     *               cho người trực đọc, không phải một thứ có ai truy vấn.
+     * @return rỗng nếu luồng đã ở trong hàng đợi từ trước
+     */
+    @Transactional
+    public Optional<Appended> requestHandoff(Long conversationId, Long userId, String reason) {
+        SupportConversation conversation = conversations.lockById(conversationId)
+                .orElseThrow(() -> new SupportException(
+                        SupportException.Reason.CONVERSATION_NOT_FOUND));
+
+        if (conversation.getStatus() == SupportConversationStatus.BLOCKED) {
+            throw new SupportException(SupportException.Reason.CONVERSATION_BLOCKED);
+        }
+
+        SupportAssistantMode previous = conversation.getAssistantMode();
+        if (!conversation.queueForHuman()) {
+            log.info("HANDOFF_DUPLICATE ho-tro: luồng {} đã ở hàng đợi", conversationId);
+            return Optional.empty();
+        }
+
+        conversations.saveAndFlush(conversation);
+        log.info("HANDOFF_REQUESTED ho-tro: luồng {}, người {}, {} → HANDOFF{}",
+                conversationId, userId, previous, reason == null ? "" : ", có nêu lý do");
+
+        return Optional.of(append(conversationId, userId, SupportSenderRole.USER,
+                SupportMessageType.SYSTEM, handoffLine(reason),
+                UUID.randomUUID().toString()));
+    }
+
+    /**
+     * Ghi một câu trả lời của trợ lý — nếu luồng vẫn còn thuộc về trợ lý.
+     *
+     * <h3>Phép kiểm ở đây là quy tắc bắt buộc số 36 của đặc tả</h3>
+     * Cảnh cần chặn: người đọc gõ một câu, lời gọi Gemini bắt đầu, người đọc bấm
+     * "Chat với tư vấn viên", việc chuyển giao xong, <i>rồi</i> Gemini mới trả
+     * lời. Câu trả lời ấy đã lỗi thời — nó thuộc về một cuộc trò chuyện mà máy
+     * không còn phụ trách nữa — và để nó rơi vào sau lời chào của tư vấn viên
+     * thì người đọc không còn biết mình đang nói với ai.
+     *
+     * <p>Chỗ đặt phép kiểm quan trọng ngang nội dung của nó: nó chạy sau khi
+     * hàng đã bị {@code SELECT ... FOR UPDATE} giữ, trong cùng giao dịch với
+     * lệnh ghi. Kiểm trước khi gọi Gemini thì vô dụng — cuộc đua nằm đúng ở
+     * quãng ba mươi giây giữa hai thời điểm ấy. Kiểm sau khi ghi thì đã muộn.
+     *
+     * <p>Câu trả lời bị bỏ chứ không được ghi rồi ẩn đi. Nó không có giá trị
+     * lịch sử nào — không ai từng thấy nó — và một hàng vô hình trong bản ghi
+     * là thứ sẽ làm lệch mọi phép đếm về sau.
+     *
+     * @return rỗng nếu luồng đã rời khỏi tay trợ lý trong lúc chờ
+     */
+    @Transactional
+    public Optional<Appended> appendAssistantReply(Long conversationId,
+                                                   String clientMessageId,
+                                                   String content) {
+        SupportConversation conversation = conversations.lockById(conversationId)
+                .orElseThrow(() -> new SupportException(
+                        SupportException.Reason.CONVERSATION_NOT_FOUND));
+
+        if (!conversation.assistantMayReply()) {
+            log.info("AI_REPLY_DROPPED ho-tro: luồng {} đã chuyển sang {} / {}",
+                    conversationId, conversation.getAssistantMode(), conversation.getStatus());
+            return Optional.empty();
+        }
+
+        return Optional.of(append(conversationId, null, SupportSenderRole.AI,
+                SupportMessageType.TEXT, content, clientMessageId));
+    }
+
+    /**
+     * Câu trả lời trợ lý đã ghi cho một câu hỏi, nếu có.
+     *
+     * <p>Đây là thứ khiến một lượt hỏi trở nên <i>bất biến</i> chứ không chỉ
+     * chống trùng: bấm gửi lại cùng một {@code clientMessageId} sau khi mạng đứt
+     * thì câu hỏi dedup bằng ràng buộc {@code UNIQUE} như mọi tin khác, và câu
+     * trả lời tìm thấy ở đây — nên lần thử lại trả về đúng câu trả lời cũ thay
+     * vì tốn thêm một lượt Gemini để sinh ra một câu khác.
+     */
+    @Transactional(readOnly = true)
+    public Optional<SupportMessageDto> findAssistantReply(Long conversationId,
+                                                          String clientMessageId) {
+        return messages.findAssistantMessage(conversationId, clientMessageId)
+                .map(SupportMessageDto::forUser);
+    }
+
+    /**
+     * Vài lượt gần nhất của luồng, để làm ngữ cảnh cho trợ lý.
+     *
+     * <h3>Ngữ cảnh đến từ bảng, không đến từ trình duyệt</h3>
+     * Đây là khác biệt then chốt so với trợ lý đọc truyện, nơi lịch sử do trình
+     * duyệt gửi kèm. Ở đó chấp nhận được vì lịch sử ấy không quyết định quyền
+     * gì. Ở đây thì không: một trình duyệt gửi lên lịch sử tự bịa có thể dựng
+     * sẵn một "câu trả lời trước" trong đó trợ lý đã hứa hoàn tiền, rồi hỏi tiếp
+     * "vậy bao giờ tôi nhận được?". Đọc từ {@code support_messages} thì cảnh ấy
+     * không dựng được.
+     *
+     * <p>Trần số lượt là trần chi phí <i>và</i> trần riêng tư: càng ít lượt cũ
+     * thì càng ít thứ rời khỏi máy chủ.
+     *
+     * @param beforeMessageId lấy những tin trước mốc này — chính là id câu vừa
+     *                        hỏi, vì câu ấy được thêm vào chuỗi lượt ở bước sau
+     *                        chứ không phải ở đây
+     */
+    @Transactional(readOnly = true)
+    public List<SupportMessageDto> assistantContext(Long conversationId,
+                                                    Long beforeMessageId,
+                                                    int maxMessages) {
+        List<SupportMessage> rows = new ArrayList<>(messages.findPageBefore(
+                conversationId, beforeMessageId, PageRequest.of(0, Math.max(maxMessages, 1))));
+        Collections.reverse(rows);
+        return rows.stream().map(SupportMessageDto::forUser).toList();
+    }
+
+    /**
+     * Trạng thái luồng đọc dưới khóa hàng, để quyết định có gọi Gemini không.
+     *
+     * <p>Tách khỏi {@link #appendAssistantReply} vì hai lời gọi ấy nằm ở hai
+     * <i>đầu</i> của lời gọi mạng, và giữa chúng không được có giao dịch nào mở
+     * — xem quy tắc 31 của đặc tả và {@code SupportAssistant}.
+     */
+    @Transactional
+    public SupportConversation lockAndRead(Long conversationId) {
+        return conversations.lockById(conversationId)
+                .orElseThrow(() -> new SupportException(
+                        SupportException.Reason.CONVERSATION_NOT_FOUND));
+    }
+
+    static final String ASSISTANT_STARTED_LINE =
+            "Bạn đang trò chuyện với trợ lý AI. Trợ lý giải đáp được các câu hỏi "
+                    + "thường gặp; cần người thật thì bấm \"Chat với tư vấn viên\" bất cứ lúc nào.";
+
+    private static String handoffLine(String reason) {
+        String head = "Đã chuyển cuộc trò chuyện cho tư vấn viên. "
+                + "Bạn không cần kể lại từ đầu — tư vấn viên đọc được toàn bộ nội dung phía trên.";
+        return reason == null || reason.isBlank()
+                ? head
+                : head + "\nLý do: " + reason.strip();
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Bên trong                                                           */
     /* ------------------------------------------------------------------ */
 
@@ -536,8 +777,27 @@ public class SupportStore {
         return SupportConversationDto.of(conversation, viewer, unread);
     }
 
+    /**
+     * Số chưa đọc của một phía, và chỗ duy nhất áp quy tắc "luồng của trợ lý
+     * không phải việc của người trực".
+     *
+     * <p>Phép đếm ở tầng truy vấn trả lời một câu hẹp hơn — "bao nhiêu tin của
+     * bên kia có id lớn hơn mốc của tôi" — và với một luồng đang do trợ lý phụ
+     * trách, câu trả lời ấy đúng nhưng vô nghĩa với quản trị viên: những tin
+     * chưa đọc kia là câu hỏi người ta đang hỏi máy, không phải việc ai phải
+     * làm. Nên nó bị làm phẳng về không ở đây, một lần, thay vì được nhớ tới ở
+     * ba chỗ dựng DTO khác nhau.
+     *
+     * <p>Phía người đọc thì không có ngoại lệ nào: câu trả lời của trợ lý là
+     * một câu gửi cho họ, và nó phải bật con số trên cái nút hỗ trợ đúng như
+     * một câu trả lời của tư vấn viên.
+     */
     private long unreadOf(SupportConversation conversation, SupportSenderRole viewer) {
-        return messages.countUnread(conversation.getId(), viewer.other(),
+        if (viewer == SupportSenderRole.ADMIN
+                && !conversation.getAssistantMode().needsHumanAttention()) {
+            return 0L;
+        }
+        return messages.countUnread(conversation.getId(), viewer.incomingFor(),
                 conversation.readMarkOf(viewer));
     }
 

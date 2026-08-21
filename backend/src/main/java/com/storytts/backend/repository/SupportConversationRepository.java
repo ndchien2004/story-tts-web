@@ -103,6 +103,20 @@ public interface SupportConversationRepository extends JpaRepository<SupportConv
      * luồng tự mang mốc của nó vào phép đếm. Luồng không có tin nào chưa đọc vẫn
      * ra một dòng số 0 nhờ {@code LEFT JOIN}.
      */
+    /**
+     * Số chưa đọc của phía hỗ trợ, cho cả một trang hộp thư trong một câu.
+     *
+     * <p>Điều kiện {@code assistantMode <> AI} nằm trong mệnh đề {@code ON} chứ
+     * không phải {@code WHERE}, và chỗ đặt ấy có chủ đích: ở {@code WHERE} thì
+     * những luồng đang do trợ lý phụ trách sẽ <i>biến mất khỏi kết quả</i>, và
+     * bên gọi — vốn dựng một {@code Map} từ danh sách này — sẽ không phân biệt
+     * được "không chưa đọc gì" với "không có dòng nào". Ở {@code ON} thì chúng
+     * ở lại với số không, đúng thứ cần.
+     *
+     * <p>Vì sao phải loại chúng: một con số đỏ cạnh một cuộc trò chuyện với AI
+     * đọc ra là "bạn đang nợ người này một câu trả lời", mà người trực thì
+     * không nợ gì cả. Xem {@code SupportAssistantMode#needsHumanAttention}.
+     */
     @Query("""
             SELECT new com.storytts.backend.repository.SupportConversationRepository$UnreadRow(
                        c.id, count(m.id))
@@ -112,6 +126,7 @@ public interface SupportConversationRepository extends JpaRepository<SupportConv
                   AND m.id > c.adminLastReadMessageId
                   AND m.senderRole = com.storytts.backend.domain.SupportSenderRole.USER
                   AND m.messageType = com.storytts.backend.domain.SupportMessageType.TEXT
+                  AND c.assistantMode <> com.storytts.backend.domain.SupportAssistantMode.AI
             WHERE c.id IN :ids
             GROUP BY c.id
             """)
@@ -124,13 +139,40 @@ public interface SupportConversationRepository extends JpaRepository<SupportConv
      * lần mở trang. Đếm <i>luồng</i> chứ không đếm <i>tin</i>: người hỗ trợ cần
      * biết còn bao nhiêu việc phải làm, không cần biết mỗi việc dài mấy câu.
      */
+    /**
+     * Con số sau cái huy hiệu đỏ trên thẻ "Hỗ trợ" của khu quản trị.
+     *
+     * <h4>Hai nhánh, vì "đang chờ" có hai nghĩa khác nhau</h4>
+     * <pre>
+     *   mode = HANDOFF                     → đang chờ, luôn luôn
+     *   mode = HUMAN và có tin chưa đọc    → đang chờ (quy tắc cũ của V15)
+     *   mode = AI                          → không bao giờ
+     * </pre>
+     *
+     * <p>Nhánh thứ nhất là phần V16 thêm vào, và nó vá một chỗ mà quy tắc cũ
+     * bỏ sót: người bấm thẳng "Chat với tư vấn viên" rồi ngồi chờ chưa gõ câu
+     * nào không có tin chưa đọc nào cả, nhưng rõ ràng đang có người chờ. Đếm
+     * bằng tin nhắn thì họ vô hình.
+     *
+     * <p>Nó cũng sửa một chỗ hơi lệch vốn có: theo quy tắc cũ, quản trị viên
+     * chỉ cần <i>mở ra đọc</i> là huy hiệu tắt, dù chưa trả lời câu nào. Một
+     * luồng {@code HANDOFF} thì không tắt theo cách ấy — nó rời khỏi phép đếm
+     * khi có người thật sự nhận, tức là khi mode chuyển sang {@code HUMAN}, và
+     * điều đó chỉ xảy ra khi một quản trị viên gõ một câu hoặc đổi trạng thái
+     * luồng. Xem {@code SupportConversation#takenOverByHuman}.
+     *
+     * <p>Nhánh thứ ba là cả lý do tính năng này tồn tại: một người hỏi trợ lý
+     * "làm sao mở khóa chương" không được phép làm sáng đèn của ai.
+     */
     @Query("""
             SELECT count(c) FROM SupportConversation c
-            WHERE EXISTS (SELECT 1 FROM SupportMessage m
-                          WHERE m.conversation.id = c.id
-                            AND m.id > c.adminLastReadMessageId
-                            AND m.senderRole = com.storytts.backend.domain.SupportSenderRole.USER
-                            AND m.messageType = com.storytts.backend.domain.SupportMessageType.TEXT)
+            WHERE c.assistantMode = com.storytts.backend.domain.SupportAssistantMode.HANDOFF
+               OR (c.assistantMode = com.storytts.backend.domain.SupportAssistantMode.HUMAN
+                   AND EXISTS (SELECT 1 FROM SupportMessage m
+                               WHERE m.conversation.id = c.id
+                                 AND m.id > c.adminLastReadMessageId
+                                 AND m.senderRole = com.storytts.backend.domain.SupportSenderRole.USER
+                                 AND m.messageType = com.storytts.backend.domain.SupportMessageType.TEXT))
             """)
     long countConversationsAwaitingReply();
 

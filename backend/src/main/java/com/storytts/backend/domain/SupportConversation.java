@@ -100,6 +100,21 @@ public class SupportConversation {
     @Builder.Default
     private SupportConversationStatus status = SupportConversationStatus.OPEN;
 
+    /**
+     * Ai đang nợ câu trả lời: trợ lý AI hay người thật. Xem
+     * {@link SupportAssistantMode} và V16.
+     *
+     * <p>Mặc định {@code HUMAN} chứ không phải {@code AI}, và điều đó cố ý ở
+     * cả hai đầu: những hàng có từ trước V16 giữ nguyên hành vi cũ, còn một
+     * đường ghi mới nào đó quên đặt mode thì sinh ra một luồng hỗ trợ bình
+     * thường — tới được quản trị viên — chứ không phải một luồng AI im lặng
+     * nuốt mất câu hỏi.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "assistant_mode", nullable = false, length = 20)
+    @Builder.Default
+    private SupportAssistantMode assistantMode = SupportAssistantMode.HUMAN;
+
     /** Id tin nhắn cuối. Null khi luồng vừa tạo và chưa ai nói gì. */
     @Column(name = "last_message_id")
     private Long lastMessageId;
@@ -225,6 +240,133 @@ public class SupportConversation {
     }
 
     /* ------------------------------------------------------------------ */
+    /* Trợ lý AI và việc chuyển cho người thật                             */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Luồng đã tạo nhưng chưa ai nói câu nào.
+     *
+     * <p>Đây là thứ giao diện dùng để biết có nên hỏi "bạn muốn chat với AI
+     * hay gặp tư vấn viên?", và nó là một phép suy ra chứ không phải một
+     * trạng thái được lưu. Lý do: không có quy tắc nào ở phía máy chủ đổi theo
+     * nó, mà một giá trị enum không đổi quy tắc nào là một nhánh mà mọi phép
+     * kiểm về sau phải nhớ tới.
+     *
+     * <p>Nó cũng vá một chỗ vốn có từ V15: {@code threadForUser} tạo luồng
+     * ngay khi người ta <i>mở</i> hộp thoại hỗ trợ. Việc ấy vô hại — luồng
+     * rỗng không bật huy hiệu của ai — nhưng nó khiến "có hàng trong bảng
+     * chưa" không trả lời được câu "người này đã chọn gì chưa".
+     */
+    public boolean awaitingFirstWord() {
+        return lastMessageId == null;
+    }
+
+    /** Trợ lý có được phép sinh câu trả lời cho luồng này ngay bây giờ không. */
+    public boolean assistantMayReply() {
+        return assistantMode.answeredByAssistant()
+                && status != SupportConversationStatus.BLOCKED;
+    }
+
+    /**
+     * Người đọc chọn trò chuyện với trợ lý AI.
+     *
+     * <p>Chỗ duy nhất trong lược đồ có đường đi <i>ngược</i> từ người thật về
+     * máy, nên nó là chỗ duy nhất cần một điều kiện. Điều kiện ấy là
+     * {@code CLOSED}: một cuộc trao đổi đang dở với tư vấn viên không được phép
+     * bị trợ lý giành lấy sau lưng cả hai bên.
+     *
+     * <p>Nhưng cấm hẳn cũng sai. Luồng ở đây sống suốt đời tài khoản, nên "đã
+     * từng gặp tư vấn viên một lần hồi tháng Giêng" mà cấm vĩnh viễn thì tính
+     * năng này coi như không tồn tại với người ấy. {@code CLOSED} là ranh giới
+     * đúng: hồ sơ cũ đã khép lại, và chính người đọc bấm chọn.
+     *
+     * <p>{@code BLOCKED} thì không: người bị chặn không được cấp thêm một
+     * đường nói chuyện nào, kể cả với máy.
+     *
+     * @return true nếu lần gọi này thật sự đổi mode
+     */
+    public boolean startAssistantSession() {
+        if (status == SupportConversationStatus.BLOCKED) {
+            throw new IllegalStateException("Luồng đang bị khóa.");
+        }
+        if (assistantMode == SupportAssistantMode.AI) {
+            return false;
+        }
+        if (assistantMode == SupportAssistantMode.HUMAN
+                && status != SupportConversationStatus.CLOSED
+                && !awaitingFirstWord()) {
+            throw new IllegalStateException("Luồng đang do tư vấn viên phụ trách.");
+        }
+        assistantMode = SupportAssistantMode.AI;
+        return true;
+    }
+
+    /**
+     * Xin chuyển cho người thật.
+     *
+     * <p><b>Tính bất biến (idempotent) nằm ở đây, không nằm ở tầng gọi.</b> Bấm
+     * nút hai lần, hai tab bấm cùng lúc, hoặc một lần thử lại sau khi mạng đứt
+     * — lần thứ hai trở đi thấy mode đã rời khỏi {@code AI} và trả về false.
+     * Bên gọi dùng nó để khỏi ghi một tin hệ thống thứ hai và khỏi đẩy một
+     * khung tin cho một việc không xảy ra.
+     *
+     * <p>Phép kiểm này chỉ đáng tin khi hàng đang bị {@code SELECT ... FOR
+     * UPDATE} giữ, và đó chính là điều {@code SupportStore} bảo đảm. Không có
+     * ràng buộc cơ sở dữ liệu nào ở đây được, vì "đã chuyển giao" là một lần
+     * đổi giá trị chứ không phải một hàng mới.
+     *
+     * @return true nếu lần gọi này thật sự chuyển giao
+     */
+    public boolean requestHandoff() {
+        if (assistantMode != SupportAssistantMode.AI) {
+            return false;
+        }
+        assistantMode = SupportAssistantMode.HANDOFF;
+        return true;
+    }
+
+    /**
+     * Đưa thẳng vào hàng đợi người thật, không đi qua trợ lý.
+     *
+     * <p>Đường của người bấm "Chat với tư vấn viên" ngay từ màn hình đầu. Khác
+     * {@link #requestHandoff()} ở chỗ nó chấp nhận cả mode {@code HUMAN} —
+     * nghĩa là nó cũng là đường mà một luồng cũ đã đóng quay lại hàng đợi.
+     *
+     * @return true nếu lần gọi này thật sự đổi mode
+     */
+    public boolean queueForHuman() {
+        if (assistantMode == SupportAssistantMode.HANDOFF) {
+            return false;
+        }
+        assistantMode = SupportAssistantMode.HANDOFF;
+        return true;
+    }
+
+    /**
+     * Một quản trị viên vừa động vào luồng: trả lời, đổi trạng thái, bất kỳ
+     * việc gì có chủ ý.
+     *
+     * <p>Đây là chỗ {@code HANDOFF → HUMAN} xảy ra, và nó xảy ra <i>tự động</i>
+     * chứ không bằng một nút "nhận việc" riêng. Lý do: một nút như thế là một
+     * bước người trực có thể quên, và mỗi lần quên là một luồng nằm mãi trong
+     * phép đếm chờ trả lời dù đã được trả lời. Hành động thật sự — gõ một câu —
+     * là bằng chứng đáng tin hơn một cái bấm nút.
+     *
+     * <p>Nó cũng bao trùm {@code AI → HUMAN}: quản trị viên nhảy vào một cuộc
+     * đang do trợ lý phụ trách thì quyền ưu tiên thuộc về người thật, và trợ lý
+     * im ngay từ câu ấy. Chiều ngược lại không tự động bao giờ.
+     *
+     * @return true nếu lần gọi này thật sự đổi mode
+     */
+    public boolean takenOverByHuman() {
+        if (assistantMode == SupportAssistantMode.HUMAN) {
+            return false;
+        }
+        assistantMode = SupportAssistantMode.HUMAN;
+        return true;
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Bộ nhớ đệm của tin cuối                                             */
     /* ------------------------------------------------------------------ */
 
@@ -243,10 +385,16 @@ public class SupportConversation {
      * một đoạn cũ bấm sau cái đã cuộn xuống đáy — không được phép kéo con số
      * chưa đọc quay lại.
      *
+     * <p>{@link SupportSenderRole#AI} không có mốc nào để tiến, và phép kiểm
+     * ấy không phải hình thức: {@code SupportStore.append} gọi thẳng hàm này
+     * với vai của người gửi, nên nếu không chặn thì mỗi câu trả lời của trợ lý
+     * sẽ đẩy mốc của <i>quản trị viên</i> lên — âm thầm xóa sạch số chưa đọc
+     * của một luồng mà người trực còn chưa mở tới.
+     *
      * @return true nếu mốc thật sự tiến lên
      */
     public boolean advanceReadMark(SupportSenderRole side, Long messageId) {
-        if (messageId == null) {
+        if (messageId == null || !side.isViewer()) {
             return false;
         }
         if (side == SupportSenderRole.USER) {

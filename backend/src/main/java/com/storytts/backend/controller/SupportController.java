@@ -1,6 +1,9 @@
 package com.storytts.backend.controller;
 
+import com.storytts.backend.dto.support.SupportAssistantReplyDto;
+import com.storytts.backend.dto.support.SupportAssistantStatusDto;
 import com.storytts.backend.dto.support.SupportConversationDto;
+import com.storytts.backend.dto.support.SupportHandoffRequest;
 import com.storytts.backend.dto.support.SupportReadRequest;
 import com.storytts.backend.dto.support.SupportSendRequest;
 import com.storytts.backend.dto.support.SupportSendResponse;
@@ -8,6 +11,7 @@ import com.storytts.backend.dto.support.SupportSummaryDto;
 import com.storytts.backend.dto.support.SupportThreadDto;
 import com.storytts.backend.exception.LoginRequiredException;
 import com.storytts.backend.service.CurrentUserService;
+import com.storytts.backend.service.support.SupportAssistant;
 import com.storytts.backend.service.support.SupportService;
 import com.storytts.backend.service.support.SupportStore;
 import com.storytts.backend.service.support.SupportStreamTickets;
@@ -15,6 +19,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -60,6 +65,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SupportController {
 
     private final SupportService supportService;
+    private final SupportAssistant assistant;
     private final SupportStreamTickets streamTickets;
     private final CurrentUserService currentUserService;
 
@@ -151,6 +157,49 @@ public class SupportController {
      * sở dữ liệu. Một người đọc xin vé rồi tự nhận là quản trị viên chỉ nhận
      * được một kết nối vai người đọc.
      */
+    /* ------------------------------------------------------------------ */
+    /* Trợ lý AI                                                           */
+    /* ------------------------------------------------------------------ */
+
+    @GetMapping("/ai/status")
+    @Operation(summary = "Trợ lý AI có dùng được không, và còn bao nhiêu lượt hôm nay",
+            description = "Không tạo luồng hỗ trợ. Tắt thì giao diện chỉ vẽ đường tới tư vấn viên.")
+    public ResponseEntity<SupportAssistantStatusDto> assistantStatus() {
+        // Không lưu đệm: số lượt còn lại đổi sau mỗi câu hỏi, và một con số cũ
+        // ở đây là một lời hứa sai mà người đọc phát hiện ra đúng lúc bấm gửi.
+        // Cùng lối với /api/ai/status.
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(assistant.status());
+    }
+
+    @PostMapping("/ai/session")
+    @Operation(summary = "Chọn trò chuyện với trợ lý AI",
+            description = "Ghi một tin hệ thống đánh dấu mốc. Gọi lại khi đang ở chế độ AI "
+                    + "là lệnh rỗng. Trả về cả trang tin mới nhất để hộp thoại vẽ ngay.")
+    public SupportThreadDto startAssistant() {
+        return assistant.startSession(actor());
+    }
+
+    @PostMapping("/ai/messages")
+    @Operation(summary = "Hỏi trợ lý AI một câu",
+            description = "Câu hỏi được ghi vào luồng như một tin thường trước khi gọi Gemini, "
+                    + "nên nó không mất kể cả khi trợ lý hỏng. Gửi lại cùng clientMessageId "
+                    + "trả về đúng câu trả lời cũ, không sinh câu mới.")
+    public SupportAssistantReplyDto askAssistant(@Valid @RequestBody SupportSendRequest request) {
+        return assistant.ask(actor(), request);
+    }
+
+    @PostMapping("/handoff")
+    @Operation(summary = "Chuyển cuộc trò chuyện cho tư vấn viên",
+            description = "Bất biến: bấm nhiều lần không sinh thêm phiếu, thêm tin hệ thống, "
+                    + "hay thêm thông báo. Không đi qua hàng rào nào của trợ lý — trợ lý tắt "
+                    + "hay hỏng thì đường này vẫn nguyên vẹn.")
+    public SupportThreadDto handoff(@Valid @RequestBody(required = false)
+                                    SupportHandoffRequest request) {
+        return assistant.handoff(actor(), request == null ? null : request.reason());
+    }
+
     @PostMapping("/ws-ticket")
     @Operation(summary = "Vé một lần, sống 90 giây, để mở WebSocket hộp thư hỗ trợ")
     public ResponseEntity<StreamTicketDto> websocketTicket() {

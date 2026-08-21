@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -37,10 +38,15 @@ public interface SupportMessageRepository extends JpaRepository<SupportMessage, 
      *
      * <p>{@code JOIN FETCH} người gửi vì DTO cần tên hiển thị của họ; không có
      * nó thì mỗi tin là một câu truy vấn thêm.
+     *
+     * <p>{@code LEFT} từ V16, và chữ ấy gánh nhiều hơn vẻ ngoài của nó: tin của
+     * trợ lý không có người gửi, nên một phép nối trong sẽ <i>lặng lẽ bỏ hết
+     * chúng ra khỏi lịch sử</i>. Không có lỗi nào được ném, không có dòng log
+     * nào — chỉ là nửa cuộc trò chuyện biến mất sau khi tải lại trang.
      */
     @Query("""
             SELECT m FROM SupportMessage m
-            JOIN FETCH m.sender
+            LEFT JOIN FETCH m.sender
             WHERE m.conversation.id = :conversationId
               AND (:before IS NULL OR m.id < :before)
             ORDER BY m.id DESC
@@ -59,7 +65,7 @@ public interface SupportMessageRepository extends JpaRepository<SupportMessage, 
      */
     @Query("""
             SELECT m FROM SupportMessage m
-            JOIN FETCH m.sender
+            LEFT JOIN FETCH m.sender
             WHERE m.conversation.id = :conversationId
               AND m.id > :after
             ORDER BY m.id ASC
@@ -79,7 +85,7 @@ public interface SupportMessageRepository extends JpaRepository<SupportMessage, 
      */
     @Query("""
             SELECT m FROM SupportMessage m
-            JOIN FETCH m.sender
+            LEFT JOIN FETCH m.sender
             WHERE m.conversation.id = :conversationId
               AND m.sender.id = :senderId
               AND m.clientMessageId = :clientMessageId
@@ -89,21 +95,58 @@ public interface SupportMessageRepository extends JpaRepository<SupportMessage, 
                                             @Param("clientMessageId") String clientMessageId);
 
     /**
-     * Số tin của một phía mà bên kia chưa đọc.
+     * Câu trả lời của trợ lý cho một câu hỏi đã có chưa.
+     *
+     * <p>Đường chống trùng riêng của tin {@code AI}, và nó phải riêng vì
+     * {@link #findByClientId} lọc theo {@code m.sender.id} — thứ mà tin của trợ
+     * lý không có. Khóa ở đây là (luồng, vai, định danh), và định danh ấy được
+     * suy ra từ id của chính câu hỏi ({@code "ai-<id>"}), nên nó chặt hơn chứ
+     * không lỏng hơn: một câu hỏi sinh ra đúng một câu trả lời, dù người ta bấm
+     * gửi lại bao nhiêu lần.
+     *
+     * <p>Không cần {@code LEFT JOIN FETCH m.sender}: hàng tìm được ở đây luôn
+     * có {@code sender} null, và bên gọi không hỏi tới nó.
+     */
+    @Query("""
+            SELECT m FROM SupportMessage m
+            WHERE m.conversation.id = :conversationId
+              AND m.senderRole = com.storytts.backend.domain.SupportSenderRole.AI
+              AND m.clientMessageId = :clientMessageId
+            """)
+    Optional<SupportMessage> findAssistantMessage(@Param("conversationId") Long conversationId,
+                                                  @Param("clientMessageId") String clientMessageId);
+
+    /**
+     * Số tin của một phía mà bên kia chưa đọc — "bao nhiêu tin của bên kia có
+     * id lớn hơn mốc của tôi".
      *
      * <p>Một phép đếm dẫn xuất từ mốc, không phải một bộ đếm được cộng trừ —
      * xem {@code SupportConversation}. Tin {@code SYSTEM} bị loại: "đã đóng cuộc
      * trò chuyện" không phải một câu chờ ai trả lời.
+     *
+     * <p>{@code senderRoles} là một tập chứ không phải một giá trị, và V16 là
+     * lý do: với người đọc, "bên kia" gồm cả quản trị viên lẫn trợ lý — cả hai
+     * đều là câu trả lời gửi cho họ. Với quản trị viên thì "bên kia" vẫn chỉ là
+     * {@code USER}: câu của trợ lý không phải việc người trực phải đọc, và tính
+     * nó vào đây sẽ làm mỗi lượt trò chuyện với AI đẩy con số ấy lên hai.
+     *
+     * <p>Tập vai luôn do {@link SupportSenderRole#incomingFor()} dựng, không
+     * bao giờ do bên gọi tự liệt kê — đó là chỗ duy nhất giữ phép ánh xạ bất
+     * đối xứng ấy.
+     *
+     * <p>Chỉ mục {@code idx_support_messages_unread (conversation_id,
+     * sender_role, id)} vẫn phục vụ được câu này: một tập hai phần tử thành hai
+     * lần dò chỉ mục chứ không thành một lần quét bảng.
      */
     @Query("""
             SELECT count(m) FROM SupportMessage m
             WHERE m.conversation.id = :conversationId
-              AND m.senderRole = :senderRole
+              AND m.senderRole IN :senderRoles
               AND m.messageType = com.storytts.backend.domain.SupportMessageType.TEXT
               AND m.id > :afterId
             """)
     long countUnread(@Param("conversationId") Long conversationId,
-                     @Param("senderRole") SupportSenderRole senderRole,
+                     @Param("senderRoles") Collection<SupportSenderRole> senderRoles,
                      @Param("afterId") Long afterId);
 
     /**

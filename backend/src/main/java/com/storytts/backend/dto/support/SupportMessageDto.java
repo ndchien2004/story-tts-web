@@ -61,8 +61,21 @@ public record SupportMessageDto(
     /** Cái tên mà cả phía hỗ trợ dùng chung khi nói với người đọc. */
     public static final String SUPPORT_DISPLAY_NAME = "Hỗ trợ viên";
 
+    /**
+     * Cái tên của trợ lý, và nó không bao giờ được phép trông giống một người.
+     *
+     * <p>Đặc tả gọi "giả làm tư vấn viên" là một điều cấm chứ không phải một
+     * tùy chọn giao diện, và chỗ thi hành điều cấm ấy là ở đây — trong lớp mà
+     * <i>mọi</i> đường đọc đều đi qua — chứ không phải ở một thành phần React
+     * mà một màn hình khác có thể quên.
+     */
+    public static final String ASSISTANT_DISPLAY_NAME = "Trợ lý AI";
+
     /** Dạng người đọc nhìn thấy. Xem ghi chú ở đầu lớp. */
     public static SupportMessageDto forUser(SupportMessage message) {
+        if (message.getSenderRole() == SupportSenderRole.AI) {
+            return assistantView(message);
+        }
         boolean fromSupport = message.getSenderRole() == SupportSenderRole.ADMIN;
         return new SupportMessageDto(
                 message.getId(),
@@ -79,6 +92,17 @@ public record SupportMessageDto(
 
     /** Dạng khu quản trị nhìn thấy. Xem ghi chú ở đầu lớp. */
     public static SupportMessageDto forAdmin(SupportMessage message) {
+        // Quản trị viên cũng thấy đúng nhãn ấy, và đó không phải chuyện thẩm mỹ:
+        // một luồng đã chuyển giao là bản ghi trộn lẫn câu của người và câu của
+        // máy, và người trực phải đọc ra được đoạn nào là đoạn nào trước khi
+        // trả lời tiếp.
+        //
+        // Phép kiểm là hasHumanSender() chứ không phải so vai với AI: nó cũng
+        // bắt luôn trường hợp một hàng cũ nào đó mất người gửi, và một bong bóng
+        // vô danh vẫn hơn một NullPointerException giữa hộp thư.
+        if (!message.hasHumanSender()) {
+            return assistantView(message);
+        }
         return new SupportMessageDto(
                 message.getId(),
                 message.getConversation().getId(),
@@ -87,6 +111,27 @@ public record SupportMessageDto(
                 message.getSender().getId(),
                 displayNameOf(message.getSender()),
                 message.getSender().getAvatarUrl(),
+                message.getContent(),
+                message.getClientMessageId(),
+                message.getCreatedAt());
+    }
+
+    /**
+     * Dạng chung cho tin của trợ lý, giống hệt ở cả hai phía.
+     *
+     * <p>{@code senderId} và {@code senderAvatarUrl} để null vì không có gì
+     * thật để đặt vào đó: trợ lý không có hàng trong {@code users}. Xem V16 về
+     * vì sao đó là câu trả lời đúng thay vì một tài khoản ma.
+     */
+    private static SupportMessageDto assistantView(SupportMessage message) {
+        return new SupportMessageDto(
+                message.getId(),
+                message.getConversation().getId(),
+                SupportSenderRole.AI,
+                message.getMessageType(),
+                null,
+                ASSISTANT_DISPLAY_NAME,
+                null,
                 message.getContent(),
                 message.getClientMessageId(),
                 message.getCreatedAt());
