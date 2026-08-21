@@ -1,5 +1,6 @@
 package com.storytts.backend.service.support;
 
+import com.storytts.backend.config.CorsProperties;
 import com.storytts.backend.domain.SupportSenderRole;
 import com.storytts.backend.exception.AccountLockedException;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.socket.WebSocketHandler;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,6 +50,9 @@ class SupportHandshakeAccessTest {
     private static final long READER = 7L;
     private static final long ADMIN = 9L;
 
+    /** Nguồn duy nhất được phép, trong mọi bài dưới đây. */
+    private static final String ALLOWED_ORIGIN = "https://truyen-nghe.example";
+
     private SupportStreamTickets tickets;
     private SupportService supportService;
     private SupportHandshakeInterceptor interceptor;
@@ -56,7 +61,8 @@ class SupportHandshakeAccessTest {
     void setUp() {
         tickets = new SupportStreamTickets();
         supportService = mock(SupportService.class);
-        interceptor = new SupportHandshakeInterceptor(tickets, supportService);
+        interceptor = new SupportHandshakeInterceptor(tickets, supportService,
+                new CorsProperties(List.of(ALLOWED_ORIGIN)));
 
         when(supportService.resolveActor(READER))
                 .thenReturn(new SupportService.Actor(READER, SupportSenderRole.USER));
@@ -162,7 +168,72 @@ class SupportHandshakeAccessTest {
         assertThat(locked.getContentAsString()).isEqualTo(forged.getContentAsString());
     }
 
+    /* ---------------- Nguồn của trang mở kết nối ---------------- */
+
+    @Test
+    @DisplayName("nguồn nằm trong danh sách thì mở được")
+    void anAllowedOriginConnects() {
+        Map<String, Object> attributes = new HashMap<>();
+        MockHttpServletRequest request = requestWithOrigin(tickets.issue(READER), ALLOWED_ORIGIN);
+
+        assertThat(shakeHands(request, attributes)).isTrue();
+        assertThat(attributes)
+                .containsEntry(SupportHandshakeInterceptor.ATTR_USER_ID, READER);
+    }
+
+    @Test
+    @DisplayName("nguồn lạ bị từ chối bằng 403, và không kết nối nào được mở")
+    void aForeignOriginIsRefused() {
+        Map<String, Object> attributes = new HashMap<>();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockHttpServletRequest request =
+                requestWithOrigin(tickets.issue(READER), "https://trang-la.example");
+
+        assertThat(shakeHands(request, attributes, response)).isFalse();
+
+        assertThat(attributes).isEmpty();
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
+    }
+
+    /**
+     * Nguồn bị từ chối thì cái vé <b>không</b> bị tiêu.
+     *
+     * <h3>Đây là bài kiểm của một lỗi đã sửa, không phải một tính năng</h3>
+     * Spring nối {@code OriginHandshakeInterceptor} của nó vào <i>cuối</i> danh
+     * sách interceptor — sau interceptor của ứng dụng. Nên thứ tự mặc định là:
+     * đổi vé (và <i>xóa</i> nó, vì vé dùng một lần) trước, kiểm nguồn sau.
+     *
+     * <p>Hậu quả trên bản chạy thật: một tên miền chưa được thêm vào
+     * {@code CORS_ALLOWED_ORIGINS} khiến mỗi lần trình duyệt thử nối lại đốt
+     * thêm một cái vé, và chuỗi 403 ấy không kèm dòng nhật ký nào giải thích —
+     * {@code OriginHandshakeInterceptor} chỉ ghi ở mức DEBUG.
+     *
+     * <p>Phép kiểm dưới đây khóa chặt thứ tự đúng: vé vẫn còn nguyên sau một
+     * lần bị từ chối vì nguồn, nên nó dùng được ngay khi cấu hình được sửa.
+     */
+    @Test
+    @DisplayName("nguồn bị từ chối KHÔNG tiêu mất vé")
+    void aRejectedOriginDoesNotSpendTheTicket() {
+        String ticket = tickets.issue(READER);
+
+        assertThat(shakeHands(requestWithOrigin(ticket, "https://trang-la.example"),
+                new HashMap<>())).isFalse();
+
+        // Vé vẫn còn: cùng chuỗi ấy mở được kết nối từ một nguồn hợp lệ.
+        Map<String, Object> attributes = new HashMap<>();
+        assertThat(shakeHands(requestWithOrigin(ticket, ALLOWED_ORIGIN), attributes)).isTrue();
+        assertThat(attributes)
+                .containsEntry(SupportHandshakeInterceptor.ATTR_USER_ID, READER);
+    }
+
     /* ================================================================== */
+
+    private static MockHttpServletRequest requestWithOrigin(String ticket, String origin) {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/ws/support");
+        request.setQueryString("ticket=" + ticket);
+        request.addHeader("Origin", origin);
+        return request;
+    }
 
     private boolean shakeHands(String ticket, Map<String, Object> attributes) {
         return shakeHands(ticket, attributes, new MockHttpServletResponse());
