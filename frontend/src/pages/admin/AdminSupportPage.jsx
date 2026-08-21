@@ -3,6 +3,7 @@ import { adminSupportApi } from "../../api/endpoints";
 import Avatar from "../../components/Avatar";
 import SupportThread from "../../components/support/SupportThread";
 import { Badge, Button, EmptyState, SearchInput, Spinner } from "../../components/ui";
+import { useAdminSupport } from "../../context/admin-support-context";
 import { useSupportSocket } from "../../context/support-socket-context";
 import { useSupportThread } from "../../hooks/useSupportThread";
 import useDebouncedValue from "../../hooks/useDebouncedValue";
@@ -37,25 +38,35 @@ export default function AdminSupportPage() {
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState(null);
   const [selected, setSelected] = useState(null);
 
   const socket = useSupportSocket();
 
+  /*
+   * Mấy con số ở đầu khoang đến từ context của cả bảng quản trị, không từ một
+   * lượt gọi của riêng trang này.
+   *
+   * Trước đây trang tự gọi `adminSupportApi.summary()` song song với danh sách.
+   * Từ khi tab "Hỗ trợ" có huy hiệu, con số ấy đã được hỏi ở tầng trên — và hai
+   * bên cùng nghe một socket, nên MỖI tin nhắn sinh ra HAI lượt gọi cùng một
+   * đường. Tệ hơn cái giá là hệ quả: hai lượt về không cùng lúc, nên có những
+   * khoảnh khắc huy hiệu trên thanh bên và dòng chữ ngay bên cạnh nó nói hai
+   * con số khác nhau về đúng một sự thật.
+   *
+   * Một nguồn, hai chỗ vẽ.
+   */
+  const support = useAdminSupport();
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [page, stats] = await Promise.all([
-        adminSupportApi.conversations({
-          status: status || undefined,
-          q: search || undefined,
-          page: 0,
-          size: 30,
-        }),
-        adminSupportApi.summary(),
-      ]);
+      const page = await adminSupportApi.conversations({
+        status: status || undefined,
+        q: search || undefined,
+        page: 0,
+        size: 30,
+      });
       setItems(page.content ?? []);
-      setSummary(stats);
     } finally {
       setLoading(false);
     }
@@ -90,7 +101,17 @@ export default function AdminSupportPage() {
   useEffect(() => {
     if (!socket) return undefined;
     return socket.subscribe((frame) => {
-      if (frame.type === "message:new" || frame.type === "message:read") load();
+      if (frame.type === "message:new") {
+        load();
+        return;
+      }
+      // Chỉ mốc đã đọc của PHÍA HỖ TRỢ mới đổi được thứ gì trên danh sách này
+      // — cụ thể là con số chưa đọc ở mép phải mỗi dòng. Mốc của người đọc thì
+      // không: không cột nào ở đây vẽ nó ra. Khung tin ấy vẫn tới đây vì cả hai
+      // phía dùng chung một hình dạng khung tin (xem `SupportRealtime`), nên
+      // lọc nó ở đây là bỏ đi một lượt tải lại toàn bộ hộp thư mỗi lần có một
+      // người đọc bất kỳ mở hộp thoại chat của họ ra.
+      if (frame.type === "message:read" && frame.payload?.reader === "ADMIN") load();
     });
   }, [socket, load]);
 
@@ -116,6 +137,11 @@ export default function AdminSupportPage() {
     await adminSupportApi.setStatus(selected, next);
     await load();
     thread.refresh();
+    // Đổi trạng thái ghi một tin hệ thống vào luồng, trong cùng giao dịch — và
+    // lượt ghi ấy đẩy luôn mốc đã đọc của phía gửi. Nghĩa là bấm "Đóng" có thể
+    // kéo một luồng ra khỏi hàng đợi chờ trả lời, tức là đổi con số trên huy
+    // hiệu. Đường này không đi qua socket, nên nó phải tự nói.
+    support?.refresh();
   };
 
   const threadStatus = thread.conversation?.status;
@@ -127,10 +153,10 @@ export default function AdminSupportPage() {
         <section className="admin-panel">
           <div className="admin-panel-head">
             <span className="admin-panel-title">Cuộc trò chuyện</span>
-            {summary && (
+            {support?.loaded && (
               <span className="admin-stat" title="Số kết nối thời gian thực đang mở">
-                {summary.awaitingReply} chờ trả lời
-                <span className="muted"> · {summary.openConnections} kết nối</span>
+                {support.awaitingReply} chờ trả lời
+                <span className="muted"> · {support.openConnections} kết nối</span>
               </span>
             )}
           </div>

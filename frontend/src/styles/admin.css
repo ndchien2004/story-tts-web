@@ -179,6 +179,61 @@
   white-space: nowrap;
 }
 
+/*
+ * Huy hiệu "còn người đang chờ" trên tab Hỗ trợ.
+ *
+ * Đỏ, không phải màu nhấn của trang. Màu nhấn đã dùng cho "đây là chỗ bạn đang
+ * đứng" ở .admin-nav-link.active, và hai nghĩa khác hẳn nhau dùng chung một
+ * màu thì cả hai cùng mất tiếng nói. Đây là thứ duy nhất trong thanh bên đòi
+ * hành động của người khác, nên nó được màu duy nhất còn lại.
+ *
+ * `margin-left: auto` đẩy nó ra mép phải: ở một cột dọc thì mắt tìm huy hiệu
+ * bằng một lần liếc dọc theo mép, không phải bằng cách đọc hết từng dòng chữ.
+ */
+.admin-nav-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  /* Con số đổi thường xuyên; chữ số cùng bề rộng thì huy hiệu không giật mỗi
+     lần 9 thành 10. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: #fff;
+  background: var(--danger);
+  border-radius: var(--radius-pill);
+}
+
+/*
+ * Thanh bên thu về dạng ray: không còn chữ, nên huy hiệu không còn mép phải để
+ * bám vào. Nó neo lên góc icon — cùng chỗ mà cái chuông thông báo và bong bóng
+ * chat đặt huy hiệu của chúng, nên ba thứ trong cả trang nói cùng một ngôn ngữ.
+ *
+ * Viền cùng màu nền thanh bên tách nó khỏi nét icon bên dưới; không có viền thì
+ * ở dạng ray hai hình chồng lên nhau thành một vệt khó đọc.
+ */
+.admin-shell-collapsed .admin-nav-link {
+  position: relative;
+}
+
+.admin-shell-collapsed .admin-nav-badge {
+  position: absolute;
+  top: 0.05rem;
+  right: 0.05rem;
+  margin-left: 0;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding-inline: 0.25rem;
+  font-size: 0.6rem;
+  border: 2px solid var(--surface);
+}
+
 /* Pushes everything after it to the bottom of the sidebar. */
 .admin-sidebar-spacer {
   flex: 1 1 auto;

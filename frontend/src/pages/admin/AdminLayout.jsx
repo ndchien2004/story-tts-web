@@ -3,6 +3,8 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-do
 import { LOGO_MARK } from "../../brand";
 import AdminToaster from "../../components/AdminToaster";
 import { AdminShellContext } from "../../context/admin-shell-context";
+import { useAdminSupport } from "../../context/admin-support-context";
+import AdminSupportProvider from "../../context/AdminSupportProvider";
 import { useAuth } from "../../context/auth-context";
 import { Button } from "../../components/ui";
 
@@ -133,6 +135,47 @@ function ExternalIcon() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Huy hiệu                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Con số đỏ trên tab "Hỗ trợ": còn bao nhiêu luồng đang chờ trả lời.
+ *
+ * <h3>Vì sao là số LUỒNG chứ không phải số TIN</h3>
+ * Vì đây là hàng đợi việc, không phải hộp thư cá nhân. Người trực hỗ trợ cần
+ * biết còn bao nhiêu người đang chờ mình, không cần biết mỗi người đã gõ mấy
+ * câu — ba câu liên tiếp của cùng một người vẫn là <i>một</i> việc phải làm.
+ * Số tin của từng luồng đã có ở đúng chỗ nó có nghĩa: cái chấm bên phải mỗi
+ * dòng trong danh sách hộp thư. Cùng cách chia mà máy chủ đã chọn — xem
+ * `SupportConversationRepository.countConversationsAwaitingReply`.
+ *
+ * <h3>Vì sao không vẽ gì khi bằng 0</h3>
+ * Một huy hiệu "0" là một huy hiệu nói rằng có việc, rồi bắt người ta đọc mới
+ * biết là không. Huy hiệu ở đây chỉ có một nghĩa duy nhất: có người đang chờ.
+ *
+ * <p>Cũng không vẽ trong lúc chưa có câu trả lời đầu tiên: nhấp nháy một con số
+ * rồi rút lại còn tệ hơn là hiện ra muộn nửa giây.
+ */
+function SupportNavBadge() {
+  const support = useAdminSupport();
+  const count = support?.awaitingReply ?? 0;
+
+  if (!support?.loaded || count <= 0) return null;
+
+  const label = `${count} cuộc trò chuyện hỗ trợ đang chờ trả lời`;
+
+  return (
+    <span className="admin-nav-badge" title={label}>
+      {/* Con số cho mắt, câu chữ cho trình đọc màn hình. Một mình con số thì
+          bộ đọc màn hình đọc ra "4" giữa dòng "Hỗ trợ 4" — đúng ký tự, không
+          có nghĩa nào. */}
+      <span aria-hidden="true">{count > 99 ? "99+" : count}</span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Navigation                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -218,10 +261,14 @@ const NAV_GROUPS = [
       // nghĩa: hai mục này là hai chiều của cùng một việc — nói với người đọc.
       // Thông báo là một chiều và do quản trị viên chủ động; hỗ trợ là hai
       // chiều và do người đọc bắt đầu.
+      // Mục duy nhất có huy hiệu, và đó là chủ ý. Bốn mục kia nói về việc
+      // quản trị viên tự chọn lúc nào làm; mục này nói về người khác đang
+      // đứng chờ — thứ duy nhất trong thanh bên có đồng hồ chạy.
       {
         to: "/admin/ho-tro",
         label: "Hỗ trợ",
         Icon: ChatIcon,
+        Badge: SupportNavBadge,
         isActive: (pathname) => pathname.startsWith("/admin/ho-tro"),
       },
     ],
@@ -298,111 +345,127 @@ export default function AdminLayout() {
 
   return (
     <AdminShellContext.Provider value={shell}>
-      {/* Wraps the whole console so every screen under it can report a success
-          the same way, into the same corner. */}
-      <AdminToaster>
-        <div className={`admin-shell ${collapsed ? "admin-shell-collapsed" : ""}`}>
-          {sidebarOpen && (
-            <div
-              className="admin-scrim"
-              role="presentation"
-              onClick={() => setSidebarOpen(false)}
-            />
-          )}
+      {/*
+        Ở đây chứ không ở `App`, và ranh giới ấy là điểm chính: mọi màn hình
+        quản trị nằm dưới nó, không màn hình nào của người đọc nằm dưới nó. Đặt
+        cao hơn thì nó sẽ hỏi `/api/admin/support/summary` trên mọi trang của
+        mọi người đăng nhập — một đường chỉ quản trị viên gọi được, nên với
+        người đọc đó là một lời từ chối 403 lặp lại mãi mãi.
 
-          <aside className={`admin-sidebar ${sidebarOpen ? "open" : ""}`}>
-            {/* The mark and the product's name, unframed: it says where you
-                are, it is not one of the destinations listed under it. */}
-            <Link to="/admin" className="admin-brand" title="Truyện Nghe — Bảng quản trị">
-              <img className="admin-brand-mark" src={LOGO_MARK} alt="" width="40" height="40" />
-              <span className="admin-brand-text">
-                <span className="admin-brand-name">Truyện Nghe</span>
-                <span className="admin-brand-sub">Bảng quản trị</span>
-              </span>
-            </Link>
-
-            <nav className="admin-nav" aria-label="Điều hướng quản trị">
-              {NAV_GROUPS.map((group) => (
-                <div className="admin-nav-group" key={group.label}>
-                  <span className="admin-nav-label">{group.label}</span>
-                  {group.items.map(({ to, label, Icon, isActive }) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      // Collapsed there is no label to read, so the tooltip carries it.
-                      title={label}
-                      // A function, not a string: given a string, NavLink appends
-                      // its own "active" class on top of ours, and by its
-                      // reckoning "/admin" matches everything beneath it.
-                      className={() => `admin-nav-link ${isActive(pathname) ? "active" : ""}`}
-                    >
-                      <Icon />
-                      <span className="admin-nav-text">{label}</span>
-                    </NavLink>
-                  ))}
-                </div>
-              ))}
-            </nav>
-
-            <div className="admin-sidebar-spacer" />
-
-            {/* The theme switch lives in the top bar, with the other controls
-                that belong to the person rather than to the page. */}
-            <div className="admin-sidebar-foot">
-              {/* Signing in as an admin now lands here rather than on the site,
-                  so the way back to the reader's view has to be somewhere on
-                  screen. This is that somewhere. */}
-              <Link
-                to="/"
-                className="admin-nav-link admin-sidebar-exit"
-                title="Xem trang người đọc"
-              >
-                <ExternalIcon />
-                <span className="admin-nav-text">Xem trang người đọc</span>
+        Nó phải nằm NGOÀI thanh bên vì cái huy hiệu nằm trong thanh bên: một
+        context chỉ nhìn xuống được.
+      */}
+      <AdminSupportProvider>
+        {/* Wraps the whole console so every screen under it can report a success
+            the same way, into the same corner. */}
+        <AdminToaster>
+          <div className={`admin-shell ${collapsed ? "admin-shell-collapsed" : ""}`}>
+            {sidebarOpen && (
+              <div
+                className="admin-scrim"
+                role="presentation"
+                onClick={() => setSidebarOpen(false)}
+              />
+            )}
+  
+            <aside className={`admin-sidebar ${sidebarOpen ? "open" : ""}`}>
+              {/* The mark and the product's name, unframed: it says where you
+                  are, it is not one of the destinations listed under it. */}
+              <Link to="/admin" className="admin-brand" title="Truyện Nghe — Bảng quản trị">
+                <img className="admin-brand-mark" src={LOGO_MARK} alt="" width="40" height="40" />
+                <span className="admin-brand-text">
+                  <span className="admin-brand-name">Truyện Nghe</span>
+                  <span className="admin-brand-sub">Bảng quản trị</span>
+                </span>
               </Link>
-
-              <div className="admin-whoami" title={displayName}>
-                <span className="admin-whoami-avatar" aria-hidden="true">
-                  {displayName.slice(0, 1).toUpperCase()}
-                </span>
-                {/* One line, not two. The account's own name sat above this and
-                    an admin's display name is "Quản trị viên" as often as not,
-                    which left the corner of the sidebar saying the same words
-                    twice. The name is on the avatar and in the tooltip. */}
-                <span className="admin-whoami-text">
-                  <span className="admin-whoami-role">Quản trị viên</span>
-                </span>
-
-                <Button
-                  className="nb-icon-btn admin-logout"
-                  variant="ghost"
-                  size="sm"
-                  title="Đăng xuất"
-                  aria-label="Đăng xuất"
-                  onClick={handleLogout}
+  
+              <nav className="admin-nav" aria-label="Điều hướng quản trị">
+                {NAV_GROUPS.map((group) => (
+                  <div className="admin-nav-group" key={group.label}>
+                    <span className="admin-nav-label">{group.label}</span>
+                    {group.items.map(({ to, label, Icon, Badge, isActive }) => (
+                      <NavLink
+                        key={to}
+                        to={to}
+                        // Collapsed there is no label to read, so the tooltip carries it.
+                        title={label}
+                        // A function, not a string: given a string, NavLink appends
+                        // its own "active" class on top of ours, and by its
+                        // reckoning "/admin" matches everything beneath it.
+                        className={() => `admin-nav-link ${isActive(pathname) ? "active" : ""}`}
+                      >
+                        <Icon />
+                        <span className="admin-nav-text">{label}</span>
+                        {/* Sau phần chữ, nên nó trôi về mép phải khi thanh bên
+                            mở rộng và neo lên góc icon khi thanh bên thu lại —
+                            cùng một nút JSX, hai chỗ đứng, do CSS quyết định. */}
+                        {Badge && <Badge />}
+                      </NavLink>
+                    ))}
+                  </div>
+                ))}
+              </nav>
+  
+              <div className="admin-sidebar-spacer" />
+  
+              {/* The theme switch lives in the top bar, with the other controls
+                  that belong to the person rather than to the page. */}
+              <div className="admin-sidebar-foot">
+                {/* Signing in as an admin now lands here rather than on the site,
+                    so the way back to the reader's view has to be somewhere on
+                    screen. This is that somewhere. */}
+                <Link
+                  to="/"
+                  className="admin-nav-link admin-sidebar-exit"
+                  title="Xem trang người đọc"
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
+                  <ExternalIcon />
+                  <span className="admin-nav-text">Xem trang người đọc</span>
+                </Link>
+  
+                <div className="admin-whoami" title={displayName}>
+                  <span className="admin-whoami-avatar" aria-hidden="true">
+                    {displayName.slice(0, 1).toUpperCase()}
+                  </span>
+                  {/* One line, not two. The account's own name sat above this and
+                      an admin's display name is "Quản trị viên" as often as not,
+                      which left the corner of the sidebar saying the same words
+                      twice. The name is on the avatar and in the tooltip. */}
+                  <span className="admin-whoami-text">
+                    <span className="admin-whoami-role">Quản trị viên</span>
+                  </span>
+  
+                  <Button
+                    className="nb-icon-btn admin-logout"
+                    variant="ghost"
+                    size="sm"
+                    title="Đăng xuất"
+                    aria-label="Đăng xuất"
+                    onClick={handleLogout}
                   >
-                    <path d="M14.5 8V5.8a1.8 1.8 0 0 0-1.8-1.8H6.3A1.8 1.8 0 0 0 4.5 5.8v12.4A1.8 1.8 0 0 0 6.3 20h6.4a1.8 1.8 0 0 0 1.8-1.8V16" />
-                    <path d="M10 12h9.5m0 0-2.8-2.8M19.5 12l-2.8 2.8" />
-                  </svg>
-                </Button>
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M14.5 8V5.8a1.8 1.8 0 0 0-1.8-1.8H6.3A1.8 1.8 0 0 0 4.5 5.8v12.4A1.8 1.8 0 0 0 6.3 20h6.4a1.8 1.8 0 0 0 1.8-1.8V16" />
+                      <path d="M10 12h9.5m0 0-2.8-2.8M19.5 12l-2.8 2.8" />
+                    </svg>
+                  </Button>
+                </div>
               </div>
+            </aside>
+  
+            <div className="admin-main">
+              <Outlet />
             </div>
-          </aside>
-
-          <div className="admin-main">
-            <Outlet />
           </div>
-        </div>
-      </AdminToaster>
+        </AdminToaster>
+      </AdminSupportProvider>
     </AdminShellContext.Provider>
   );
 }
